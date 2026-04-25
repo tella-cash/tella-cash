@@ -23,9 +23,9 @@ const jakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Pago — Your AI Money Companion on WhatsApp",
+  title: "UPAY — Offramp USDC to Naira on WhatsApp",
   description:
-    "Move money, settle bills, and understand your spending with a quick chat. Pago is a personal financial assistant that lives in WhatsApp.",
+    "Convert USDC to Nigerian Naira and receive it in any bank account — all from a WhatsApp message. Powered by ARC. Near-zero second finality.",
 };
 
 /**
