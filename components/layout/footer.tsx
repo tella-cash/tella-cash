@@ -16,8 +16,8 @@ export function Footer() {
         <div className="space-y-4">
           <BrandLogo variant="light" />
           <p className="max-w-sm text-sm text-cream-50/60">
-            A friendlier way to handle money — no apps to learn, no menus to
-            navigate. Just chat.
+            The fastest way to turn USDC into Naira — no exchange account, no
+            app. Just a WhatsApp message.
           </p>
         </div>
 
@@ -63,7 +63,7 @@ export function Footer() {
 
       <div className="border-t border-cream-50/10">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-6 text-xs text-cream-50/50">
-          <span>© {new Date().getFullYear()} Pago. All rights reserved.</span>
+          <span>© {new Date().getFullYear()} UPAY. All rights reserved.</span>
           <span>Built with care.</span>
         </div>
       </div>
