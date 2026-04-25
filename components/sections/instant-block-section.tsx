@@ -47,14 +47,14 @@ export function InstantBlockSection() {
             Lost your phone?
             <br />
             <span className="inline-flex items-center gap-3">
-              Freeze Pago in seconds.
+              Freeze UPAY in seconds.
               <Spark className="h-7 w-7" tone="accent" />
             </span>
           </h2>
           <p className="mt-6 max-w-xl text-lg text-cream-50/75">
             If your device goes missing, sign in from any other WhatsApp and
-            pause all payment activity. We'll guide you through secure recovery
-            from there.
+            freeze all offramp activity immediately. We'll guide you through
+            secure recovery from there.
           </p>
 
           <div className="mt-10 flex flex-wrap gap-4">
