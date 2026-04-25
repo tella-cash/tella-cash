@@ -19,7 +19,7 @@ export function FaqSection() {
             Questions, answered.
           </h2>
           <p className="mt-4 text-ink-700">
-            Anything we missed? Send us a message — Pago itself can usually
+            Anything we missed? Send us a message — UPAY itself can usually
             help.
           </p>
         </div>
