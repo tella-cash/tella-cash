@@ -37,51 +37,51 @@ export default function HomePage() {
 
         <FeatureSection
           id="features"
-          eyebrow="Transfer"
+          eyebrow="Offramp"
           heading={
             <>
-              Send money, <em className="not-italic text-pago-700">stress-free.</em>
+              USDC to Naira, <em className="not-italic text-pago-700">stress-free.</em>
             </>
           }
-          description="Move funds to a friend, a vendor, or your own savings account in a single message. Pago resolves the recipient, validates the bank, and shows you a receipt — all inside the chat."
+          description="Tell UPAY how much USDC you want to sell. It quotes the live rate, you confirm, and your Nigerian bank account is credited in seconds — receipt included, all inside the chat."
           visual={<TransferIllustration />}
         />
 
         <FeatureSection
-          eyebrow="Spending Analysis"
+          eyebrow="Live Rates"
           heading={
             <>
-              Know where{" "}
-              <em className="not-italic text-pago-700">your money</em> goes.
+              Always the rate{" "}
+              <em className="not-italic text-pago-700">you deserve.</em>
             </>
           }
-          description={`Ask casually — "how much on transport this month?" — and Pago breaks it down. No spreadsheets, no budgeting apps, no setup.`}
+          description={`Check the going rate any time — "what's the rate?" — and UPAY quotes you the live market price with our competitive spread. The number you see is the number you get.`}
           visual={<SpendingIllustration />}
           reverse
           toneClassName="bg-cream-100/60"
         />
 
         <FeatureSection
-          eyebrow="Self Support"
+          eyebrow="Settlement"
           heading={
             <>
-              Help, without{" "}
-              <em className="not-italic text-pago-700">the wait.</em>
+              Near-zero.{" "}
+              <em className="not-italic text-pago-700">Every time.</em>
             </>
           }
-          description="No call centers, no hold music. Pago answers questions instantly, walks you through fixes, and only escalates to a human when it actually needs to."
+          description="UPAY settles on ARC — a blockchain purpose-built for near-zero second finality. Your Naira does not queue. Most offramps complete before you put your phone down."
           visual={<SupportIllustration />}
         />
 
         <FeatureSection
-          eyebrow="Context Aware"
+          eyebrow="Seamless Repeat"
           heading={
             <>
-              It remembers, so{" "}
-              <em className="not-italic text-pago-700">you don't have to.</em>
+              Set your bank once,{" "}
+              <em className="not-italic text-pago-700">offramp forever.</em>
             </>
           }
-          description={`Pago keeps thread of who you've paid, when, and for what. Reference earlier conversations naturally — "send him the same as last week" — and it just works.`}
+          description={`UPAY remembers your bank account so repeat offramps are a single message away. "sell 200 USDC" — same bank, live rate, instant settlement. Done.`}
           visual={<ContextIllustration />}
           reverse
           toneClassName="bg-cream-100/60"
