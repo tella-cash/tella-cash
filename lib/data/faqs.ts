@@ -1,10 +1,3 @@
-/**
- * FAQ items for the home page accordion.
- *
- * Each item is keyed by `id` so the accordion can be controlled / linked
- * to from elsewhere (e.g. anchor URLs like #faq-security).
- */
-
 export interface FaqItem {
   id: string;
   question: string;
@@ -13,45 +6,51 @@ export interface FaqItem {
 
 export const FAQS: FaqItem[] = [
   {
-    id: "what-is-pago",
-    question: "What exactly is Pago?",
+    id: "what-is-upay",
+    question: "What exactly is UPAY?",
     answer:
-      "Pago is an AI money companion that lives inside WhatsApp. You chat with it the same way you'd chat with a friend — type a message, send a voice note, or snap a photo of a bill — and it handles the financial task for you, from sending money to breaking down your spending.",
+      "UPAY is a WhatsApp bot that converts USDC to Nigerian Naira and sends the Naira straight to your bank account. No crypto exchange account, no separate app — just send a message, confirm the rate, and your bank is credited in seconds.",
+  },
+  {
+    id: "what-is-usdc",
+    question: "What is USDC and why would I need to offramp it?",
+    answer:
+      "USDC is a dollar-pegged stablecoin — one USDC is always worth one US dollar. If you earn, receive, or hold USDC and need Nigerian Naira for everyday spending, that's an offramp. UPAY makes it as simple as sending a WhatsApp message.",
   },
   {
     id: "how-it-works",
-    question: "How does it actually work?",
+    question: "How does the offramp actually work?",
     answer:
-      "Under the hood, Pago uses an AI model that understands natural language, voice, and images. You describe what you want (\"send 5k to my landlord\", \"how much did I spend on transport last week?\") and it figures out the rest. The more you use it, the better it understands your patterns and shortcuts.",
+      "Tell UPAY how much USDC you want to sell. It quotes you the live market rate with our competitive spread, you confirm, and UPAY settles the transaction on ARC — a blockchain built for near-zero second finality. The Naira lands in your registered Nigerian bank account within seconds.",
   },
   {
-    id: "security",
-    question: "Is my money and data safe?",
+    id: "rates",
+    question: "What rate do I get?",
     answer:
-      "Security is non-negotiable. Pago runs on end-to-end encrypted messaging, and every payment requires a PIN you set during onboarding. We follow industry-standard data protection practices, and our infrastructure is independently audited. None of your conversations are used to train external models.",
+      "UPAY uses live market rates with a competitive spread — no hidden fees, no markups buried in a surprise number. The rate shown when you confirm is the rate you get. You can also ask UPAY \"what's the rate?\" any time to check before you commit.",
+  },
+  {
+    id: "settlement",
+    question: "How fast does it settle?",
+    answer:
+      "Near-zero second finality. UPAY settles on ARC, a blockchain purpose-built for instant transactions. Most offramps complete before you can put your phone down. Your Naira does not queue.",
   },
   {
     id: "getting-started",
     question: "How do I get started?",
     answer:
-      "Tap any \"Try Pago\" button on this page and it'll open a WhatsApp chat. The first time you message, Pago walks you through a quick three-step setup — verify your number, link a wallet, and choose a PIN. From there you're ready to send, request, or ask questions.",
+      "Tap any \"Try UPAY\" button on this page to open a WhatsApp chat. UPAY walks you through a quick setup — link your USDC wallet address and add your Nigerian bank account details. Once that's done, you're ready to offramp anytime.",
   },
   {
-    id: "misunderstands",
-    question: "What if Pago misunderstands me?",
+    id: "banks",
+    question: "Which Nigerian banks are supported?",
     answer:
-      "If something is unclear, Pago will ask a clarifying question instead of guessing. You can also rephrase, switch to voice, or send a screenshot. Every transaction always shows a confirmation step before any money moves, so misunderstandings can never become accidental payments.",
+      "All of them. GTBank, Access, UBA, First Bank, Zenith, Kuda, OPay, Moniepoint, Palmpay, FCMB, Fidelity — every licensed bank and fintech with a valid Nigerian account number. If it has an account number, UPAY can credit it.",
   },
   {
     id: "lost-phone",
-    question: "What happens if I lose my phone?",
+    question: "What if I lose my phone?",
     answer:
-      "Open Pago from any other WhatsApp device and freeze your account in two taps — payments pause immediately. You can also use the \"Block account\" link in the footer of this page to do it from a browser. Recovery is guided and requires identity verification.",
-  },
-  {
-    id: "languages",
-    question: "Does it support voice and other languages?",
-    answer:
-      "Yes — voice notes work the same as text, and Pago understands several major languages including Pidgin, Yoruba, and Swahili in addition to English. Speak however feels natural and it'll respond in kind.",
+      "Sign in from any other WhatsApp device and freeze your UPAY account in two taps — all activity pauses immediately. You can also use the \"Block account\" link in the footer of this page from a browser. Recovery is guided and requires identity verification.",
   },
 ];
