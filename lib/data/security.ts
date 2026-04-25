@@ -1,9 +1,3 @@
-/**
- * Security feature cards rendered in the security section grid.
- * Each card pairs a short headline with a one-paragraph description and
- * an illustration component reference.
- */
-
 export interface SecurityCard {
   id: string;
   title: string;
@@ -14,23 +8,23 @@ export interface SecurityCard {
 export const SECURITY_CARDS: SecurityCard[] = [
   {
     id: "passcode",
-    title: "A PIN on every payment",
+    title: "A PIN on every offramp",
     body:
-      "Set a PIN during onboarding and decide when it's required — every transaction, only above a threshold, or for new recipients only. You're always in control.",
+      "Set a PIN during onboarding and decide when it's required — every transaction, only above a threshold, or for new bank accounts only. No USDC moves without your sign-off.",
     illustration: "passcode",
   },
   {
     id: "certified",
-    title: "Certified, encrypted, audited",
+    title: "ARC-settled, encrypted, audited",
     body:
-      "Our infrastructure follows industry data protection standards and is audited annually. Your chats use the same end-to-end encryption that secures the rest of WhatsApp.",
+      "Your offramps settle on ARC — a blockchain with near-zero second finality and independently verifiable transactions. The WhatsApp layer uses the same end-to-end encryption that secures every other message you send.",
     illustration: "certified",
   },
   {
     id: "biometric",
-    title: "Biometric lock for the chat itself",
+    title: "Biometric lock on the chat itself",
     body:
-      "Hide your Pago thread inside WhatsApp's locked chats folder — face or fingerprint required to even open it. Privacy down to the conversation level.",
+      "Hide your UPAY thread inside WhatsApp's locked chats folder — face or fingerprint required to even open it. Security down to the conversation level, not just the transaction.",
     illustration: "biometric",
   },
 ];
