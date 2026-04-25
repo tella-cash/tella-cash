@@ -4,12 +4,12 @@
  */
 
 export const SITE = {
-  brandName: "Pago",
+  brandName: "UPAY",
   /**
    * Replace this with your real WhatsApp Business link before shipping.
    * Format: https://wa.me/<number>?text=<urlEncodedMessage>
    */
-  whatsappLink: "https://wa.me/0000000000?text=Hi%20Pago",
+  whatsappLink: "https://wa.me/0000000000?text=Hi%20UPAY",
   twitterUrl: "https://x.com/",
   facebookUrl: "#",
   termsUrl: "/terms",
