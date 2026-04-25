@@ -29,11 +29,11 @@ export function SecuritySection() {
       <div className="mx-auto max-w-7xl px-6">
         <div className="mx-auto max-w-3xl text-center">
           <h2 className="font-display text-4xl font-medium leading-[1.1] tracking-tight text-ink-900 sm:text-5xl lg:text-6xl">
-            Built on the privacy you already trust.
+            Built on security you can verify.
           </h2>
           <p className="mt-6 text-lg text-ink-700">
-            We chose WhatsApp as the home for Pago because the security
-            foundations are already there — and we layered our own protections
+            WhatsApp for the interface. ARC for the settlement layer. Both are
+            independently battle-tested — and we've added our own protections
             on top.
           </p>
         </div>
