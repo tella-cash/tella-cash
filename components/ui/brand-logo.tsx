@@ -32,7 +32,7 @@ export function BrandLogo({ variant = "dark", className }: BrandLogoProps) {
           className={glyphFill}
         />
         <path
-          d="M14 11h6.5a4.5 4.5 0 0 1 0 9H17v4h-3V11Zm3 3v3h3.5a1.5 1.5 0 0 0 0-3H17Z"
+          d="M13 10h3v12a2.5 2.5 0 005 0V10h3v12a5.5 5.5 0 01-11 0V10z"
           className={glyphCutout}
         />
       </svg>
@@ -42,7 +42,7 @@ export function BrandLogo({ variant = "dark", className }: BrandLogoProps) {
           wordmarkColor,
         )}
       >
-        Pago
+        UPAY
       </span>
     </div>
   );
