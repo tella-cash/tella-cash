@@ -16,11 +16,11 @@ export function EverydayUsageSection() {
       <div className="mx-auto max-w-7xl px-6">
         <div className="flex flex-col items-end justify-between gap-6 md:flex-row md:items-end">
           <h2 className="max-w-2xl font-display text-4xl font-medium leading-[1.05] tracking-tight text-ink-900 sm:text-5xl lg:text-6xl">
-            Where Pago fits in <em className="not-italic text-pago-700">everyday life.</em>
+            Where UPAY fits in <em className="not-italic text-pago-700">everyday life.</em>
           </h2>
           <p className="max-w-sm text-ink-700 md:text-right">
-            Money moments rarely happen at a desk. Here's how Pago shows up in
-            the flow of a regular day.
+            USDC doesn't spend itself. Here's how Nigerians are turning their
+            crypto into Naira for the moments that matter.
           </p>
         </div>
 
@@ -46,9 +46,9 @@ function UsageCard({ scene }: { scene: UsageScene }) {
 
         {/* Mini receipt overlay */}
         <div className="absolute bottom-3 left-3 flex items-center gap-2 rounded-full bg-cream-50/95 px-3 py-1.5 text-xs shadow-soft backdrop-blur-sm">
-          <span className="text-pago-700">↗</span>
-          <span className="font-medium text-ink-900">Sent {scene.amount}</span>
-          <span className="text-ink-500">to {scene.recipient}</span>
+          <span className="text-pago-700">↙</span>
+          <span className="font-medium text-ink-900">Received {scene.amount}</span>
+          <span className="text-ink-500">via {scene.recipient}</span>
         </div>
       </div>
 
