@@ -7,6 +7,11 @@ interface IncomingMessage {
   isNew: boolean;
 }
 
+export interface HandlerResult {
+  reply: string;
+  sideEffect?: { kind: "provision_wallet"; userId: string };
+}
+
 function isValidName(input: string): boolean {
   const trimmed = input.trim();
   if (trimmed.length < 2 || trimmed.length > 40) return false;
@@ -21,19 +26,29 @@ function extractName(input: string): string {
     .trim();
 }
 
+/**
+ * Single entry point for inbound WhatsApp messages.
+ *
+ * Returns a HandlerResult so callers can know not just what to reply but
+ * also whether any post-reply side effects should run. This keeps the
+ * handler pure(ish) — it doesn't fire-and-forget directly, the route does.
+ */
 export async function handleIncomingMessage(
   message: IncomingMessage,
-): Promise<string> {
+): Promise<HandlerResult> {
   const { user, text, isNew } = message;
 
+  // First-ever message — greet and ask for name.
   if (isNew) {
-    return [
-      "👋 Welcome to UPay!",
-      "",
-      "I'm your AI money companion. Before we get started, what should I call you?",
-      "",
-      "(Just reply with your name)",
-    ].join("\n");
+    return {
+      reply: [
+        "👋 Welcome to UPay!",
+        "",
+        "I'm your AI money companion. Before we get started, what should I call you?",
+        "",
+        "(Just reply with your name)",
+      ].join("\n"),
+    };
   }
 
   // Returning user, still mid-onboarding — parse this message as their name.
@@ -41,11 +56,13 @@ export async function handleIncomingMessage(
     const candidate = extractName(text);
 
     if (!isValidName(candidate)) {
-      return [
-        "Hmm, that doesn't look like a name 🤔",
-        "",
-        "Could you reply with just your first name? Something like *Evan* or *Adaeze*.",
-      ].join("\n");
+      return {
+        reply: [
+          "Hmm, that doesn't look like a name 🤔",
+          "",
+          "Could you reply with just your first name? Something like *Evan* or *Adaeze*.",
+        ].join("\n"),
+      };
     }
 
     const updated = await completeOnboarding({
@@ -54,19 +71,19 @@ export async function handleIncomingMessage(
     });
 
     const firstName = updated.profile_name?.split(" ")[0] ?? candidate;
-    return [
-      `Nice to meet you, ${firstName}! 🎉`,
-      "",
-      "Your account is all set. Try one of these to get started:",
-      '• "send 5k to chuks"',
-      '• "what\'s my balance?"',
-      "",
-      "I'll always confirm before moving any money.",
-    ].join("\n");
+
+    return {
+      reply: [
+        `Nice to meet you, ${firstName}! 🎉`,
+        "",
+        "I'm setting up your UPay wallet now — give me a few seconds. I'll send your address as soon as it's ready.",
+      ].join("\n"),
+      sideEffect: { kind: "provision_wallet", userId: user.id },
+    };
   }
 
-  // Onboarded user — placeholder responses until the LLM is wired up.
-  return handleOnboardedUser({ user, text });
+  // Onboarded user — placeholder responses.
+  return { reply: handleOnboardedUser({ user, text }) };
 }
 
 function handleOnboardedUser({
@@ -80,18 +97,35 @@ function handleOnboardedUser({
   const name = user.profile_name?.split(" ")[0] ?? "there";
 
   if (!trimmed) {
-    return `Hi ${name}! Send me a message like "send 5k to chuks" to get started.`;
+    return `Hi ${name}! Send me a message like "send 5 usdc to +234..." to get started.`;
   }
 
   if (trimmed === "ping") return "pong ✓";
+
+  if (trimmed.includes("address") || trimmed.includes("my wallet")) {
+    if (user.wallet_status === "active" && user.wallet_address) {
+      return [
+        `Your UPay wallet address:`,
+        "",
+        `\`${user.wallet_address}\``,
+        "",
+        "You can receive USDC at this address on Arc.",
+      ].join("\n");
+    }
+    if (user.wallet_status === "pending") {
+      return "Your wallet is still being set up — give it a moment and ask again.";
+    }
+    return "Your wallet isn't ready yet. I'll have another go at setting it up shortly.";
+  }
 
   if (trimmed.includes("help") || trimmed === "hi" || trimmed === "hello") {
     return [
       `Hey ${name} 👋`,
       "",
       "Try one of these:",
-      '• "send 5k to chuks"',
+      '• "what\'s my address?"',
       '• "what\'s my balance?"',
+      '• "send 5 usdc to <address>"',
     ].join("\n");
   }
 

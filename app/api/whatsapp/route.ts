@@ -3,6 +3,8 @@ import twilio from "twilio";
 import { sendWhatsAppMessage } from "@/lib/twilio/client";
 import { handleIncomingMessage } from "@/lib/agent/handler";
 import { findOrCreateUser } from "@/lib/users/repository";
+import { provisionWalletForUser } from "@/lib/wallet/provision";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
 interface TwilioWebhookPayload {
   From: string;
@@ -61,30 +63,61 @@ export async function POST(request: Request) {
 /**
  * Run the agent and send the reply back through Twilio's REST API.
  *
- * Kept separate from the request handler so the webhook can ack with 200
- * immediately. Failures here are logged but don't surface to Twilio —
- * Twilio just sees the empty TwiML response we already returned.
+ * If the handler flags a wallet-provisioning side effect, fire it after the
+ * primary reply is sent and follow up with a separate message containing
+ * the address (or a failure note) once it resolves.
  */
 async function processMessageAsync(
   fromNumber: string,
   userMessage: string,
   payload: TwilioWebhookPayload,
 ) {
-  // 1. Look up or create the user. New rows start in 'awaiting_name' state.
   const { user, isNew } = await findOrCreateUser({
     whatsappNumber: fromNumber,
   });
 
-  // 2. Generate a reply based on user state and message content.
-  const reply = await handleIncomingMessage({
+  const { reply, sideEffect } = await handleIncomingMessage({
     user,
     text: userMessage,
     isNew,
   });
 
-  // 3. Send the reply back to the user via Twilio.
-  await sendWhatsAppMessage({
-    to: fromNumber,
-    body: reply,
-  });
+  await sendWhatsAppMessage({ to: fromNumber, body: reply });
+
+  // Handle post-reply side effects. We send the primary reply first so the
+  // user sees acknowledgement immediately, then deliver the wallet address
+  // (or a failure note) as a follow-up message.
+  if (sideEffect?.kind === "provision_wallet") {
+    const success = await provisionWalletForUser(sideEffect.userId);
+
+    if (success) {
+      // Re-fetch the user so we have the freshly-saved wallet_address.
+      const supabase = getSupabaseAdmin();
+      const { data } = await supabase
+        .from("pago_users")
+        .select("wallet_address")
+        .eq("id", sideEffect.userId)
+        .single();
+
+      const address = (data as { wallet_address: string } | null)
+        ?.wallet_address;
+      if (address) {
+        await sendWhatsAppMessage({
+          to: fromNumber,
+          body: [
+            "✅ Your wallet is ready!",
+            "",
+            `Address: \`${address}\``,
+            "",
+            "Send USDC to this address on Arc to fund your account. Try \"what's my balance?\" once you have funds.",
+          ].join("\n"),
+        });
+      }
+    } else {
+      await sendWhatsAppMessage({
+        to: fromNumber,
+        body: "I couldn't set up your wallet just now — I'll retry automatically. You can keep using UPay in the meantime.",
+      });
+    }
+  }
 }

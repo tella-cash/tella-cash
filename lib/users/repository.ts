@@ -60,3 +60,43 @@ export async function completeOnboarding({
   if (error) throw new Error(`completeOnboarding failed: ${error.message}`);
   return data as UpayUser;
 }
+
+
+export async function markWalletPending(userId: string): Promise<void> {
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase
+    .from("upay_users")
+    .update({ wallet_status: "pending" })
+    .eq("id", userId);
+  if (error) throw new Error(`markWalletPending failed: ${error.message}`);
+}
+
+export async function setWalletActive({
+  userId,
+  walletId,
+  address,
+}: {
+  userId: string;
+  walletId: string;
+  address: string;
+}): Promise<void> {
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase
+    .from("upay_users")
+    .update({
+      circle_wallet_id: walletId,
+      wallet_address: address,
+      wallet_status: "active",
+    })
+    .eq("id", userId);
+  if (error) throw new Error(`setWalletActive failed: ${error.message}`);
+}
+
+export async function markWalletFailed(userId: string): Promise<void> {
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase
+    .from("upay_users")
+    .update({ wallet_status: "failed" })
+    .eq("id", userId);
+  if (error) throw new Error(`markWalletFailed failed: ${error.message}`);
+}

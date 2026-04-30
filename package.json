@@ -9,10 +9,12 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@circle-fin/developer-controlled-wallets": "^10.3.1",
     "@supabase/supabase-js": "^2.105.1",
     "next": "16.2.4",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "tsx": "^4.21.0",
     "twilio": "^6.0.0"
   },
   "devDependencies": {
