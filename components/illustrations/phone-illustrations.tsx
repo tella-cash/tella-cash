@@ -55,7 +55,7 @@ export function SpendingIllustration() {
             </ChatBubble>
             <div className="flex w-full justify-start">
               <div className="w-[88%] rounded-2xl rounded-bl-md bg-white p-3 shadow-sm">
-                <p className="text-[10px] uppercase tracking-wider text-pago-700">
+                <p className="text-[10px] uppercase tracking-wider text-upay-700">
                   Live Rate
                 </p>
                 <p className="mt-1 font-display text-2xl font-semibold text-ink-900">
@@ -167,7 +167,7 @@ function ScreenHeader({
   subtitle?: string;
 }) {
   return (
-    <div className="flex items-center gap-2 bg-pago-800 px-4 pb-2 pt-10 text-cream-50">
+    <div className="flex items-center gap-2 bg-upay-800 px-4 pb-2 pt-10 text-cream-50">
       <div className="grid h-7 w-7 place-items-center rounded-full bg-cream-50/15 text-[11px] font-semibold">
         U
       </div>
@@ -184,10 +184,10 @@ function OfframpReceiptCard({ amount, detail }: { amount: string; detail: string
     <div className="flex w-full justify-start">
       <div className="w-[78%] rounded-2xl rounded-bl-md bg-white p-3 shadow-sm">
         <div className="flex items-center justify-between">
-          <span className="text-[10px] uppercase tracking-wider text-pago-700">
+          <span className="text-[10px] uppercase tracking-wider text-upay-700">
             Received
           </span>
-          <span className="rounded-full bg-pago-100 px-2 py-0.5 text-[9px] font-medium text-pago-800">
+          <span className="rounded-full bg-upay-100 px-2 py-0.5 text-[9px] font-medium text-upay-800">
             ✓ Settled
           </span>
         </div>
@@ -204,7 +204,7 @@ function OfframpReceiptCard({ amount, detail }: { amount: string; detail: string
 function FloatingReceipt() {
   return (
     <div className="absolute -left-12 top-24 z-10 flex w-52 items-center gap-3 rounded-2xl bg-white p-3 shadow-[0_18px_36px_-12px_rgba(13,61,39,0.25)]">
-      <div className="grid h-9 w-9 place-items-center rounded-full bg-pago-100 text-xs font-semibold text-pago-800">
+      <div className="grid h-9 w-9 place-items-center rounded-full bg-upay-100 text-xs font-semibold text-upay-800">
         AB
       </div>
       <div className="flex-1">
@@ -221,7 +221,7 @@ function FloatingReceipt() {
 /** Floating settlement speed badge for the Offramp section. */
 function FloatingSettlementBadge() {
   return (
-    <div className="absolute -right-10 bottom-20 z-10 w-44 rounded-2xl bg-pago-800 p-4 text-cream-50 shadow-[0_18px_36px_-12px_rgba(13,61,39,0.4)]">
+    <div className="absolute -right-10 bottom-20 z-10 w-44 rounded-2xl bg-upay-800 p-4 text-cream-50 shadow-[0_18px_36px_-12px_rgba(13,61,39,0.4)]">
       <Spark className="mb-2 h-5 w-5" tone="accent" />
       <p className="font-display text-3xl font-semibold leading-none">&lt;1s</p>
       <p className="mt-1 text-[10px] text-cream-50/70">settlement on ARC</p>
@@ -268,8 +268,8 @@ function FloatingRateChip({
 /** Decorative "remembers last offramp" badge for the Repeat section. */
 function FloatingMemoryBadge() {
   return (
-    <div className="absolute -right-10 top-20 z-10 w-44 rounded-2xl bg-cream-50 p-4 ring-1 ring-pago-900/10 shadow-[0_18px_36px_-12px_rgba(13,61,39,0.18)]">
-      <p className="text-[10px] uppercase tracking-wider text-pago-700">
+    <div className="absolute -right-10 top-20 z-10 w-44 rounded-2xl bg-cream-50 p-4 ring-1 ring-upay-900/10 shadow-[0_18px_36px_-12px_rgba(13,61,39,0.18)]">
+      <p className="text-[10px] uppercase tracking-wider text-upay-700">
         Memory
       </p>
       <p className="mt-1 font-display text-base font-medium leading-tight text-ink-900">
@@ -282,7 +282,7 @@ function FloatingMemoryBadge() {
 /** Suggested-reply chip inside the Support phone screen. */
 function ReplyChip({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-full border border-pago-700/30 bg-cream-50 px-3 py-1 text-[10px] font-medium text-pago-800">
+    <div className="rounded-full border border-upay-700/30 bg-cream-50 px-3 py-1 text-[10px] font-medium text-upay-800">
       {children}
     </div>
   );
@@ -291,11 +291,11 @@ function ReplyChip({ children }: { children: React.ReactNode }) {
 /** Mini bar chart repurposed as a USDC rate trend visualization. */
 function RateBars() {
   const bars = [
-    { label: "Mon", value: 1620, color: "bg-pago-300" },
-    { label: "Tue", value: 1635, color: "bg-pago-400" },
-    { label: "Wed", value: 1628, color: "bg-pago-400" },
-    { label: "Thu", value: 1645, color: "bg-pago-500" },
-    { label: "Now", value: 1650, color: "bg-pago-700" },
+    { label: "Mon", value: 1620, color: "bg-upay-300" },
+    { label: "Tue", value: 1635, color: "bg-upay-400" },
+    { label: "Wed", value: 1628, color: "bg-upay-400" },
+    { label: "Thu", value: 1645, color: "bg-upay-500" },
+    { label: "Now", value: 1650, color: "bg-upay-700" },
   ];
   const min = Math.min(...bars.map((b) => b.value));
   const max = Math.max(...bars.map((b) => b.value));

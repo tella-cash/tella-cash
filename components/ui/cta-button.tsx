@@ -9,7 +9,7 @@ type CtaButtonProps = ComponentProps<"a"> & {
 /**
  * CtaButton
  *
- * The "Try Pago" / "Try It Out" pill that recurs throughout the page.
+ * The "Try upay" / "Try It Out" pill that recurs throughout the page.
  * Renders as an anchor (these always link to the WhatsApp deep link), so
  * we extend native `a` props directly instead of wrapping a Button shim.
  *
@@ -24,8 +24,8 @@ export function CtaButton({
 }: CtaButtonProps) {
   const variantClass =
     variant === "primary"
-      ? "bg-pago-800 text-cream-50 hover:bg-pago-900"
-      : "bg-transparent text-pago-900 ring-1 ring-pago-900/15 hover:bg-pago-900/5";
+      ? "bg-upay-800 text-cream-50 hover:bg-upay-900"
+      : "bg-transparent text-upay-900 ring-1 ring-upay-900/15 hover:bg-upay-900/5";
 
   return (
     <a

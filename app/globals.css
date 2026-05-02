@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /**
- * Theme tokens for the Pago landing page.
+ * Theme tokens for the upay landing page.
  *
  * Palette is built around a deep, slightly desaturated fintech green sitting
  * on a warm cream background — evocative of cash, but kept earthy rather than
@@ -14,18 +14,18 @@
   --color-cream-200: #f1e6c7;
   --color-cream-300: #e8d6a3;
 
-  /* Pago green — primary brand */
-  --color-pago-50: #effaf2;
-  --color-pago-100: #d8f3df;
-  --color-pago-200: #b4e6c4;
-  --color-pago-300: #82d2a1;
-  --color-pago-400: #4eb87b;
-  --color-pago-500: #2a9c5f;
-  --color-pago-600: #197d4a;
-  --color-pago-700: #14633c;
-  --color-pago-800: #114f31;
-  --color-pago-900: #0d3d27;
-  --color-pago-950: #062017;
+  /* upay green — primary brand */
+  --color-upay-50: #effaf2;
+  --color-upay-100: #d8f3df;
+  --color-upay-200: #b4e6c4;
+  --color-upay-300: #82d2a1;
+  --color-upay-400: #4eb87b;
+  --color-upay-500: #2a9c5f;
+  --color-upay-600: #197d4a;
+  --color-upay-700: #14633c;
+  --color-upay-800: #114f31;
+  --color-upay-900: #0d3d27;
+  --color-upay-950: #062017;
 
   /* Accent — warm mustard for callouts and stars */
   --color-accent-300: #f3d96b;

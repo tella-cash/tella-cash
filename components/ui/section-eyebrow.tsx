@@ -16,7 +16,7 @@ export function SectionEyebrow({ children, className }: SectionEyebrowProps) {
   return (
     <span
       className={cn(
-        "inline-block text-xs font-semibold uppercase tracking-[0.22em] text-pago-700",
+        "inline-block text-xs font-semibold uppercase tracking-[0.22em] text-upay-700",
         className,
       )}
     >

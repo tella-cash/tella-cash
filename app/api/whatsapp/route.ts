@@ -94,7 +94,7 @@ async function processMessageAsync(
       // Re-fetch the user so we have the freshly-saved wallet_address.
       const supabase = getSupabaseAdmin();
       const { data } = await supabase
-        .from("pago_users")
+        .from("upay_users")
         .select("wallet_address")
         .eq("id", sideEffect.userId)
         .single();

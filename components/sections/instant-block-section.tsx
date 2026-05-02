@@ -17,7 +17,7 @@ import { Spark } from "@/components/ui/spark";
  */
 export function InstantBlockSection() {
   return (
-    <section className="relative overflow-hidden bg-pago-900 text-cream-50">
+    <section className="relative overflow-hidden bg-upay-900 text-cream-50">
       {/* Concentric rings backdrop */}
       <svg
         viewBox="0 0 600 600"

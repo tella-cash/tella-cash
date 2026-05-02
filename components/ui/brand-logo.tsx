@@ -16,9 +16,9 @@ interface BrandLogoProps {
  * suggest both messaging and the brand initial.
  */
 export function BrandLogo({ variant = "dark", className }: BrandLogoProps) {
-  const wordmarkColor = variant === "dark" ? "text-pago-900" : "text-cream-50";
-  const glyphFill = variant === "dark" ? "fill-pago-700" : "fill-cream-50";
-  const glyphCutout = variant === "dark" ? "fill-cream-50" : "fill-pago-900";
+  const wordmarkColor = variant === "dark" ? "text-upay-900" : "text-cream-50";
+  const glyphFill = variant === "dark" ? "fill-upay-700" : "fill-cream-50";
+  const glyphCutout = variant === "dark" ? "fill-cream-50" : "fill-upay-900";
 
   return (
     <div className={cn("flex items-center gap-2", className)}>

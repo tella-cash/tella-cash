@@ -44,7 +44,7 @@ export function SecuritySection() {
             return (
               <article
                 key={card.id}
-                className="flex flex-col gap-5 rounded-3xl bg-cream-50 p-6 ring-1 ring-pago-900/5"
+                className="flex flex-col gap-5 rounded-3xl bg-cream-50 p-6 ring-1 ring-upay-900/5"
               >
                 <Illustration />
                 <div>

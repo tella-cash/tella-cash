@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils/cn";
 
 interface SparkProps {
   className?: string;
-  /** Color preset — most uses are pago-700 or accent-500. */
+  /** Color preset — most uses are upay-700 or accent-500. */
   tone?: "primary" | "accent" | "ink";
 }
 
@@ -18,7 +18,7 @@ interface SparkProps {
 export function Spark({ className, tone = "primary" }: SparkProps) {
   const fill =
     tone === "primary"
-      ? "fill-pago-700"
+      ? "fill-upay-700"
       : tone === "accent"
         ? "fill-accent-500"
         : "fill-ink-900";

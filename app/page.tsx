@@ -40,7 +40,7 @@ export default function HomePage() {
           eyebrow="Offramp"
           heading={
             <>
-              USDC to Naira, <em className="not-italic text-pago-700">stress-free.</em>
+              USDC to Naira, <em className="not-italic text-upay-700">stress-free.</em>
             </>
           }
           description="Tell UPAY how much USDC you want to sell. It quotes the live rate, you confirm, and your Nigerian bank account is credited in seconds — receipt included, all inside the chat."
@@ -52,7 +52,7 @@ export default function HomePage() {
           heading={
             <>
               Always the rate{" "}
-              <em className="not-italic text-pago-700">you deserve.</em>
+              <em className="not-italic text-upay-700">you deserve.</em>
             </>
           }
           description={`Check the going rate any time — "what's the rate?" — and UPAY quotes you the live market price with our competitive spread. The number you see is the number you get.`}
@@ -66,7 +66,7 @@ export default function HomePage() {
           heading={
             <>
               Near-zero.{" "}
-              <em className="not-italic text-pago-700">Every time.</em>
+              <em className="not-italic text-upay-700">Every time.</em>
             </>
           }
           description="UPAY settles on ARC — a blockchain purpose-built for near-zero second finality. Your Naira does not queue. Most offramps complete before you put your phone down."
@@ -78,7 +78,7 @@ export default function HomePage() {
           heading={
             <>
               Set your bank once,{" "}
-              <em className="not-italic text-pago-700">offramp forever.</em>
+              <em className="not-italic text-upay-700">offramp forever.</em>
             </>
           }
           description={`UPAY remembers your bank account so repeat offramps are a single message away. "sell 200 USDC" — same bank, live rate, instant settlement. Done.`}

@@ -11,7 +11,7 @@ import { SITE } from "@/lib/data/site";
  */
 export function Footer() {
   return (
-    <footer className="bg-pago-950 text-cream-50">
+    <footer className="bg-upay-950 text-cream-50">
       <div className="mx-auto flex max-w-7xl flex-col gap-10 px-6 py-16 lg:flex-row lg:items-end lg:justify-between">
         <div className="space-y-4">
           <BrandLogo variant="light" />

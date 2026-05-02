@@ -23,7 +23,7 @@ export function FaqItem({ faq, defaultOpen = false }: FaqItemProps) {
     <details
       id={`faq-${faq.id}`}
       open={defaultOpen}
-      className="group border-b border-pago-900/10 py-5 [&[open]_.faq-chevron]:rotate-45"
+      className="group border-b border-upay-900/10 py-5 [&[open]_.faq-chevron]:rotate-45"
     >
       <summary className="flex cursor-pointer list-none items-center justify-between gap-6 text-left">
         <h3 className="font-display text-lg font-medium text-ink-900 sm:text-xl">
@@ -31,7 +31,7 @@ export function FaqItem({ faq, defaultOpen = false }: FaqItemProps) {
         </h3>
         <span
           aria-hidden="true"
-          className="faq-chevron flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-pago-50 text-pago-700 transition-transform duration-300"
+          className="faq-chevron flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-upay-50 text-upay-700 transition-transform duration-300"
         >
           {/* Plus icon — rotates 45deg into × when open */}
           <svg viewBox="0 0 16 16" className="h-4 w-4">

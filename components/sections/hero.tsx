@@ -20,7 +20,7 @@ export function Hero() {
             <br />
             your Naira,
             <span className="relative ml-3 inline-block">
-              <span className="text-pago-700">instantly.</span>
+              <span className="text-upay-700">instantly.</span>
               <Spark
                 className="absolute -right-7 -top-2 h-6 w-6 animate-float-slow"
                 tone="accent"
@@ -45,7 +45,7 @@ export function Hero() {
             </CtaButton>
             <a
               href="#features"
-              className="text-sm font-medium text-ink-700 underline-offset-4 hover:text-pago-900 hover:underline"
+              className="text-sm font-medium text-ink-700 underline-offset-4 hover:text-upay-900 hover:underline"
             >
               See how it works
             </a>
@@ -86,7 +86,7 @@ function HeroPhone() {
       </div>
 
       {/* Floating settlement stat card, bottom-right */}
-      <div className="absolute -right-6 bottom-16 z-10 w-44 rounded-2xl bg-pago-800 p-4 text-cream-50 shadow-[0_18px_36px_-12px_rgba(13,61,39,0.4)] sm:-right-10 lg:-right-4">
+      <div className="absolute -right-6 bottom-16 z-10 w-44 rounded-2xl bg-upay-800 p-4 text-cream-50 shadow-[0_18px_36px_-12px_rgba(13,61,39,0.4)] sm:-right-10 lg:-right-4">
         <Spark className="mb-2 h-5 w-5" tone="accent" />
         <p className="font-display text-3xl font-semibold leading-none">&lt;1s</p>
         <p className="mt-1 text-xs text-cream-50/70">
@@ -105,7 +105,7 @@ function HeroChatThread() {
   return (
     <div className="flex h-full flex-col bg-cream-100">
       {/* Chat header */}
-      <div className="flex items-center gap-2 bg-pago-800 px-4 pb-2 pt-10 text-cream-50">
+      <div className="flex items-center gap-2 bg-upay-800 px-4 pb-2 pt-10 text-cream-50">
         <div className="grid h-7 w-7 place-items-center rounded-full bg-cream-50/15 text-[11px] font-semibold">
           U
         </div>
@@ -131,10 +131,10 @@ function HeroChatThread() {
         <div className="flex w-full justify-start">
           <div className="w-[78%] rounded-2xl rounded-bl-md bg-white p-3 shadow-sm">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] uppercase tracking-wider text-pago-700">
+              <span className="text-[10px] uppercase tracking-wider text-upay-700">
                 Received
               </span>
-              <span className="rounded-full bg-pago-100 px-2 py-0.5 text-[9px] font-medium text-pago-800">
+              <span className="rounded-full bg-upay-100 px-2 py-0.5 text-[9px] font-medium text-upay-800">
                 ✓ Settled
               </span>
             </div>
@@ -154,7 +154,7 @@ function HeroChatThread() {
 
 function BankAvatar({ letters }: { letters: string }) {
   return (
-    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-pago-100 text-sm font-semibold text-pago-800">
+    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-upay-100 text-sm font-semibold text-upay-800">
       {letters}
     </div>
   );

@@ -15,7 +15,7 @@ interface ChatBubbleProps {
  * ChatBubble
  *
  * WhatsApp-style speech bubble with a subtle tail. Outgoing bubbles use a
- * pale Pago-green tint reminiscent of a banking chat; incoming use white.
+ * pale upay-green tint reminiscent of a banking chat; incoming use white.
  *
  * Bubble width is bounded so longer text wraps nicely inside the phone frame.
  */
@@ -35,7 +35,7 @@ export function ChatBubble({ side, children, time, className }: ChatBubbleProps)
           "relative max-w-[78%] rounded-2xl px-3 py-2 text-[11px] leading-snug",
           "shadow-[0_1px_2px_rgba(0,0,0,0.05)]",
           isOutgoing
-            ? "rounded-br-md bg-pago-100 text-ink-900"
+            ? "rounded-br-md bg-upay-100 text-ink-900"
             : "rounded-bl-md bg-white text-ink-900",
         )}
       >
@@ -43,7 +43,7 @@ export function ChatBubble({ side, children, time, className }: ChatBubbleProps)
         {time && (
           <span className="mt-0.5 block text-right text-[9px] text-ink-500">
             {time}
-            {isOutgoing && <span className="ml-1 text-pago-500">✓✓</span>}
+            {isOutgoing && <span className="ml-1 text-upay-500">✓✓</span>}
           </span>
         )}
       </div>

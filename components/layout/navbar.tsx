@@ -17,7 +17,7 @@ import { NAV_LINKS, SITE } from "@/lib/data/site";
  */
 export function Navbar() {
   return (
-    <header className="sticky top-0 z-50 border-b border-pago-900/5 bg-cream-50/80 backdrop-blur-md">
+    <header className="sticky top-0 z-50 border-b border-upay-900/5 bg-cream-50/80 backdrop-blur-md">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
         <Link href="/" aria-label="UPAY — home">
           <BrandLogo />
@@ -29,7 +29,7 @@ export function Navbar() {
               <li key={link.href}>
                 <a
                   href={link.href}
-                  className="transition-colors hover:text-pago-900"
+                  className="transition-colors hover:text-upay-900"
                 >
                   {link.label}
                 </a>
