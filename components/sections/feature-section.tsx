@@ -1,37 +1,34 @@
 import type { ReactNode } from "react";
-import { CtaButton } from "@/components/ui/cta-button";
-import { SectionEyebrow } from "@/components/ui/section-eyebrow";
+import { Reveal } from "@/components/interactive/reveal";
 import { cn } from "@/lib/utils/cn";
-import { SITE } from "@/lib/data/site";
 
 interface FeatureSectionProps {
-  /** Anchor id used for in-page nav (#features etc.). */
   id?: string;
+  /** Section index, used for the small numeric tag (01, 02, etc.). */
+  index: string;
   eyebrow: string;
-  /** Headline supports rich text — pass a fragment with highlighted spans. */
+  /** Headline accepts ReactNode so callers can mix italics/highlights. */
   heading: ReactNode;
   description: string;
-  /** The phone-mockup illustration column. */
   visual: ReactNode;
-  /** Whether to flip the layout (visual on the left). */
   reverse?: boolean;
-  /** Optional background tint override — defaults to plain cream. */
   toneClassName?: string;
 }
 
 /**
  * FeatureSection
  *
- * Reusable two-column feature section used by Transfer, Spending, Support,
- * and Context. Centralizing this layout means tweaks to gutter, vertical
- * rhythm, or eyebrow position propagate everywhere consistently.
+ * Two-column section template for product features. The numeric tag
+ * (01 / 02 / 03 …) sits above the eyebrow as a small editorial flourish —
+ * a Mercury-style detail that signals "this is one of a series" without
+ * needing visible navigation.
  *
- * The `reverse` prop alternates the visual side without breaking source order
- * (text always renders first in DOM for accessibility), using grid order
- * utilities on large screens only.
+ * Reveal animations stagger between the text and visual columns by 0.15s
+ * so the eye lands on the heading first, then the supporting visual.
  */
 export function FeatureSection({
   id,
+  index,
   eyebrow,
   heading,
   description,
@@ -40,30 +37,34 @@ export function FeatureSection({
   toneClassName,
 }: FeatureSectionProps) {
   return (
-    <section
-      id={id}
-      className={cn("relative py-24 lg:py-32", toneClassName)}
-    >
-      <div className="mx-auto grid max-w-7xl items-center gap-16 px-6 lg:grid-cols-2 lg:gap-24">
-        <div
-          className={cn(
-            "max-w-xl",
-            reverse && "lg:order-2 lg:ml-auto",
-          )}
+    <section id={id} className={cn("relative py-32 lg:py-40", toneClassName)}>
+      <div className="mx-auto grid max-w-7xl items-center gap-20 px-6 lg:grid-cols-2 lg:gap-24">
+        <Reveal
+          from={reverse ? "right" : "left"}
+          className={cn("max-w-xl", reverse && "lg:order-2 lg:ml-auto")}
         >
-          <SectionEyebrow>{eyebrow}</SectionEyebrow>
-          <h2 className="mt-4 font-display text-4xl font-medium leading-[1.05] tracking-tight text-ink-900 sm:text-5xl lg:text-[3.75rem]">
+          <div className="flex items-center gap-4 text-xs font-mono text-ink-400">
+            <span>{index}</span>
+            <span className="h-px w-8 bg-ink-300" />
+            <span className="uppercase tracking-[0.2em]">{eyebrow}</span>
+          </div>
+
+          <h2 className="mt-8 text-[clamp(2.25rem,4.5vw,4rem)] font-normal leading-[1.02] tracking-[-0.03em] text-ink-900">
             {heading}
           </h2>
-          <p className="mt-6 text-lg text-ink-700">{description}</p>
-          <div className="mt-8">
-            <CtaButton href={SITE.whatsappLink} target="_blank" rel="noopener">
-              Try it out
-            </CtaButton>
-          </div>
-        </div>
 
-        <div className={cn("relative", reverse && "lg:order-1")}>{visual}</div>
+          <p className="mt-6 text-lg leading-relaxed text-ink-500">
+            {description}
+          </p>
+        </Reveal>
+
+        <Reveal
+          from={reverse ? "left" : "right"}
+          delay={0.15}
+          className={cn("relative", reverse && "lg:order-1")}
+        >
+          {visual}
+        </Reveal>
       </div>
     </section>
   );

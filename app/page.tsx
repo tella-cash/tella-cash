@@ -3,15 +3,15 @@ import { Footer } from "@/components/layout/footer";
 import { Hero } from "@/components/sections/hero";
 import { FeatureSection } from "@/components/sections/feature-section";
 import { SecuritySection } from "@/components/sections/security-section";
-import { EverydayUsageSection } from "@/components/sections/everyday-usage-section";
+import { UseCasesSection } from "@/components/sections/use-cases-section";
 import { FaqSection } from "@/components/sections/faq-section";
-import { InstantBlockSection } from "@/components/sections/instant-block-section";
+import { ClosingCta } from "@/components/sections/closing-cta";
 import {
-  TransferIllustration,
-  SpendingIllustration,
-  SupportIllustration,
+  SendIllustration,
+  BalanceIllustration,
+  ReceiveIllustration,
   ContextIllustration,
-} from "@/components/illustrations/phone-illustrations";
+} from "@/components/illustrations/feature-illustrations";
 
 export default function HomePage() {
   return (
@@ -22,60 +22,66 @@ export default function HomePage() {
 
         <FeatureSection
           id="features"
-          eyebrow="Offramp"
+          index="01"
+          eyebrow="Send"
           heading={
             <>
-              USDC to Naira, <em className="not-italic text-upay-700">stress-free.</em>
+              Type the amount.{" "}
+              <span className="italic text-accent-500">Type the name.</span>{" "}
+              That's the whole flow.
             </>
           }
-          description="Tell UPAY how much USDC you want to sell. It quotes the live rate, you confirm, and your Nigerian bank account is credited in seconds — receipt included, all inside the chat."
-          visual={<TransferIllustration />}
+          description="No recipient lookups, no copy-pasted addresses, no IBAN forms. Tell UPay what you want to do in plain English. It confirms before any money moves."
+          visual={<SendIllustration />}
         />
 
         <FeatureSection
-          eyebrow="Live Rates"
+          index="02"
+          eyebrow="Balance"
           heading={
             <>
-              Always the rate{" "}
-              <em className="not-italic text-upay-700">you deserve.</em>
+              A balance you can{" "}
+              <span className="italic text-accent-500">just ask for.</span>
             </>
           }
-          description={`Check the going rate any time — "what's the rate?" — and UPAY quotes you the live market price with our competitive spread. The number you see is the number you get.`}
-          visual={<SpendingIllustration />}
+          description="Open WhatsApp. Type 'balance.' That's the whole product. No dashboards, no apps to install, no expired sessions."
+          visual={<BalanceIllustration />}
           reverse
-          toneClassName="bg-cream-100/60"
+          toneClassName="bg-surface-100/40"
         />
 
         <FeatureSection
-          eyebrow="Settlement"
+          index="03"
+          eyebrow="Receive"
           heading={
             <>
-              Near-zero.{" "}
-              <em className="not-italic text-upay-700">Every time.</em>
+              Money lands in your chat,{" "}
+              <span className="italic text-accent-500">not a separate inbox.</span>
             </>
           }
-          description="UPAY settles on ARC — a blockchain purpose-built for near-zero second finality. Your Naira does not queue. Most offramps complete before you put your phone down."
-          visual={<SupportIllustration />}
+          description="Incoming payments arrive as messages. New balance, sender's name, transaction reference — all there, in the same thread you already check."
+          visual={<ReceiveIllustration />}
         />
 
         <FeatureSection
-          eyebrow="Seamless Repeat"
+          index="04"
+          eyebrow="Context"
           heading={
             <>
-              Set your bank once,{" "}
-              <em className="not-italic text-upay-700">offramp forever.</em>
+              It remembers,{" "}
+              <span className="italic text-accent-500">so you don't have to.</span>
             </>
           }
-          description={`UPAY remembers your bank account so repeat offramps are a single message away. "sell 200 USDC" — same bank, live rate, instant settlement. Done.`}
+          description="Reference earlier conversations naturally. 'Send him the same as last week' resolves to the right person, the right amount, the right wallet."
           visual={<ContextIllustration />}
           reverse
-          toneClassName="bg-cream-100/60"
+          toneClassName="bg-surface-100/40"
         />
 
         <SecuritySection />
-        <EverydayUsageSection />
+        <UseCasesSection />
         <FaqSection />
-        <InstantBlockSection />
+        <ClosingCta />
       </main>
       <Footer />
     </>

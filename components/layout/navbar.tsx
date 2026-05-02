@@ -1,23 +1,54 @@
+"use client";
+
 import Link from "next/link";
-import { BrandLogo } from "@/components/ui/brand-logo";
-import { CtaButton } from "@/components/ui/cta-button";
+import { motion, useScroll, useTransform } from "framer-motion";
+import { BrandMark } from "@/components/ui/brand-mark";
+import { MagneticCta } from "@/components/ui/magnetic-cta";
 import { NAV_LINKS, SITE } from "@/lib/data/site";
 
+/**
+ * Navbar
+ *
+ * Top navigation. Sits transparent at the top of the page and acquires a
+ * subtle blurred background once the user scrolls past the hero. The
+ * crossfade is driven by `useScroll` so it tracks the actual scroll
+ * position with no jank.
+ *
+ * Client component because it reads scroll state. Keep it lean — anything
+ * that doesn't need scroll awareness should stay server-rendered.
+ */
 export function Navbar() {
+  const { scrollY } = useScroll();
+  const bgOpacity = useTransform(scrollY, [0, 80], [0, 0.85]);
+  const borderOpacity = useTransform(scrollY, [0, 80], [0, 0.08]);
+
   return (
-    <header className="sticky top-0 z-50 border-b border-upay-900/5 bg-cream-50/80 backdrop-blur-md">
+    <motion.header
+      className="fixed inset-x-0 top-0 z-50 backdrop-blur-md"
+      style={{
+        backgroundColor: useTransform(
+          bgOpacity,
+          (v) => `rgba(250, 250, 248, ${v})`,
+        ),
+        borderBottom: "1px solid",
+        borderColor: useTransform(
+          borderOpacity,
+          (v) => `rgba(10, 10, 10, ${v})`,
+        ),
+      }}
+    >
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-        <Link href="/" aria-label="UPAY — home">
-          <BrandLogo />
+        <Link href="/" aria-label="UPay — home" data-cursor="grow">
+          <BrandMark />
         </Link>
 
         <nav aria-label="Primary" className="hidden lg:block">
-          <ul className="flex items-center gap-8 text-sm text-ink-700">
+          <ul className="flex items-center gap-10 text-sm text-ink-700">
             {NAV_LINKS.map((link) => (
               <li key={link.href}>
                 <a
                   href={link.href}
-                  className="transition-colors hover:text-upay-900"
+                  className="transition-colors hover:text-ink-900"
                 >
                   {link.label}
                 </a>
@@ -26,10 +57,10 @@ export function Navbar() {
           </ul>
         </nav>
 
-        <CtaButton href={SITE.whatsappLink} target="_blank" rel="noopener">
-          Try it out
-        </CtaButton>
+        <MagneticCta href={SITE.whatsappLink} target="_blank" rel="noopener">
+          Try UPay
+        </MagneticCta>
       </div>
-    </header>
+    </motion.header>
   );
 }

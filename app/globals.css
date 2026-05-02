@@ -1,110 +1,145 @@
 @import "tailwindcss";
 
 /**
- * Theme tokens for the upay landing page.
+ * UPay design tokens — premium, quiet, Mercury-style.
  *
- * Palette is built around a deep, slightly desaturated fintech green sitting
- * on a warm cream background — evocative of cash, but kept earthy rather than
- * neon. Accents in mustard/amber for highlight cards.
+ * The system rests on three colors: a near-white surface that's slightly
+ * warm so it doesn't feel sterile, deep ink for text that's not pure black
+ * (pure black is too harsh against the warm white), and one electric-blue
+ * accent that does all the heavy lifting for emphasis, CTAs, and active
+ * states.
+ *
+ * Restraint is the point. Every visual element should justify its presence
+ * either by communicating something or by carrying brand. Decoration for
+ * its own sake doesn't belong here.
  */
 @theme {
-  /* Cream / surface scale */
-  --color-cream-50: #fdfaf2;
-  --color-cream-100: #f8f1de;
-  --color-cream-200: #f1e6c7;
-  --color-cream-300: #e8d6a3;
+  /* Surface — warm near-whites */
+  --color-surface-0: #ffffff;
+  --color-surface-50: #fafaf8;
+  --color-surface-100: #f4f4f0;
+  --color-surface-200: #e9e9e3;
+  --color-surface-300: #d4d4cc;
 
-  /* upay green — primary brand */
-  --color-upay-50: #effaf2;
-  --color-upay-100: #d8f3df;
-  --color-upay-200: #b4e6c4;
-  --color-upay-300: #82d2a1;
-  --color-upay-400: #4eb87b;
-  --color-upay-500: #2a9c5f;
-  --color-upay-600: #197d4a;
-  --color-upay-700: #14633c;
-  --color-upay-800: #114f31;
-  --color-upay-900: #0d3d27;
-  --color-upay-950: #062017;
+  /* Ink — deep neutrals, never pure black */
+  --color-ink-900: #0a0a0a;
+  --color-ink-700: #2b2b2b;
+  --color-ink-500: #6b6b6b;
+  --color-ink-400: #8a8a8a;
+  --color-ink-300: #b8b8b8;
+  --color-ink-200: #dcdcdc;
 
-  /* Accent — warm mustard for callouts and stars */
-  --color-accent-300: #f3d96b;
-  --color-accent-400: #ecc341;
-  --color-accent-500: #d9a922;
-  --color-accent-600: #b58717;
-
-  /* Ink / text colors */
-  --color-ink-900: #0a1f17;
-  --color-ink-700: #2a3d33;
-  --color-ink-500: #5a6e63;
-  --color-ink-300: #97a89e;
+  /* Accent — electric blue. The single bold color in the system. */
+  --color-accent-50: #eef2ff;
+  --color-accent-100: #dbe3ff;
+  --color-accent-300: #8fa6ff;
+  --color-accent-500: #0047ff;
+  --color-accent-600: #0038cc;
+  --color-accent-700: #002a99;
 
   /* Fonts */
-  --font-display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
-  --font-body: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Instrument Serif", "Times New Roman", ui-serif, serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
-  /* Radii */
-  --radius-card: 1.5rem;
-  --radius-pill: 999px;
+  /* Radii — restrained */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
 
-  /* Shadow with green tint */
-  --shadow-soft: 0 8px 24px -8px rgb(13 61 39 / 0.18);
-  --shadow-card: 0 24px 48px -16px rgb(13 61 39 / 0.22);
+  /* Shadows — soft, never heavy */
+  --shadow-soft: 0 1px 3px rgb(0 0 0 / 0.04), 0 4px 12px rgb(0 0 0 / 0.04);
+  --shadow-card: 0 4px 12px rgb(0 0 0 / 0.06), 0 16px 40px rgb(0 0 0 / 0.08);
+  --shadow-accent: 0 8px 24px -8px rgb(0 71 255 / 0.4);
 }
 
-/* Smooth scroll for in-page anchor nav */
+/* Base reset / typography */
 html {
-  scroll-behavior: smooth;
+  scroll-behavior: auto; /* Lenis owns scrolling now */
 }
 
 body {
-  background: var(--color-cream-50);
+  background: var(--color-surface-50);
   color: var(--color-ink-900);
-  font-family: var(--font-body);
+  font-family: var(--font-sans);
+  font-feature-settings: "ss01", "cv11";
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
-/* Display headings get the display font automatically */
-h1,
-h2,
-h3,
-h4 {
+/* Display headings use the serif. Mercury / Stripe both lean serif for
+   heroes — adds editorial weight that sans-serif can't match. */
+h1, h2, h3 {
   font-family: var(--font-display);
   letter-spacing: -0.02em;
+  line-height: 1.05;
 }
 
-/* Subtle grain on the page body to add tactile depth */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  opacity: 0.04;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+h4, h5, h6 {
+  font-family: var(--font-sans);
+  letter-spacing: -0.015em;
+  font-weight: 500;
+}
+
+/* Hide native cursor when our custom one is active. The .has-custom-cursor
+   class is applied by the cursor component itself once mounted, so non-JS
+   users still see the native cursor as fallback. */
+.has-custom-cursor,
+.has-custom-cursor * {
+  cursor: none !important;
+}
+
+@media (pointer: coarse) {
+  /* Touch devices — never hide the system cursor / interactions. */
+  .has-custom-cursor,
+  .has-custom-cursor * {
+    cursor: auto !important;
+  }
+}
+
+/* Selection styling — picks up the accent color */
+::selection {
+  background: var(--color-accent-500);
+  color: white;
 }
 
 /* Keyframes used across the page */
-@keyframes float-slow {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
 }
 
-@keyframes fade-rise {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
+@keyframes typing-dots {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.3; }
+  30% { transform: translateY(-3px); opacity: 1; }
 }
 
 @keyframes shimmer {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
 }
 
-.animate-float-slow {
-  animation: float-slow 5s ease-in-out infinite;
+@keyframes drift-slow {
+  0%, 100% { transform: translate(0, 0); }
+  33% { transform: translate(8px, -6px); }
+  66% { transform: translate(-6px, 8px); }
 }
 
-.animate-fade-rise {
-  animation: fade-rise 0.8s ease-out backwards;
+.animate-drift-slow {
+  animation: drift-slow 12s ease-in-out infinite;
+}
+
+/* Scrollbar — minimal */
+::-webkit-scrollbar { width: 0; height: 0; }
+
+/* Reduce motion respect */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

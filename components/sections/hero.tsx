@@ -1,161 +1,196 @@
-import { CtaButton } from "@/components/ui/cta-button";
+"use client";
+
+import { motion, useScroll, useTransform } from "framer-motion";
+import { useRef } from "react";
+import { MagneticCta } from "@/components/ui/magnetic-cta";
 import { PhoneFrame } from "@/components/ui/phone-frame";
-import { ChatBubble } from "@/components/ui/chat-bubble";
-import { Spark } from "@/components/ui/spark";
+import { LiveChatThread } from "@/components/illustrations/live-chat-thread";
 import { SITE } from "@/lib/data/site";
 
+/**
+ * Hero
+ *
+ * The opening statement of the page. Two columns on desktop:
+ *   - Left: editorial headline, subhead, primary CTA, trust strip.
+ *   - Right: phone with the looping live chat thread, parallaxed gently
+ *     against scroll so the section feels three-dimensional.
+ *
+ * The headline copy is intentionally short. Premium fintech doesn't
+ * over-explain — the phone shows the product working, the headline just
+ * names what it is.
+ */
 export function Hero() {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const { scrollYProgress } = useScroll({
+    target: ref,
+    offset: ["start start", "end start"],
+  });
+
+  // Phone parallaxes up slightly faster than the text — gives the right
+  // column a subtle depth-of-field feel. Range tuned so the phone never
+  // exits the viewport prematurely.
+  const phoneY = useTransform(scrollYProgress, [0, 1], [0, -120]);
+  const headlineY = useTransform(scrollYProgress, [0, 1], [0, -40]);
+
   return (
-    <section className="relative overflow-hidden">
+    <section
+      ref={ref}
+      className="relative overflow-hidden pb-32 pt-40 lg:pb-40 lg:pt-48"
+    >
+      {/* Background grid — extremely subtle, adds rhythm without ornament */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute right-0 top-0 -z-10 h-[600px] w-[600px] translate-x-1/4 -translate-y-1/4 rounded-full bg-gradient-to-br from-accent-300/40 via-accent-300/10 to-transparent blur-3xl"
+        className="pointer-events-none absolute inset-0 -z-10 opacity-[0.025]"
+        style={{
+          backgroundImage:
+            "linear-gradient(to right, #000 1px, transparent 1px), linear-gradient(to bottom, #000 1px, transparent 1px)",
+          backgroundSize: "64px 64px",
+        }}
       />
 
-      <div className="mx-auto grid max-w-7xl items-center gap-12 px-6 pb-24 pt-16 lg:grid-cols-12 lg:pb-32 lg:pt-24">
+      {/* One soft accent glow, top-right — single point of color in the
+          composition before the hero phone enters. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute right-0 top-0 -z-10 h-[600px] w-[600px] translate-x-1/3 -translate-y-1/4 rounded-full bg-accent-500/[0.06] blur-3xl"
+      />
+
+      <div className="mx-auto grid max-w-7xl items-center gap-16 px-6 lg:grid-cols-12 lg:gap-8">
         {/* Copy column */}
-        <div className="lg:col-span-7">
-          <h1 className="font-display text-5xl font-medium leading-[1.05] tracking-tight text-ink-900 sm:text-6xl lg:text-[5.5rem]">
-            Your USDC,
+        <motion.div style={{ y: headlineY }} className="lg:col-span-7">
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+            className="inline-flex items-center gap-2 rounded-full border border-ink-200 bg-surface-50/60 px-3 py-1 text-xs text-ink-500 backdrop-blur"
+          >
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-accent-500" />
+            <span>Now on Arc — stablecoins by message</span>
+          </motion.div>
+
+          <motion.h1
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.9, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
+            className="mt-8 text-[clamp(3rem,7vw,6.5rem)] font-normal leading-[0.96] tracking-[-0.04em] text-ink-900"
+          >
+            Money,
             <br />
-            your Naira,
-            <span className="relative ml-3 inline-block">
-              <span className="text-upay-700">instantly.</span>
-              <Spark
-                className="absolute -right-7 -top-2 h-6 w-6 animate-float-slow"
-                tone="accent"
-              />
-            </span>
-          </h1>
+            <span className="italic text-accent-500">by message.</span>
+          </motion.h1>
 
-          <p className="mt-8 max-w-xl text-lg text-ink-700">
-            Message UPAY on WhatsApp, tell it how much USDC to offramp, and
-            Naira lands in your Nigerian bank account in seconds. No exchange
-            account. No app. Just chat.
-          </p>
+          <motion.p
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
+            className="mt-8 max-w-md text-lg leading-relaxed text-ink-500"
+          >
+            Send, receive, and track stablecoins from a WhatsApp chat. No app to
+            install. No menus to learn. Just write.
+          </motion.p>
 
-          <div className="mt-10 flex flex-wrap items-center gap-4">
-            <CtaButton
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, delay: 0.5, ease: [0.16, 1, 0.3, 1] }}
+            className="mt-10 flex flex-wrap items-center gap-5"
+          >
+            <MagneticCta
               href={SITE.whatsappLink}
               target="_blank"
               rel="noopener"
               className="text-base"
             >
-              Try UPAY now
-            </CtaButton>
+              Start on WhatsApp
+            </MagneticCta>
             <a
               href="#features"
-              className="text-sm font-medium text-ink-700 underline-offset-4 hover:text-upay-900 hover:underline"
+              data-cursor="grow"
+              className="text-sm text-ink-500 underline-offset-4 transition-colors hover:text-ink-900 hover:underline"
             >
-              See how it works
+              See how it works →
             </a>
-          </div>
+          </motion.div>
 
-          {/* Trust strip */}
-          <div className="mt-16 flex flex-wrap items-center gap-x-8 gap-y-3 text-xs uppercase tracking-widest text-ink-500">
-            <span>All Nigerian banks</span>
-            <span className="h-1 w-1 rounded-full bg-ink-500/50" />
-            <span>Near-zero finality</span>
-            <span className="h-1 w-1 rounded-full bg-ink-500/50" />
-            <span>Powered by ARC</span>
-          </div>
-        </div>
+          {/* Trust strip — small, restrained */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 1, delay: 0.7 }}
+            className="mt-20 flex flex-wrap items-center gap-x-8 gap-y-3 text-[11px] uppercase tracking-[0.18em] text-ink-400"
+          >
+            <span>End-to-end encrypted</span>
+            <span className="h-1 w-1 rounded-full bg-ink-300" />
+            <span>USDC native</span>
+            <span className="h-1 w-1 rounded-full bg-ink-300" />
+            <span>Sub-second finality</span>
+          </motion.div>
+        </motion.div>
 
         {/* Phone column */}
-        <div className="relative lg:col-span-5">
+        <motion.div
+          style={{ y: phoneY }}
+          initial={{ opacity: 0, y: 40 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 1, delay: 0.4, ease: [0.16, 1, 0.3, 1] }}
+          className="relative lg:col-span-5"
+        >
           <HeroPhone />
-        </div>
+        </motion.div>
       </div>
     </section>
   );
 }
 
+/**
+ * HeroPhone
+ *
+ * Composes the phone frame with the looping chat thread, plus two floating
+ * detail elements that overlap the phone for depth — a small notification
+ * card and a stat tile. Both drift independently using CSS keyframe
+ * animation so they don't feel mechanically synced.
+ */
 function HeroPhone() {
   return (
     <div className="relative mx-auto w-fit">
-      {/* Floating received notification, top-left */}
-      <div className="absolute -left-6 top-12 z-10 flex w-56 items-center gap-3 rounded-2xl bg-white p-3 shadow-[0_18px_36px_-12px_rgba(13,61,39,0.25)] sm:-left-12 lg:-left-8">
-        <BankAvatar letters="GT" />
-        <div className="flex-1">
-          <p className="text-xs text-ink-500">Received</p>
-          <p className="font-display text-base font-semibold text-ink-900">
-            ₦82,500
-          </p>
-          <p className="text-xs text-ink-500">GTBank · 4521</p>
+      {/* Floating notification — top-left of phone */}
+      <motion.div
+        initial={{ opacity: 0, y: 20, x: -10 }}
+        animate={{ opacity: 1, y: 0, x: 0 }}
+        transition={{ duration: 0.8, delay: 1.2, ease: [0.16, 1, 0.3, 1] }}
+        className="animate-drift-slow absolute -left-8 top-16 z-10 flex w-52 items-center gap-3 rounded-2xl bg-white p-3 shadow-card ring-1 ring-ink-200/30 sm:-left-14 lg:-left-10"
+      >
+        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-accent-50 text-xs font-semibold text-accent-600">
+          CO
         </div>
-      </div>
+        <div className="flex-1 leading-tight">
+          <p className="text-[10px] uppercase tracking-wider text-ink-400">
+            Sent
+          </p>
+          <p className="font-display text-base leading-none text-ink-900">
+            $5.00
+          </p>
+          <p className="text-[10px] text-ink-500">to Chuks Okafor</p>
+        </div>
+      </motion.div>
 
-      {/* Floating settlement stat card, bottom-right */}
-      <div className="absolute -right-6 bottom-16 z-10 w-44 rounded-2xl bg-upay-800 p-4 text-cream-50 shadow-[0_18px_36px_-12px_rgba(13,61,39,0.4)] sm:-right-10 lg:-right-4">
-        <Spark className="mb-2 h-5 w-5" tone="accent" />
-        <p className="font-display text-3xl font-semibold leading-none">&lt;1s</p>
-        <p className="mt-1 text-xs text-cream-50/70">
-          average settlement time on ARC.
+      {/* Floating stat — bottom-right */}
+      <motion.div
+        initial={{ opacity: 0, y: 20, x: 10 }}
+        animate={{ opacity: 1, y: 0, x: 0 }}
+        transition={{ duration: 0.8, delay: 1.4, ease: [0.16, 1, 0.3, 1] }}
+        className="animate-drift-slow absolute -right-6 bottom-24 z-10 w-44 rounded-2xl bg-ink-900 p-4 text-surface-50 shadow-card"
+        style={{ animationDelay: "-3s" }}
+      >
+        <p className="font-display text-3xl leading-none">~1s</p>
+        <p className="mt-2 text-[11px] leading-tight text-surface-50/60">
+          Average settlement on Arc
         </p>
-      </div>
+      </motion.div>
 
       <PhoneFrame>
-        <HeroChatThread />
+        <LiveChatThread />
       </PhoneFrame>
-    </div>
-  );
-}
-
-function HeroChatThread() {
-  return (
-    <div className="flex h-full flex-col bg-cream-100">
-      {/* Chat header */}
-      <div className="flex items-center gap-2 bg-upay-800 px-4 pb-2 pt-10 text-cream-50">
-        <div className="grid h-7 w-7 place-items-center rounded-full bg-cream-50/15 text-[11px] font-semibold">
-          U
-        </div>
-        <div className="leading-tight">
-          <p className="text-[12px] font-medium">UPAY</p>
-          <p className="text-[9px] text-cream-50/70">online</p>
-        </div>
-      </div>
-
-      {/* Messages */}
-      <div className="flex flex-1 flex-col gap-2 px-3 py-3">
-        <ChatBubble side="outgoing" time="9:14">
-          sell 50 usdc
-        </ChatBubble>
-        <ChatBubble side="incoming" time="9:14">
-          Got it — 50 USDC → ₦82,500 (₦1,650/USDC). To GTBank · 4521. Confirm?
-        </ChatBubble>
-        <ChatBubble side="outgoing" time="9:14">
-          yes
-        </ChatBubble>
-
-        {/* Receipt card as bot message */}
-        <div className="flex w-full justify-start">
-          <div className="w-[78%] rounded-2xl rounded-bl-md bg-white p-3 shadow-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] uppercase tracking-wider text-upay-700">
-                Received
-              </span>
-              <span className="rounded-full bg-upay-100 px-2 py-0.5 text-[9px] font-medium text-upay-800">
-                ✓ Settled
-              </span>
-            </div>
-            <p className="mt-1 font-display text-2xl font-semibold text-ink-900">
-              ₦82,500
-            </p>
-            <p className="mt-0.5 text-[10px] text-ink-500">
-              GTBank · 4521 · via ARC
-            </p>
-            <p className="mt-2 text-[9px] text-ink-300">REF · 4R9K2M · 9:14 AM</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function BankAvatar({ letters }: { letters: string }) {
-  return (
-    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-upay-100 text-sm font-semibold text-upay-800">
-      {letters}
     </div>
   );
 }

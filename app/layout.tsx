@@ -1,47 +1,64 @@
 import type { Metadata } from "next";
-import { Bricolage_Grotesque, Plus_Jakarta_Sans } from "next/font/google";
+import { Inter, Instrument_Serif, JetBrains_Mono } from "next/font/google";
 import "@/app/globals.css";
+import { SmoothScroll } from "@/components/interactive/smooth-scroll";
+import { CustomCursor } from "@/components/interactive/custom-cursor";
 
 /**
- * Display font — used for headings and large numerics. Variable axis lets
- * us pull thin elegance for big hero text without loading multiple weights.
+ * Inter — body text. Variable weight so we don't need to load multiple
+ * weights as separate files. Modern, neutral, and trusted in fintech.
  */
-const bricolage = Bricolage_Grotesque({
+const inter = Inter({
   subsets: ["latin"],
+  variable: "--font-sans",
+  display: "swap",
+});
+
+/**
+ * Instrument Serif — display headings only. Single weight, italic optional.
+ * Pairs the serif's editorial weight with Inter's clean body text — a
+ * combination Mercury, Stripe, and Linear have all leaned on.
+ */
+const instrumentSerif = Instrument_Serif({
+  subsets: ["latin"],
+  weight: "400",
+  style: ["normal", "italic"],
   variable: "--font-display",
   display: "swap",
 });
 
 /**
- * Body font — humanist sans with friendlier counters than Inter, which
- * suits a consumer fintech voice better than something more corporate.
+ * JetBrains Mono — used sparingly for inline code, transaction references,
+ * wallet addresses. Adds technical credibility where appropriate.
  */
-const jakarta = Plus_Jakarta_Sans({
+const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
-  variable: "--font-body",
+  variable: "--font-mono",
   display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "UPAY — Offramp USDC to Naira on WhatsApp",
+  title: "UPay — Money, by message.",
   description:
-    "Convert USDC to Nigerian Naira and receive it in any bank account — all from a WhatsApp message. Powered by ARC. Near-zero second finality.",
+    "Send, receive, and track money over WhatsApp. No app to install, no menus to learn.",
 };
 
-/**
- * RootLayout
- *
- * App Router root. Owns the html/body shell, font variables, and global CSS.
- * Keep this file lean — it should not import section-level components.
- */
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${bricolage.variable} ${jakarta.variable}`}>
-      <body className="relative min-h-screen overflow-x-hidden">{children}</body>
+    <html
+      lang="en"
+      className={`${inter.variable} ${instrumentSerif.variable} ${jetbrainsMono.variable}`}
+    >
+      <body className="relative min-h-screen overflow-x-hidden">
+        <SmoothScroll>
+          <CustomCursor />
+          {children}
+        </SmoothScroll>
+      </body>
     </html>
   );
 }
