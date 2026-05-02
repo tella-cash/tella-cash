@@ -2,13 +2,6 @@ import Link from "next/link";
 import { BrandMark } from "@/components/ui/brand-mark";
 import { SITE } from "@/lib/data/site";
 
-/**
- * Footer
- *
- * Closing band of the page. Dark slab with the brand mark, a short
- * tagline, and a small set of links. Premium products keep footers
- * lean — no exhaustive sitemap, no email signup, no social grid.
- */
 export function Footer() {
   return (
     <footer className="bg-ink-900 text-surface-50">

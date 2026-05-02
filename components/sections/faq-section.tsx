@@ -2,14 +2,6 @@ import { Reveal } from "@/components/interactive/reveal";
 import { FAQS } from "@/lib/data/faqs";
 import type { FaqItem } from "@/lib/data/faqs";
 
-/**
- * FaqSection
- *
- * Single-column FAQ block. Uses native <details> for accessibility and
- * deep-link support. The chevron rotates 45° to form a × when expanded —
- * a small detail that mirrors the design's preference for geometric
- * transformation over icon swaps.
- */
 export function FaqSection() {
   return (
     <section id="faqs" className="bg-surface-50 py-32 lg:py-40">

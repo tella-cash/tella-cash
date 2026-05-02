@@ -15,17 +15,6 @@ interface FeatureSectionProps {
   toneClassName?: string;
 }
 
-/**
- * FeatureSection
- *
- * Two-column section template for product features. The numeric tag
- * (01 / 02 / 03 …) sits above the eyebrow as a small editorial flourish —
- * a Mercury-style detail that signals "this is one of a series" without
- * needing visible navigation.
- *
- * Reveal animations stagger between the text and visual columns by 0.15s
- * so the eye lands on the heading first, then the supporting visual.
- */
 export function FeatureSection({
   id,
   index,

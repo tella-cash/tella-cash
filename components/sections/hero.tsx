@@ -7,18 +7,6 @@ import { PhoneFrame } from "@/components/ui/phone-frame";
 import { LiveChatThread } from "@/components/illustrations/live-chat-thread";
 import { SITE } from "@/lib/data/site";
 
-/**
- * Hero
- *
- * The opening statement of the page. Two columns on desktop:
- *   - Left: editorial headline, subhead, primary CTA, trust strip.
- *   - Right: phone with the looping live chat thread, parallaxed gently
- *     against scroll so the section feels three-dimensional.
- *
- * The headline copy is intentionally short. Premium fintech doesn't
- * over-explain — the phone shows the product working, the headline just
- * names what it is.
- */
 export function Hero() {
   const ref = useRef<HTMLDivElement | null>(null);
   const { scrollYProgress } = useScroll({

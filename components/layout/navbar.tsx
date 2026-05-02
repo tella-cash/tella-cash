@@ -6,17 +6,6 @@ import { BrandMark } from "@/components/ui/brand-mark";
 import { MagneticCta } from "@/components/ui/magnetic-cta";
 import { NAV_LINKS, SITE } from "@/lib/data/site";
 
-/**
- * Navbar
- *
- * Top navigation. Sits transparent at the top of the page and acquires a
- * subtle blurred background once the user scrolls past the hero. The
- * crossfade is driven by `useScroll` so it tracks the actual scroll
- * position with no jank.
- *
- * Client component because it reads scroll state. Keep it lean — anything
- * that doesn't need scroll awareness should stay server-rendered.
- */
 export function Navbar() {
   const { scrollY } = useScroll();
   const bgOpacity = useTransform(scrollY, [0, 80], [0, 0.85]);

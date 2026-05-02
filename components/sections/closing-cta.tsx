@@ -5,18 +5,6 @@ import { useRef } from "react";
 import { MagneticCta } from "@/components/ui/magnetic-cta";
 import { SITE } from "@/lib/data/site";
 
-/**
- * ClosingCta
- *
- * The final, large editorial statement before the footer. Massive type,
- * minimal supporting copy, single CTA. The headline scales in slightly as
- * it scrolls into view — a parallax-driven detail that gives the section
- * a sense of arriving rather than just appearing.
- *
- * The right-side decoration is a single oversized chat bubble in accent
- * color, anchored off-canvas and partially visible. Suggests the next
- * conversation without showing a literal device.
- */
 export function ClosingCta() {
   const ref = useRef<HTMLDivElement | null>(null);
   const { scrollYProgress } = useScroll({

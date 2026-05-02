@@ -2,12 +2,6 @@ import { PhoneFrame } from "@/components/ui/phone-frame";
 import { ChatBubble } from "@/components/ui/chat-bubble";
 import { Spark } from "@/components/ui/spark";
 
-/**
- * TransferIllustration
- *
- * Phone mockup showing a USDC offramp flow: user sells USDC, UPAY
- * quotes the live rate, user confirms, receipt is dropped in chat.
- */
 export function TransferIllustration() {
   return (
     <div className="relative mx-auto w-fit">
@@ -34,12 +28,6 @@ export function TransferIllustration() {
   );
 }
 
-/**
- * SpendingIllustration
- *
- * Repurposed as a "Live Rates" illustration — shows a rate card inside
- * the phone in response to a casual rate check.
- */
 export function SpendingIllustration() {
   return (
     <div className="relative mx-auto w-fit">
@@ -74,12 +62,6 @@ export function SpendingIllustration() {
   );
 }
 
-/**
- * SupportIllustration
- *
- * A support thread showing a user checking on an offramp status.
- * UPAY resolves it instantly via ARC's transaction record.
- */
 export function SupportIllustration() {
   return (
     <div className="relative mx-auto w-fit">
