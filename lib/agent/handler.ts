@@ -1,5 +1,6 @@
 import type { UpayUser } from "@/lib/supabase/types";
 import { completeOnboarding } from "@/lib/users/repository";
+import { getWalletBalances } from "../wallet/circle";
 
 interface IncomingMessage {
   user: UpayUser;
@@ -26,13 +27,6 @@ function extractName(input: string): string {
     .trim();
 }
 
-/**
- * Single entry point for inbound WhatsApp messages.
- *
- * Returns a HandlerResult so callers can know not just what to reply but
- * also whether any post-reply side effects should run. This keeps the
- * handler pure(ish) — it doesn't fire-and-forget directly, the route does.
- */
 export async function handleIncomingMessage(
   message: IncomingMessage,
 ): Promise<HandlerResult> {
@@ -83,16 +77,16 @@ export async function handleIncomingMessage(
   }
 
   // Onboarded user — placeholder responses.
-  return { reply: handleOnboardedUser({ user, text }) };
+  return { reply: await handleOnboardedUser({ user, text }) };
 }
 
-function handleOnboardedUser({
+async function handleOnboardedUser({
   user,
   text,
 }: {
   user: UpayUser;
   text: string;
-}): string {
+}): Promise<string> {
   const trimmed = text.trim().toLowerCase();
   const name = user.profile_name?.split(" ")[0] ?? "there";
 
@@ -118,6 +112,11 @@ function handleOnboardedUser({
     return "Your wallet isn't ready yet. I'll have another go at setting it up shortly.";
   }
 
+    // Balance lookup
+  if (trimmed.includes("balance")) {
+    return await getBalanceReply(user);
+  }
+
   if (trimmed.includes("help") || trimmed === "hi" || trimmed === "hello") {
     return [
       `Hey ${name} 👋`,
@@ -130,4 +129,35 @@ function handleOnboardedUser({
   }
 
   return `I got your message: "${text}". (LLM not wired up yet.)`;
+}
+
+
+async function getBalanceReply(user: UpayUser): Promise<string> {
+  if (user.wallet_status !== "active" || !user.circle_wallet_id) {
+    return "Your wallet isn't ready yet. Once it's set up I'll be able to show your balance.";
+  }
+
+  let balances;
+  try {
+    balances = await getWalletBalances(user.circle_wallet_id);
+  } catch (err) {
+    console.error("[balance] fetch failed", { userId: user.id, err });
+    return "I couldn't fetch your balance right now. Try again in a moment.";
+  }
+
+  // Filter out zero balances — Circle sometimes returns historical tokens
+  // with a 0 amount. Showing them is just noise.
+  const nonZero = balances.filter((b) => parseFloat(b.amount) > 0);
+
+  if (nonZero.length === 0) {
+    return [
+      "Your wallet is empty 👀",
+      "",
+      `Send USDC to this address to fund up:`,
+      `\`${user.wallet_address}\``,
+    ].join("\n");
+  }
+
+  const lines = nonZero.map((b) => `• ${b.amount} ${b.symbol}`);
+  return ["Here's what you've got:", "", ...lines].join("\n");
 }
