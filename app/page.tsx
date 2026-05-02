@@ -13,21 +13,6 @@ import {
   ContextIllustration,
 } from "@/components/illustrations/phone-illustrations";
 
-/**
- * HomePage
- *
- * Top-level landing route. Composes every section in display order. The
- * feature trio (Transfer / Spending / Support / Context) reuses
- * `FeatureSection` so layout, typography, and CTA placement stay locked.
- *
- * Section IDs:
- *   - #use-cases  → EverydayUsageSection
- *   - #features   → first FeatureSection (Transfer)
- *   - #security   → SecuritySection
- *   - #faqs       → FaqSection
- *
- * These match the in-page nav links defined in `lib/data/site.ts`.
- */
 export default function HomePage() {
   return (
     <>
