@@ -81,3 +81,50 @@ export async function getWalletBalances(
     tokenAddress: b.token?.tokenAddress ?? null,
   }));
 }
+
+export interface SendUsdcArgs {
+  fromWalletId: string;
+  toAddress: string;
+  amount: string;
+}
+
+export interface SendUsdcResult {
+  transactionId: string;
+  txHash: string | null;
+}
+
+export async function sendUsdc({
+  fromWalletId,
+  toAddress,
+  amount,
+}: SendUsdcArgs): Promise<SendUsdcResult> {
+  const network = process.env.ARC_NETWORK ?? "ARC-TESTNET";
+  const client = getCircleClient();
+
+  const response = await client.createTransaction({
+    idempotencyKey: crypto.randomUUID(),
+    walletId: fromWalletId,
+    destinationAddress: toAddress,
+    tokenId: undefined as unknown as string,
+    blockchain: network as any,
+    amount: [amount],
+    fee: { type: "level", config: { feeLevel: "MEDIUM" } },
+  });
+
+  const tx = response.data;
+  if (!tx?.id) {
+    throw new Error("Circle createTransaction returned no transaction ID");
+  }
+
+  console.log("[circle] send submitted", {
+    fromWalletId,
+    toAddress,
+    amount,
+    txId: tx.id,
+  });
+
+  return {
+    transactionId: tx.id,
+    txHash: (tx as any).txHash ?? null,
+  };
+}

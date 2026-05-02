@@ -100,3 +100,17 @@ export async function markWalletFailed(userId: string): Promise<void> {
     .eq("id", userId);
   if (error) throw new Error(`markWalletFailed failed: ${error.message}`);
 }
+
+export async function findUserByWhatsApp(
+  whatsappNumber: string,
+): Promise<UpayUser | null> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("upay_users")
+    .select("*")
+    .eq("whatsapp_number", whatsappNumber)
+    .maybeSingle();
+
+  if (error) throw new Error(`findUserByWhatsApp failed: ${error.message}`);
+  return (data as UpayUser | null) ?? null;
+}

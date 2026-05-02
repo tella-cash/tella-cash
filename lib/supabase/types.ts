@@ -12,3 +12,20 @@ export interface UpayUser {
   created_at: string;
   updated_at: string;
 }
+
+export interface PendingAction {
+  id: string;
+  user_id: string;
+  kind: "send";
+  payload: SendPayload;
+  expires_at: string;
+  created_at: string;
+}
+
+export interface SendPayload {
+  amount: string;
+  token: "USDC";
+  recipientUserId: string | null;
+  recipientName: string | null;
+  recipientAddress: string;
+}
