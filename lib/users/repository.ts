@@ -114,3 +114,19 @@ export async function findUserByWhatsApp(
   if (error) throw new Error(`findUserByWhatsApp failed: ${error.message}`);
   return (data as UpayUser | null) ?? null;
 }
+
+export async function findUserByCircleWalletId(
+  circleWalletId: string,
+): Promise<UpayUser | null> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("upay_users")
+    .select("*")
+    .eq("circle_wallet_id", circleWalletId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`findUserByCircleWalletId failed: ${error.message}`);
+  }
+  return (data as UpayUser | null) ?? null;
+}
