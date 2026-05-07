@@ -8,8 +8,9 @@ import {
   getActivePending,
   deletePending,
 } from "@/lib/pending_actions/repository";
-import { getWalletBalances, sendUsdc } from "@/lib/wallet/circle";
+import { getWalletBalances } from "@/lib/wallet/circle";
 import { parseSendIntent, parseConfirmation } from "@/lib/agent/parse-send";
+import { buildConfirmUrl } from "@/lib/webauthn/config";
 
 interface IncomingMessage {
   user: UpayUser;
@@ -59,7 +60,7 @@ export async function handleIncomingMessage(
 
   const pending = await getActivePending(user.id);
   if (pending) {
-    return { reply: await handlePendingResponse({ user, pending, text }) };
+    return { reply: await handlePendingResponse({ pending, text }) };
   }
 
   return { reply: await handleOnboardedUser({ user, text }) };
@@ -102,11 +103,9 @@ async function handleNameEntry({
 }
 
 async function handlePendingResponse({
-  user,
   pending,
   text,
 }: {
-  user: UpayUser;
   pending: PendingAction;
   text: string;
 }): Promise<string> {
@@ -117,53 +116,23 @@ async function handlePendingResponse({
     return "Cancelled. Let me know if you want to try again.";
   }
 
-  if (decision === "yes") {
-    return executePendingSend({ user, pending });
-  }
+  // "yes" no longer confirms in chat — sends require biometric/PIN in
+  // the browser. Re-send the link for any unrecognized reply (and for
+  // "yes" too) so the user always has a fresh tap-to-confirm.
+  return buildPendingPrompt(pending);
+}
 
-  // Neither yes nor no — nudge them back.
+function buildPendingPrompt(pending: PendingAction): string {
   const p = pending.payload;
   const recipientLabel = p.recipientName ?? p.recipientAddress;
   return [
-    `You still have a pending send: ${p.amount} ${p.token} to ${recipientLabel}.`,
+    `Confirm send: *${p.amount} ${p.token}* to ${recipientLabel}`,
     "",
-    "Reply *yes* to confirm or *no* to cancel.",
+    `Tap to authorize with Face ID / Touch ID:`,
+    buildConfirmUrl(pending.id),
+    "",
+    "Reply *no* to cancel.",
   ].join("\n");
-}
-
-async function executePendingSend({
-  user,
-  pending,
-}: {
-  user: UpayUser;
-  pending: PendingAction;
-}): Promise<string> {
-  if (user.wallet_status !== "active" || !user.circle_wallet_id) {
-    await deletePending(pending.id);
-    return "Your wallet isn't ready to send right now. Try again in a moment.";
-  }
-
-  // Delete BEFORE the transfer so a duplicate "yes" can't double-send.
-  await deletePending(pending.id);
-
-  const p = pending.payload;
-  try {
-    const result = await sendUsdc({
-      fromWalletId: user.circle_wallet_id,
-      toAddress: p.recipientAddress,
-      amount: p.amount,
-    });
-
-    const recipientLabel = p.recipientName ?? p.recipientAddress;
-    return [
-      `✓ Sent ${p.amount} ${p.token} to ${recipientLabel}.`,
-      "",
-      `Reference: \`${result.transactionId.slice(0, 8)}\``,
-    ].join("\n");
-  } catch (err) {
-    console.error("[send] transfer failed", { userId: user.id, err });
-    return "I couldn't complete that transfer. Your balance is unchanged. Want to try again?";
-  }
 }
 
 async function handleOnboardedUser({
@@ -275,7 +244,7 @@ async function startSendFlow({
     recipientUserId = recipient.id;
   }
 
-  await createPendingSend({
+  const pending = await createPendingSend({
     userId: user.id,
     payload: {
       amount: intent.amount,
@@ -286,12 +255,7 @@ async function startSendFlow({
     },
   });
 
-  const recipientLabel = recipientName ?? `\`${recipientAddress.slice(0, 6)}…${recipientAddress.slice(-4)}\``;
-  return [
-    `Send *${intent.amount} ${intent.token}* to ${recipientLabel}?`,
-    "",
-    "Reply *yes* to confirm or *no* to cancel.",
-  ].join("\n");
+  return buildPendingPrompt(pending);
 }
 
 async function getBalanceReply(user: UpayUser): Promise<string> {
