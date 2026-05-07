@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import {
   verifyRegistrationResponse,
-  type RegistrationResponseJSON,
+  type VerifyRegistrationResponseOpts,
 } from "@simplewebauthn/server";
+
+type RegistrationResponseJSON = VerifyRegistrationResponseOpts["response"];
 import { loadConfirmContext } from "@/lib/confirm/context";
 import { getWebAuthnConfig } from "@/lib/webauthn/config";
 import {
