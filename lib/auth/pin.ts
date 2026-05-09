@@ -1,18 +1,38 @@
-import { randomBytes, scrypt as scryptCb, timingSafeEqual } from "node:crypto";
+import {
+  randomBytes,
+  scrypt as scryptCb,
+  timingSafeEqual,
+  type ScryptOptions,
+} from "node:crypto";
+import { promisify } from "node:util";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+
+// promisify drops the 4-arg (options) overload from its type signature,
+// so we re-assert it. Runtime accepts options fine — this is purely typing.
+const scrypt = promisify(scryptCb) as (
+  password: string | Buffer,
+  salt: string | Buffer,
+  keylen: number,
+  options?: ScryptOptions,
+) => Promise<Buffer>;
 
 const KEY_LENGTH = 64;
 const SALT_BYTES = 16;
 
 // scrypt cost params for a 4-digit PIN.
 //
-// The keyspace is 10,000 — so the meaningful security boundary is
-// rate-limiting + lockout on the confirm flow, not the hash work factor.
-// scrypt here is defense-in-depth against an offline dump.
+// Real security here is rate-limiting + lockout on the confirm flow,
+// since the keyspace is only 10,000. scrypt is defense-in-depth.
 //
-// N=2^14 keeps us inside OpenSSL's default 32MB scrypt budget without
-// needing to override `maxmem`. Memory ≈ 128 * N * r * p = 16MB.
-const SCRYPT_PARAMS = { N: 1 << 14, r: 8, p: 1 } as const;
+// N=2^14 → ~16 MB working memory. We override maxmem because OpenSSL's
+// default 32 MB ceiling has been observed to reject this on some Node
+// builds (Vercel runtime among them) due to internal overhead.
+const SCRYPT_PARAMS = {
+  N: 1 << 14,
+  r: 8,
+  p: 1,
+  maxmem: 128 * 1024 * 1024,
+} as const;
 
 const PIN_PATTERN = /^\d{4,8}$/;
 const HASH_SCHEME = "scrypt";
@@ -21,22 +41,14 @@ export function isValidPin(pin: string): boolean {
   return PIN_PATTERN.test(pin);
 }
 
-/**
- * Stored hash format: `scrypt$N$r$p$saltB64$hashB64`
- *
- * Embedding the params lets us bump N later without breaking existing
- * users — verifyPin reads the params off the stored string.
- */
 async function deriveKey(
   pin: string,
   salt: Buffer,
   params: { N: number; r: number; p: number },
 ): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    scryptCb(pin, salt, KEY_LENGTH, params, (err, derivedKey) => {
-      if (err) reject(err);
-      else resolve(derivedKey);
-    });
+  return scrypt(pin, salt, KEY_LENGTH, {
+    ...params,
+    maxmem: SCRYPT_PARAMS.maxmem,
   });
 }
 
