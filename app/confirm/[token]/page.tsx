@@ -1,5 +1,4 @@
 import { loadConfirmContext } from "@/lib/confirm/context";
-import { hasAnyCredential } from "@/lib/webauthn/repository";
 import { ConfirmClient } from "./confirm-client";
 
 export const dynamic = "force-dynamic";
@@ -30,7 +29,6 @@ export default async function ConfirmPage({
     );
   }
 
-  const hasCredential = await hasAnyCredential(ctx.user.id);
   const hasPin = Boolean(ctx.user.pin_hash);
 
   return (
@@ -43,7 +41,6 @@ export default async function ConfirmPage({
           ctx.pending.payload.recipientName ??
           formatAddress(ctx.pending.payload.recipientAddress),
       }}
-      hasCredential={hasCredential}
       hasPin={hasPin}
     />
   );

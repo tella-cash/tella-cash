@@ -1,10 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import {
-  startAuthentication,
-  startRegistration,
-} from "@simplewebauthn/browser";
+import Link from "next/link";
+import { useState } from "react";
 
 interface SendSummary {
   amount: string;
@@ -13,47 +10,33 @@ interface SendSummary {
 }
 
 type Stage =
-  | { kind: "checking" }
-  | { kind: "ready_biometric"; mode: "register_then_auth" | "auth_only" }
-  | { kind: "ready_pin"; mode: "setup" | "verify" }
+  | { kind: "ready"; mode: "setup" | "verify" }
   | { kind: "working"; label: string }
   | { kind: "success"; reference: string }
   | { kind: "error"; message: string };
 
+/**
+ * ConfirmClient
+ *
+ * The interactive surface of the confirmation page. PIN-only for now;
+ * biometric (WebAuthn) is planned to layer on top of this same shell —
+ * see BIOMETRIC_TODO.md for the re-enable path. The Stage state machine
+ * is intentionally kept generic so adding a `ready_biometric` branch
+ * later doesn't require restructuring.
+ */
 export function ConfirmClient({
   token,
   summary,
-  hasCredential,
   hasPin,
 }: {
   token: string;
   summary: SendSummary;
-  hasCredential: boolean;
   hasPin: boolean;
 }) {
-  const [stage, setStage] = useState<Stage>({ kind: "checking" });
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const supported = await detectWebAuthnSupport();
-      if (cancelled) return;
-      if (supported) {
-        setStage({
-          kind: "ready_biometric",
-          mode: hasCredential ? "auth_only" : "register_then_auth",
-        });
-      } else {
-        setStage({
-          kind: "ready_pin",
-          mode: hasPin ? "verify" : "setup",
-        });
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [hasCredential, hasPin]);
+  const [stage, setStage] = useState<Stage>({
+    kind: "ready",
+    mode: hasPin ? "verify" : "setup",
+  });
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-md flex-col px-6 py-12">
@@ -77,11 +60,7 @@ export function ConfirmClient({
       </section>
 
       <section className="mt-8 flex-1">
-        <StageView
-          stage={stage}
-          token={token}
-          onStageChange={setStage}
-        />
+        <StageView stage={stage} token={token} onStageChange={setStage} />
       </section>
     </main>
   );
@@ -96,10 +75,6 @@ function StageView({
   token: string;
   onStageChange: (next: Stage) => void;
 }) {
-  if (stage.kind === "checking") {
-    return <p className="text-sm text-ink-500">Preparing…</p>;
-  }
-
   if (stage.kind === "working") {
     return <p className="text-sm text-ink-500">{stage.label}</p>;
   }
@@ -113,7 +88,7 @@ function StageView({
       <div>
         <p className="text-sm text-red-600">{stage.message}</p>
         <button
-          onClick={() => onStageChange({ kind: "checking" })}
+          onClick={() => onStageChange({ kind: "ready", mode: "verify" })}
           className="mt-4 text-sm underline underline-offset-4"
         >
           Try again
@@ -122,64 +97,8 @@ function StageView({
     );
   }
 
-  if (stage.kind === "ready_biometric") {
-    return (
-      <BiometricButton
-        token={token}
-        mode={stage.mode}
-        onStageChange={onStageChange}
-      />
-    );
-  }
-
   return (
     <PinForm token={token} mode={stage.mode} onStageChange={onStageChange} />
-  );
-}
-
-function BiometricButton({
-  token,
-  mode,
-  onStageChange,
-}: {
-  token: string;
-  mode: "register_then_auth" | "auth_only";
-  onStageChange: (next: Stage) => void;
-}) {
-  const label =
-    mode === "auth_only"
-      ? "Confirm with Face ID / Touch ID"
-      : "Set up biometric, then confirm";
-
-  async function run() {
-    try {
-      if (mode === "register_then_auth") {
-        onStageChange({ kind: "working", label: "Setting up biometric…" });
-        await registerCredential(token);
-      }
-      onStageChange({ kind: "working", label: "Waiting for biometric…" });
-      const result = await authenticateAndSend(token);
-      onStageChange({
-        kind: "success",
-        reference: result.transactionId.slice(0, 8),
-      });
-    } catch (err) {
-      console.error(err);
-      onStageChange({
-        kind: "error",
-        message:
-          err instanceof Error ? err.message : "Something went wrong.",
-      });
-    }
-  }
-
-  return (
-    <button
-      onClick={run}
-      className="w-full rounded-full bg-ink-900 px-6 py-4 text-base font-medium text-surface-50 active:scale-[0.98] transition-transform"
-    >
-      {label}
-    </button>
   );
 }
 
@@ -241,7 +160,7 @@ function PinForm({
     <form onSubmit={submit} className="space-y-4">
       <p className="text-sm text-ink-500">
         {isSetup
-          ? "Set a 4–8 digit PIN. You'll use this to confirm sends on this device."
+          ? "Set a 4–8 digit PIN. You'll use this to confirm sends going forward."
           : "Enter your PIN to confirm."}
       </p>
       <input
@@ -254,6 +173,7 @@ function PinForm({
         maxLength={8}
         className="w-full rounded-xl border border-ink-200 bg-surface-50 px-4 py-3 text-lg tracking-widest"
         placeholder="••••"
+        autoFocus
       />
       {isSetup && (
         <input
@@ -288,67 +208,17 @@ function SuccessView({ reference }: { reference: string }) {
         Reference{" "}
         <code className="font-mono text-ink-900">{reference}</code>
       </p>
-      <a
+      <Link
         href="whatsapp://send"
         className="mt-8 inline-block rounded-full bg-ink-900 px-6 py-3 text-sm font-medium text-surface-50"
       >
         Back to WhatsApp ↗
-      </a>
+      </Link>
       <p className="mt-4 text-xs text-ink-400">
         Receipt has been sent to your chat. You can close this tab.
       </p>
     </div>
   );
-}
-
-async function detectWebAuthnSupport(): Promise<boolean> {
-  if (typeof window === "undefined") return false;
-  if (!("PublicKeyCredential" in window)) return false;
-  try {
-    const fn =
-      window.PublicKeyCredential
-        .isUserVerifyingPlatformAuthenticatorAvailable;
-    return typeof fn === "function" ? await fn() : false;
-  } catch {
-    return false;
-  }
-}
-
-async function registerCredential(token: string): Promise<void> {
-  const optsRes = await fetch("/api/webauthn/register/options", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ token }),
-  });
-  if (!optsRes.ok) throw new Error(await readError(optsRes));
-  const options = await optsRes.json();
-  const attestation = await startRegistration({ optionsJSON: options });
-  const verifyRes = await fetch("/api/webauthn/register/verify", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ token, response: attestation }),
-  });
-  if (!verifyRes.ok) throw new Error(await readError(verifyRes));
-}
-
-async function authenticateAndSend(
-  token: string,
-): Promise<{ transactionId: string }> {
-  const optsRes = await fetch("/api/webauthn/authenticate/options", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ token }),
-  });
-  if (!optsRes.ok) throw new Error(await readError(optsRes));
-  const options = await optsRes.json();
-  const assertion = await startAuthentication({ optionsJSON: options });
-  const verifyRes = await fetch("/api/webauthn/authenticate/verify", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ token, response: assertion }),
-  });
-  if (!verifyRes.ok) throw new Error(await readError(verifyRes));
-  return verifyRes.json();
 }
 
 async function readError(res: Response): Promise<string> {

@@ -10,7 +10,7 @@ import {
 } from "@/lib/pending_actions/repository";
 import { getWalletBalances } from "@/lib/wallet/circle";
 import { parseSendIntent, parseConfirmation } from "@/lib/agent/parse-send";
-import { buildConfirmUrl } from "@/lib/webauthn/config";
+import { buildConfirmUrl } from "@/lib/confirm/url";
 
 interface IncomingMessage {
   user: UpayUser;
