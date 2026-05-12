@@ -71,7 +71,7 @@ export function CustomCursor() {
       className={`pointer-events-none fixed left-0 top-0 z-[100] transition-[width,height,background-color,border-color] duration-200 ease-out ${
         isGrown
           ? "h-10 w-10 rounded-full border border-accent-500 bg-transparent mix-blend-difference"
-          : "h-2 w-2 rounded-full bg-ink-900 mix-blend-difference"
+          : "h-3 w-3 rounded-full bg-accent-500 shadow-[0_0_0_3px_rgba(0,71,255,0.18)]"
       }`}
     />
   );
