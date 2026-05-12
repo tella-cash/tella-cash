@@ -12,6 +12,5 @@ export const NAV_LINKS = [
   { label: "Use Cases", href: "#use-cases" },
   { label: "Features", href: "#features" },
   { label: "Security", href: "#security" },
-  { label: "Ambassadors", href: "/ambassadors" },
   { label: "FAQ", href: "#faqs" },
 ] as const;

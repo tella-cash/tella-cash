@@ -41,6 +41,7 @@
   --font-display: "Instrument Serif", "Times New Roman", ui-serif, serif;
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-works: "Newsreader", "Suisse Works", ui-serif, serif;
 
   /* Radii — restrained */
   --radius-sm: 0.375rem;

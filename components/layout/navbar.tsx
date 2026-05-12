@@ -1,7 +1,8 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { motion, useScroll, useTransform } from "framer-motion";
+import { motion, AnimatePresence, useScroll, useTransform } from "framer-motion";
 import { BrandMark } from "@/components/ui/brand-mark";
 import { MagneticCta } from "@/components/ui/magnetic-cta";
 import { NAV_LINKS, SITE } from "@/lib/data/site";
@@ -11,9 +12,31 @@ export function Navbar() {
   const bgOpacity = useTransform(scrollY, [0, 80], [0, 0.85]);
   const borderOpacity = useTransform(scrollY, [0, 80], [0, 0.08]);
 
+  const [open, setOpen] = useState(false);
+
+  // Lock body scroll while the mobile sheet is open.
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [open]);
+
+  // Close the sheet if the viewport grows past the mobile breakpoint.
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const onChange = (e: MediaQueryListEvent) => {
+      if (e.matches) setOpen(false);
+    };
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
   return (
     <motion.header
-      className="fixed inset-x-0 top-0 z-50 backdrop-blur-md"
+      className="fixed inset-x-0 top-0 z-50 backdrop-blur-md px-[10px] sm:px[72px]"
       style={{
         backgroundColor: useTransform(
           bgOpacity,
@@ -27,12 +50,12 @@ export function Navbar() {
       }}
     >
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-        <Link href="/" aria-label="UPay — home" data-cursor="grow">
+        <Link href="/" aria-label="Tella - home" data-cursor="grow">
           <BrandMark />
         </Link>
 
-        <nav aria-label="Primary" className="hidden lg:block">
-          <ul className="flex items-center gap-10 text-sm text-ink-700">
+        <nav aria-label="Primary" className="hidden md:block">
+          <ul className="flex items-center gap-10 font-works font-medium text-sm text-ink-700">
             {NAV_LINKS.map((link) => (
               <li key={link.href}>
                 <a
@@ -46,10 +69,81 @@ export function Navbar() {
           </ul>
         </nav>
 
-        <MagneticCta href={SITE.whatsappLink} target="_blank" rel="noopener">
-          Try UPay
-        </MagneticCta>
+        <div className="hidden md:block">
+          <MagneticCta href={SITE.whatsappLink} target="_blank" rel="noopener">
+            Try it now
+          </MagneticCta>
+        </div>
+
+        <button
+          type="button"
+          aria-label={open ? "Close menu" : "Open menu"}
+          aria-expanded={open}
+          aria-controls="mobile-nav"
+          onClick={() => setOpen((v) => !v)}
+          className="relative grid h-10 w-10 place-items-center rounded-md text-ink-900 transition-colors hover:bg-ink-900/5 md:hidden"
+        >
+          <span className="sr-only">Menu</span>
+          <span aria-hidden="true" className="relative block h-4 w-5">
+            <span
+              className={`absolute left-0 right-0 top-0 h-[2px] rounded-full bg-current transition-transform duration-200 ${
+                open ? "translate-y-[7px] rotate-45" : ""
+              }`}
+            />
+            <span
+              className={`absolute left-0 right-0 top-1/2 h-[2px] -translate-y-1/2 rounded-full bg-current transition-opacity duration-200 ${
+                open ? "opacity-0" : "opacity-100"
+              }`}
+            />
+            <span
+              className={`absolute left-0 right-0 bottom-0 h-[2px] rounded-full bg-current transition-transform duration-200 ${
+                open ? "-translate-y-[7px] -rotate-45" : ""
+              }`}
+            />
+          </span>
+        </button>
       </div>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            id="mobile-nav"
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+            className="md:hidden"
+          >
+            <nav
+              aria-label="Mobile"
+              className="border-t border-ink-900/5 bg-surface-50/95 backdrop-blur-md"
+            >
+              <ul className="flex flex-col gap-1 px-6 py-4 font-works font-semibold text-base text-ink-700">
+                {NAV_LINKS.map((link) => (
+                  <li key={link.href}>
+                    <a
+                      href={link.href}
+                      onClick={() => setOpen(false)}
+                      className="block rounded-md py-3 transition-colors hover:text-ink-900"
+                    >
+                      {link.label}
+                    </a>
+                  </li>
+                ))}
+                <li className="pt-3">
+                  <MagneticCta
+                    href={SITE.whatsappLink}
+                    target="_blank"
+                    rel="noopener"
+                  >
+                    Try it now
+                  </MagneticCta>
+                </li>
+              </ul>
+            </nav>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.header>
   );
 }
