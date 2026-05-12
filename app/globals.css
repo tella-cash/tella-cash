@@ -63,22 +63,20 @@ html {
 body {
   background: var(--color-surface-50);
   color: var(--color-ink-900);
-  font-family: var(--font-sans);
+  font-family: var(--font-works);
   font-feature-settings: "ss01", "cv11";
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
-/* Display headings use the serif. Mercury / Stripe both lean serif for
-   heroes — adds editorial weight that sans-serif can't match. */
 h1, h2, h3 {
-  font-family: var(--font-display);
+  font-family: var(--font-works);
   letter-spacing: -0.02em;
   line-height: 1.05;
 }
 
 h4, h5, h6 {
-  font-family: var(--font-sans);
+  font-family: var(--font-works);
   letter-spacing: -0.015em;
   font-weight: 500;
 }

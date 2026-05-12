@@ -5,9 +5,9 @@ import { SITE } from "@/lib/data/site";
 export function Footer() {
   return (
     <footer className="bg-ink-900 text-surface-50">
-      <div className="mx-auto flex max-w-7xl flex-col gap-12 px-6 py-20 lg:flex-row lg:items-end lg:justify-between">
+      <div className="mx-auto flex max-w-7xl flex-col gap-12 px-6 py-1  2 lg:flex-row lg:items-end lg:justify-between">
         <div className="space-y-5">
-          <BrandMark variant="light" />
+          <BrandMark />
           <p className="max-w-sm text-sm text-surface-50/50">
             Money, by message. Built for the way people already talk.
           </p>
@@ -47,7 +47,7 @@ export function Footer() {
 
       <div className="border-t border-surface-50/10">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-6 text-xs text-surface-50/40">
-          <span>© {new Date().getFullYear()} UPay</span>
+          <span>© {new Date().getFullYear()} Tella</span>
           <span className="font-mono">v0.2</span>
         </div>
       </div>

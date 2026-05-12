@@ -2,10 +2,15 @@
 
 import { motion, useScroll, useTransform } from "framer-motion";
 import { useRef } from "react";
+import Image from "next/image";
 import { MagneticCta } from "@/components/ui/magnetic-cta";
 import { PhoneFrame } from "@/components/ui/phone-frame";
 import { LiveChatThread } from "@/components/illustrations/live-chat-thread";
 import { SITE } from "@/lib/data/site";
+import lightIcon from "@/public/icons/lightening.svg";
+import coinIcon from "@/public/icons/coin.svg";
+import lockIcon from "@/public/icons/lock.svg";
+import whatsappIcon from "@/public/icons/whatsapp.svg";
 
 export function Hero() {
   const ref = useRef<HTMLDivElement | null>(null);
@@ -14,89 +19,79 @@ export function Hero() {
     offset: ["start start", "end start"],
   });
 
-  // Phone parallaxes up slightly faster than the text — gives the right
-  // column a subtle depth-of-field feel. Range tuned so the phone never
-  // exits the viewport prematurely.
   const phoneY = useTransform(scrollYProgress, [0, 1], [0, -120]);
   const headlineY = useTransform(scrollYProgress, [0, 1], [0, -40]);
 
   return (
     <section
       ref={ref}
-      className="relative overflow-hidden pb-32 pt-40 lg:pb-40 lg:pt-48"
+      className="relative lg:h-screen overflow-hidden pt-[104px] px-[10px] sm:px[72px]"
     >
-      {/* Background grid — extremely subtle, adds rhythm without ornament */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 -z-10 opacity-[0.025]"
-        style={{
-          backgroundImage:
-            "linear-gradient(to right, #000 1px, transparent 1px), linear-gradient(to bottom, #000 1px, transparent 1px)",
-          backgroundSize: "64px 64px",
-        }}
-      />
-
-      {/* One soft accent glow, top-right — single point of color in the
-          composition before the hero phone enters. */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute right-0 top-0 -z-10 h-[600px] w-[600px] translate-x-1/3 -translate-y-1/4 rounded-full bg-accent-500/[0.06] blur-3xl"
-      />
-
-      <div className="mx-auto grid max-w-7xl items-center gap-16 px-6 lg:grid-cols-12 lg:gap-8">
+      <div className="mx-auto grid h-full max-w-7xl items-center gap-8 lg:gap-16 px-6 lg:grid-cols-12 lg:gap-8">
         {/* Copy column */}
-        <motion.div style={{ y: headlineY }} className="lg:col-span-7">
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-            className="inline-flex items-center gap-2 rounded-full border border-ink-200 bg-surface-50/60 px-3 py-1 text-xs text-ink-500 backdrop-blur"
-          >
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-accent-500" />
-            <span>Now on Arc — stablecoins by message</span>
-          </motion.div>
-
+        <motion.div style={{ y: headlineY }} className="lg:col-span-7 lg:w-[650px]">
           <motion.h1
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.9, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
-            className="mt-8 text-[clamp(3rem,7vw,6.5rem)] font-normal leading-[0.96] tracking-[-0.04em] text-ink-900"
+            className="text-[24px] md:text-[48px] font-semibold md:font-medium  lg:w-[450px] font-display text-ink-900"
           >
-            Money,
-            <br />
-            <span className="italic text-accent-500">by message.</span>
+            Send USDC and Receive Naira on WhatsApp
           </motion.h1>
 
           <motion.p
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
-            className="mt-8 max-w-md text-lg leading-relaxed text-ink-500"
+            className="mt-[16px] max-w-md text-[12px] md:text-[15px] text-ink-900"
           >
-            Send, receive, and track stablecoins from a WhatsApp chat. No app to
-            install. No menus to learn. Just write.
+            Send, receive, and manage stablecoins directly in WhatsApp. 
+            No apps. 
+            No learning curve. 
+            Just type.
           </motion.p>
 
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.5, ease: [0.16, 1, 0.3, 1] }}
-            className="mt-10 flex flex-wrap items-center gap-5"
+            className="mt-[32px] md:mt-[50px] flex flex-wrap items-center gap-4 md:gap-5"
           >
             <MagneticCta
               href={SITE.whatsappLink}
               target="_blank"
               rel="noopener"
-              className="text-base"
+              className="text-xs md:text-base flex gap-2"
             >
-              Start on WhatsApp
+              <Image 
+              className="text-white"
+              src={whatsappIcon}
+              alt="WhatsApp"
+              width={16}
+              height={16} />
+              <p className="text-white">Start on WhatsApp</p>
             </MagneticCta>
             <a
               href="#features"
               data-cursor="grow"
-              className="text-sm text-ink-500 underline-offset-4 transition-colors hover:text-ink-900 hover:underline"
+              className="text-xs md:text-base text-ink-900 flex gap-2 font-medium underline-offset-4 transition-colors hover:text-ink-900 hover:underline"
             >
-              See how it works →
+              See how it works
+              <span
+                aria-hidden="true"
+                className="grid h-5 w-5 place-items-center transition-transform duration-300 group-hover:translate-x-0.5"
+              >
+                <svg viewBox="0 0 12 12" className="h-3 w-3">
+                  <path
+                    d="M2 6h8m0 0L6 2m4 4L6 10"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    fill="none"
+                  />
+                </svg>
+              </span>
             </a>
           </motion.div>
 
@@ -105,13 +100,33 @@ export function Hero() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 1, delay: 0.7 }}
-            className="mt-20 flex flex-wrap items-center gap-x-8 gap-y-3 text-[11px] uppercase tracking-[0.18em] text-ink-400"
+            className="mt-[48px] hidden lg:flex flex-wrap items-center gap-x-4 gap-y-3 text-[14px] font-medum text-ink-900"
           >
-            <span>End-to-end encrypted</span>
-            <span className="h-1 w-1 rounded-full bg-ink-300" />
-            <span>USDC native</span>
-            <span className="h-1 w-1 rounded-full bg-ink-300" />
-            <span>Sub-second finality</span>
+            <span className="flex items-center gap-2">
+              <Image
+                src={lockIcon}
+                alt="Arc"
+                width={14}
+                height={14}
+              />
+              End-to-end encrypted</span>
+            <span className="flex items-center gap-2">
+              <Image
+                src={coinIcon}
+                alt="Arc"
+                width={14}
+                height={14}
+              />
+              USDC native</span>
+            <span className="flex items-center gap-2">
+              <Image
+                src={lightIcon}
+                alt="Arc"
+                width={12}
+                height={12}
+              />
+              Sub-second finality
+            </span>
           </motion.div>
         </motion.div>
 
@@ -125,19 +140,44 @@ export function Hero() {
         >
           <HeroPhone />
         </motion.div>
+        {/* Trust strip — small, restrained */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 1, delay: 0.7 }}
+            className="lg:hidden flex flex-wrap justify-center items-center text-center gap-4 text-[14px] font-medum text-ink-900"
+          >
+            <span className="flex items-center gap-2">
+              <Image
+                src={lockIcon}
+                alt="Arc"
+                width={14}
+                height={14}
+              />
+              End-to-end encrypted</span>
+            <span className="flex items-center gap-2">
+              <Image
+                src={coinIcon}
+                alt="Arc"
+                width={14}
+                height={14}
+              />
+              USDC native</span>
+            <span className="flex items-center gap-2">
+              <Image
+                src={lightIcon}
+                alt="Arc"
+                width={12}
+                height={12}
+              />
+              Sub-second finality
+            </span>
+          </motion.div>
       </div>
     </section>
   );
 }
 
-/**
- * HeroPhone
- *
- * Composes the phone frame with the looping chat thread, plus two floating
- * detail elements that overlap the phone for depth — a small notification
- * card and a stat tile. Both drift independently using CSS keyframe
- * animation so they don't feel mechanically synced.
- */
 function HeroPhone() {
   return (
     <div className="relative mx-auto w-fit">
