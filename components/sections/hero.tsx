@@ -25,7 +25,7 @@ export function Hero() {
   return (
     <section
       ref={ref}
-      className="relative lg:h-screen overflow-hidden pt-[104px] px-[10px] sm:px[72px]"
+      className="relative lg:h-screen font-works overflow-hidden pt-[104px] px-[10px] sm:px[72px]"
     >
       <div className="mx-auto grid h-full max-w-7xl items-center gap-8 lg:gap-16 px-6 lg:grid-cols-12 lg:gap-8">
         {/* Copy column */}

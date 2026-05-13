@@ -1,18 +1,5 @@
 @import "tailwindcss";
 
-/**
- * UPay design tokens — premium, quiet, Mercury-style.
- *
- * The system rests on three colors: a near-white surface that's slightly
- * warm so it doesn't feel sterile, deep ink for text that's not pure black
- * (pure black is too harsh against the warm white), and one electric-blue
- * accent that does all the heavy lifting for emphasis, CTAs, and active
- * states.
- *
- * Restraint is the point. Every visual element should justify its presence
- * either by communicating something or by carrying brand. Decoration for
- * its own sake doesn't belong here.
- */
 @theme {
   /* Surface — warm near-whites */
   --color-surface-0: #ffffff;
@@ -81,9 +68,6 @@ h4, h5, h6 {
   font-weight: 500;
 }
 
-/* Hide native cursor when our custom one is active. The .has-custom-cursor
-   class is applied by the cursor component itself once mounted, so non-JS
-   users still see the native cursor as fallback. */
 .has-custom-cursor,
 .has-custom-cursor * {
   cursor: none !important;

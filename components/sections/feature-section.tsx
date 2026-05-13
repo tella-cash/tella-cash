@@ -4,10 +4,6 @@ import { cn } from "@/lib/utils/cn";
 
 interface FeatureSectionProps {
   id?: string;
-  /** Section index, used for the small numeric tag (01, 02, etc.). */
-  index: string;
-  eyebrow: string;
-  /** Headline accepts ReactNode so callers can mix italics/highlights. */
   heading: ReactNode;
   description: string;
   visual: ReactNode;
@@ -17,8 +13,6 @@ interface FeatureSectionProps {
 
 export function FeatureSection({
   id,
-  index,
-  eyebrow,
   heading,
   description,
   visual,
@@ -38,12 +32,6 @@ export function FeatureSection({
           from={reverse ? "right" : "left"}
           className={cn("max-w-xl", reverse && "lg:order-2 lg:ml-auto")}
         >
-          <div className="flex items-center gap-4 text-xs font-mono text-ink-400">
-            <span>{index}</span>
-            <span className="h-px w-8 bg-ink-300" />
-            <span className="uppercase tracking-[0.2em]">{eyebrow}</span>
-          </div>
-
           <h2 className="mt-8 text-[clamp(2.25rem,4.5vw,4rem)] font-normal leading-[1.02] tracking-[-0.03em] text-ink-900">
             {heading}
           </h2>

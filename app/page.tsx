@@ -25,15 +25,12 @@ export default function HomePage() {
           style={{ ["--feature-stick-top" as string]: "220px" }}
         >
           {/* Sticky header — pins below the navbar while the feature cards stack underneath */}
-          <div className="sticky top-[64px] z-10 bg-surface-50">
-            <div className="mx-auto max-w-7xl px-6 py-10 text-center">
-              <p className="text-xs uppercase tracking-[0.2em] text-ink-400">
-                Features
-              </p>
-              <h2 className="mt-3 text-[clamp(2rem,4vw,3rem)] font-normal leading-[1.05] tracking-[-0.02em] text-ink-900">
+          <div className="sticky top-[45px] z-10 bg-[#E6EEFF]">
+            <div className="px-[10px] sm:px-[72px] pt-10 pb-[24px]">
+              <h2 className="text-[36px] font-medium text-ink-900">
                 Built for daily use.
               </h2>
-              <p className="mx-auto mt-3 max-w-xl text-base leading-relaxed text-ink-500">
+              <p className="mt-2 text-base text-ink-500">
                 Four small moments that make Tella feel like part of the conversation.
               </p>
             </div>
@@ -41,8 +38,6 @@ export default function HomePage() {
 
           <FeatureSection
             id="features"
-            index="01"
-            eyebrow="Send"
             heading={
               <>
                 Type the amount.{" "}
@@ -55,8 +50,6 @@ export default function HomePage() {
           />
 
           <FeatureSection
-            index="02"
-            eyebrow="Balance"
             heading={
               <>
                 A balance you can{" "}
@@ -69,8 +62,6 @@ export default function HomePage() {
           />
 
           <FeatureSection
-            index="03"
-            eyebrow="Receive"
             heading={
               <>
                 Money lands in your chat,{" "}
@@ -82,8 +73,6 @@ export default function HomePage() {
           />
 
           <FeatureSection
-            index="04"
-            eyebrow="Context"
             heading={
               <>
                 It remembers,{" "}
