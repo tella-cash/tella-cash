@@ -186,7 +186,7 @@ function HeroPhone() {
         initial={{ opacity: 0, y: 20, x: -10 }}
         animate={{ opacity: 1, y: 0, x: 0 }}
         transition={{ duration: 0.8, delay: 1.2, ease: [0.16, 1, 0.3, 1] }}
-        className="animate-drift-slow absolute -left-8 top-16 z-10 flex w-52 items-center gap-3 rounded-2xl bg-white p-3 shadow-card ring-1 ring-ink-200/30 sm:-left-14 lg:-left-10"
+        className="animate-drift-slow absolute -left-24 top-28 z-10 flex w-40 items-center gap-3 rounded-2xl bg-white p-3 shadow-card ring-1 ring-ink-200/30 sm:-left-14 lg:-left-10"
       >
         <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-accent-50 text-xs font-semibold text-accent-600">
           CO
