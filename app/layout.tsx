@@ -46,9 +46,9 @@ const newsreader = Newsreader({
 });
 
 export const metadata: Metadata = {
-  title: "UPay — Money, by message.",
+  title: "Tella — USDC to Naira, by message",
   description:
-    "Send, receive, and track money over WhatsApp. No app to install, no menus to learn.",
+    "Send USDC and receive Naira straight from a WhatsApp chat. No app to install, no menus to learn — just write.",
 };
 
 export default function RootLayout({

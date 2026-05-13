@@ -1,10 +1,5 @@
 import { Reveal } from "@/components/interactive/reveal";
 
-/**
- * Security pillars data — kept inline here since it's only used in this
- * file. Each pillar pairs a short headline with a paragraph and a small
- * geometric illustration component.
- */
 const PILLARS = [
   {
     id: "encryption",
@@ -29,32 +24,13 @@ const PILLARS = [
   },
 ];
 
-/**
- * SecuritySection
- *
- * Three-pillar grid with a centered editorial heading. Background switches
- * to ink-900 for this one section so it acts as a visual stopper between
- * the lighter feature sections — a Mercury-style trick where one section
- * inverts to draw weight to a serious topic.
- */
 export function SecuritySection() {
   return (
     <section
       id="security"
       className="relative overflow-hidden bg-ink-900 py-32 text-surface-50 lg:py-40"
     >
-      {/* Subtle grid overlay so the dark slab has texture */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 opacity-[0.04]"
-        style={{
-          backgroundImage:
-            "linear-gradient(to right, #fff 1px, transparent 1px), linear-gradient(to bottom, #fff 1px, transparent 1px)",
-          backgroundSize: "64px 64px",
-        }}
-      />
-
-      <div className="relative mx-auto max-w-7xl px-6">
+      <div className="relative mx-auto max-w-7xl px-[10px] sm:px[72px]">
         <Reveal>
           <div className="mx-auto max-w-3xl text-center">
             <div className="inline-flex items-center gap-3 text-xs font-mono text-surface-50/40">
@@ -76,9 +52,9 @@ export function SecuritySection() {
 
         <div className="mt-20 grid gap-8 md:grid-cols-3">
           {PILLARS.map((p, i) => (
-            <Reveal key={p.id} delay={i * 0.1}>
+            <Reveal key={p.id} delay={i * 0.2}>
               <article className="flex h-full flex-col gap-6 rounded-3xl border border-surface-50/10 bg-surface-50/[0.02] p-8">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-surface-50/[0.04] text-accent-300">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-surface-50/[0.04] text-[#0057FF]">
                   {p.illustration}
                 </div>
                 <div>

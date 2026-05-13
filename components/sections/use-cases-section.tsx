@@ -46,7 +46,7 @@ const USE_CASES: UseCase[] = [
  */
 export function UseCasesSection() {
   return (
-    <section id="use-cases" className="relative py-32 lg:py-40">
+    <section id="use-cases" className="relative py-10 lg:py-20">
       <div className="mx-auto max-w-7xl px-6">
         <Reveal>
           <div className="flex flex-col items-start justify-between gap-8 lg:flex-row lg:items-end">

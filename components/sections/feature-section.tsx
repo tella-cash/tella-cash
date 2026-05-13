@@ -26,8 +26,14 @@ export function FeatureSection({
   toneClassName,
 }: FeatureSectionProps) {
   return (
-    <section id={id} className={cn("relative py-32 lg:py-40", toneClassName)}>
-      <div className="mx-auto grid max-w-7xl items-center gap-20 px-6 lg:grid-cols-2 lg:gap-24">
+    <section
+      id={id}
+      className={cn(
+        "sticky top-[var(--feature-stick-top)] h-[calc(100vh-var(--feature-stick-top))] overflow-hidden bg-surface-50",
+        toneClassName,
+      )}
+    >
+      <div className="mx-auto grid h-full max-w-7xl items-center gap-20 px-6 lg:grid-cols-2 lg:gap-24">
         <Reveal
           from={reverse ? "right" : "left"}
           className={cn("max-w-xl", reverse && "lg:order-2 lg:ml-auto")}

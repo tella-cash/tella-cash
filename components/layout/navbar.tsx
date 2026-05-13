@@ -55,7 +55,7 @@ export function Navbar() {
         </Link>
 
         <nav aria-label="Primary" className="hidden md:block">
-          <ul className="flex items-center gap-10 font-works font-medium text-sm text-ink-700">
+          <ul className="flex items-center gap-10 font-medium text-sm text-ink-700">
             {NAV_LINKS.map((link) => (
               <li key={link.href}>
                 <a
