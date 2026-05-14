@@ -268,6 +268,10 @@ export default function PrivacyPage() {
           <a href="mailto:privacy@example.com" className="legal-link">
             <Placeholder>[privacy@yourdomain.com]</Placeholder>
           </a>
+          . For a deletion request specifically, see our{" "}
+          <a href="/data-deletion" className="legal-link">
+            Data Deletion page
+          </a>
           . You can also lodge a complaint with the{" "}
           <strong>Nigeria Data Protection Commission (NDPC)</strong>.
         </p>
