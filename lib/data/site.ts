@@ -6,6 +6,7 @@ export const SITE = {
   facebookUrl: "#",
   termsUrl: "/terms",
   privacyUrl: "/privacy",
+  dataDeletionUrl: "/data-deletion",
 } as const;
 
 export const NAV_LINKS = [
