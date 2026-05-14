@@ -32,6 +32,14 @@ export function Footer() {
               </Link>
             </li>
             <li>
+              <Link
+                href={SITE.dataDeletionUrl}
+                className="text-surface-50/60 transition-colors hover:text-surface-50"
+              >
+                Data Deletion
+              </Link>
+            </li>
+            <li>
               <a
                 href={SITE.twitterUrl}
                 target="_blank"
