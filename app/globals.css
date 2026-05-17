@@ -45,25 +45,23 @@
 /* Base reset / typography */
 html {
   scroll-behavior: auto; /* Lenis owns scrolling now */
+  font-family: var(--font-works);
 }
 
 body {
   background: var(--color-surface-50);
   color: var(--color-ink-900);
-  font-family: var(--font-works);
   font-feature-settings: "ss01", "cv11";
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
 h1, h2, h3 {
-  font-family: var(--font-works);
   letter-spacing: -0.02em;
   line-height: 1.05;
 }
 
 h4, h5, h6 {
-  font-family: var(--font-works);
   letter-spacing: -0.015em;
   font-weight: 500;
 }
@@ -129,7 +127,6 @@ h4, h5, h6 {
 
 /* Legal pages — Terms, Privacy */
 .legal-prose {
-  font-family: var(--font-sans);
   font-size: 0.975rem;
   line-height: 1.7;
   color: var(--color-ink-700);
