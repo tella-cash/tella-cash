@@ -38,48 +38,31 @@ export default function HomePage() {
 
           <FeatureSection
             id="features"
-            heading={
-              <>
-                Type the amount.{" "}
-                <span className="italic text-accent-500">Type the name.</span>{" "}
-                That's the whole flow.
-              </>
-            }
-            description="No recipient lookups, no copy-pasted addresses, no IBAN forms. Tell UPay what you want to do in plain English. It confirms before any money moves."
+            index='1'
+            heading='Send money like a message'
+            description="Just type what you want to do. Tella understands, confirms, and moves your money no forms, no addresses."
             visual={<SendIllustration />}
           />
 
           <FeatureSection
-            heading={
-              <>
-                A balance you can{" "}
-                <span className="italic text-accent-500">just ask for.</span>
-              </>
-            }
-            description="Open WhatsApp. Type 'balance.' That's the whole product. No dashboards, no apps to install, no expired sessions."
+            index='2'
+            heading='Your balance, one message away'
+            description="Ask for your balance in WhatsApp and get instant updates no apps, dashboards, or complicated interfaces."
             visual={<BalanceIllustration />}
             reverse
           />
 
           <FeatureSection
-            heading={
-              <>
-                Money lands in your chat,{" "}
-                <span className="italic text-accent-500">not a separate inbox.</span>
-              </>
-            }
-            description="Incoming payments arrive as messages. New balance, sender's name, transaction reference — all there, in the same thread you already check."
+            index='3'
+            heading='Payments that arrives like messages'
+            description="Receive instant USDC payments directly in WhatsApp with sender details, transaction updates, and balance confirmations in one conversation."
             visual={<ReceiveIllustration />}
           />
 
           <FeatureSection
-            heading={
-              <>
-                It remembers,{" "}
-                <span className="italic text-accent-500">so you don't have to.</span>
-              </>
-            }
-            description="Reference earlier conversations naturally. 'Send him the same as last week' resolves to the right person, the right amount, the right wallet."
+            index='4'
+            heading='Talk naturally. Tella understands'
+            description="Send money the way you naturally speak. Tella understands context, remembers past transactions, and confirms before anything moves."
             visual={<ContextIllustration />}
             reverse
           />
