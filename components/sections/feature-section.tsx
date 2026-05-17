@@ -23,7 +23,7 @@ export function FeatureSection({
     <section
       id={id}
       className={cn(
-        "sticky top-[var(--feature-stick-top)] h-[calc(100vh-var(--feature-stick-top))] overflow-hidden bg-surface-50",
+        "sticky top-[var(--feature-stick-top)] overflow-hidden bg-surface-50 min-h-[calc(100vh-var(--feature-stick-top))] lg:h-[calc(100vh-var(--feature-stick-top))]",
         toneClassName,
       )}
     >
