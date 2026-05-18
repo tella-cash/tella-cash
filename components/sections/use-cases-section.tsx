@@ -34,40 +34,22 @@ const USE_CASES: UseCase[] = [
   },
 ];
 
-/**
- * UseCasesSection
- *
- * Four scenarios shown as a horizontal row of cards on desktop, stacking
- * on mobile. Each card has a small "amount sent" tag and a brief story.
- *
- * Cards use the accent color sparingly — only the amount tag picks it up,
- * leaving the rest of the card in the neutral palette. Restraint here is
- * what makes the accent feel valuable when it appears.
- */
 export function UseCasesSection() {
   return (
-    <section id="use-cases" className="relative py-10 lg:py-20">
-      <div className="mx-auto max-w-7xl px-6">
+    <section id="use-cases" className="relative py-10">
+      <div className="mx-auto max-w-[1200px] px-6">
         <Reveal>
-          <div className="flex flex-col items-start justify-between gap-8 lg:flex-row lg:items-end">
-            <div className="max-w-2xl">
-              <div className="flex items-center gap-3 text-xs font-mono text-ink-400">
-                <span className="h-px w-8 bg-ink-300" />
-                <span className="uppercase tracking-[0.2em]">Use Cases</span>
-              </div>
-              <h2 className="mt-8 text-[clamp(2.25rem,5vw,4.5rem)] font-normal leading-[1.02] tracking-[-0.03em] text-ink-900">
-                Money that fits the way{" "}
-                <span className="italic text-accent-500">you already chat.</span>
-              </h2>
-            </div>
+          <div className="flex flex-col items-center justify-between gap-2">
+            <h2 className="text-[36px] font-normal leading-[1.02] tracking-[-0.03em] text-ink-900">
+              Move money directly from chat
+            </h2>
             <p className="max-w-sm text-ink-500">
-              tella slots into the moments where money is supposed to move
-              quickly — and gets out of your way.
+              How Tellecash becomes part of everyday life
             </p>
           </div>
         </Reveal>
 
-        <div className="mt-20 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {USE_CASES.map((c, i) => (
             <Reveal key={c.id} delay={i * 0.08}>
               <article className="group relative flex h-full flex-col justify-between overflow-hidden rounded-3xl border border-ink-200/60 bg-surface-0 p-8 transition-all duration-500 hover:border-ink-900 hover:shadow-card">
