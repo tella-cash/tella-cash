@@ -28,7 +28,7 @@ export function SecuritySection() {
   return (
     <section
       id="security"
-      className="relative overflow-hidden bg-ink-900 py-[60px] text-surface-50 lg:py-40"
+      className="relative overflow-hidden bg-ink-900 py-[40px] md:py-[60px] text-surface-50"
     >
       <div className="relative mx-auto max-w-7xl px-[10px] sm:px[72px]">
         <Reveal>
@@ -36,11 +36,11 @@ export function SecuritySection() {
             <div className="text-xs font-mono text-surface-50/40">
               <span className="uppercase tracking-[0.2em]">Security</span>
             </div>
-            <h2 className="mt-8 text-[72px] text-center font-normal leading-[1.02] tracking-[-0.03em]">
+            <h2 className="mt-8 text-[24px] lg:text-[72px] text-center font-normal leading-[1.02] tracking-[-0.03em]">
               Built on rails you{" "}
               <span className="text-[#0057FF]">already trust.</span>
             </h2>
-            <p className="mx-auto mt-6 max-w-xl text-lg leading-relaxed text-surface-50/60">
+            <p className="mx-auto mt-6 max-w-xl text-[14px] lg:text-lg leading-relaxed text-surface-50/60">
               Two billion people use WhatsApp every day. tella layers payment
               logic on top - without changing what makes that channel feel
               safe.
