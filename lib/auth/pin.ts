@@ -98,7 +98,7 @@ export async function setPinForUser({
   const pin_hash = await hashPin(pin);
   const supabase = getSupabaseAdmin();
   const { error } = await supabase
-    .from("upay_users")
+    .from("tella_users")
     .update({ pin_hash })
     .eq("id", userId);
 

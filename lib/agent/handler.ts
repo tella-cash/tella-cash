@@ -1,4 +1,4 @@
-import type { UpayUser, PendingAction } from "@/lib/supabase/types";
+import type { tellaUser, PendingAction } from "@/lib/supabase/types";
 import {
   completeOnboarding,
   findUserByWhatsApp,
@@ -13,7 +13,7 @@ import { parseSendIntent, parseConfirmation } from "@/lib/agent/parse-send";
 import { buildConfirmUrl } from "@/lib/confirm/url";
 
 interface IncomingMessage {
-  user: UpayUser;
+  user: tellaUser;
   text: string;
   isNew: boolean;
 }
@@ -45,7 +45,7 @@ export async function handleIncomingMessage(
   if (isNew) {
     return {
       reply: [
-        "👋 Welcome to UPay!",
+        "👋 Welcome to tella!",
         "",
         "I'm your AI money companion. Before we get started, what should I call you?",
         "",
@@ -70,7 +70,7 @@ async function handleNameEntry({
   user,
   text,
 }: {
-  user: UpayUser;
+  user: tellaUser;
   text: string;
 }): Promise<HandlerResult> {
   const candidate = extractName(text);
@@ -96,7 +96,7 @@ async function handleNameEntry({
     reply: [
       `Nice to meet you, ${firstName}! 🎉`,
       "",
-      "I'm setting up your UPay wallet now — give me a few seconds. I'll send your address as soon as it's ready.",
+      "I'm setting up your tella wallet now — give me a few seconds. I'll send your address as soon as it's ready.",
     ].join("\n"),
     sideEffect: { kind: "provision_wallet", userId: user.id },
   };
@@ -139,7 +139,7 @@ async function handleOnboardedUser({
   user,
   text,
 }: {
-  user: UpayUser;
+  user: tellaUser;
   text: string;
 }): Promise<string> {
   const trimmed = text.trim().toLowerCase();
@@ -159,7 +159,7 @@ async function handleOnboardedUser({
   if (trimmed.includes("address") || trimmed.includes("my wallet")) {
     if (user.wallet_status === "active" && user.wallet_address) {
       return [
-        "Your UPay wallet address:",
+        "Your tella wallet address:",
         "",
         `\`${user.wallet_address}\``,
         "",
@@ -195,7 +195,7 @@ async function startSendFlow({
   user,
   intent,
 }: {
-  user: UpayUser;
+  user: tellaUser;
   intent: ReturnType<typeof parseSendIntent>;
 }): Promise<string> {
   if (!intent) return "I couldn't understand that send instruction. Try \"send 5 usdc to +234...\".";
@@ -221,9 +221,9 @@ async function startSendFlow({
 
     if (!recipient) {
       return [
-        "That number isn't on UPay yet 👀",
+        "That number isn't on tella yet 👀",
         "",
-        "I can only send to UPay users by phone number for now. If you have their wallet address, you can send to that directly:",
+        "I can only send to tella users by phone number for now. If you have their wallet address, you can send to that directly:",
         '• "send 5 usdc to 0x..."',
       ].join("\n");
     }
@@ -258,7 +258,7 @@ async function startSendFlow({
   return buildPendingPrompt(pending);
 }
 
-async function getBalanceReply(user: UpayUser): Promise<string> {
+async function getBalanceReply(user: tellaUser): Promise<string> {
   if (user.wallet_status !== "active" || !user.circle_wallet_id) {
     return "Your wallet isn't ready yet. Once it's set up I'll be able to show your balance.";
   }

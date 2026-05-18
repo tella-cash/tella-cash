@@ -42,7 +42,7 @@ export function ConfirmClient({
     <main className="mx-auto flex min-h-dvh max-w-md flex-col px-6 py-12">
       <header className="mt-4">
         <p className="text-xs uppercase tracking-[0.18em] text-ink-400">
-          UPay
+          tella
         </p>
         <h1 className="mt-2 font-display text-3xl leading-tight text-ink-900">
           Confirm send

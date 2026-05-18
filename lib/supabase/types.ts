@@ -1,7 +1,7 @@
 export type OnboardingStep = "awaiting_name" | "completed";
 export type WalletStatus = "none" | "pending" | "active" | "failed";
 
-export interface UpayUser {
+export interface tellaUser {
   id: string;
   whatsapp_number: string;
   profile_name: string | null;

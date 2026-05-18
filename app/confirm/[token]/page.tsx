@@ -4,7 +4,7 @@ import { ConfirmClient } from "./confirm-client";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Confirm send · UPay",
+  title: "Confirm send · tella",
   // Don't leak the token to third parties via Referer.
   other: { referrer: "no-referrer" },
 };

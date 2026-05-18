@@ -61,7 +61,7 @@ export function UseCasesSection() {
               </h2>
             </div>
             <p className="max-w-sm text-ink-500">
-              UPay slots into the moments where money is supposed to move
+              tella slots into the moments where money is supposed to move
               quickly — and gets out of your way.
             </p>
           </div>

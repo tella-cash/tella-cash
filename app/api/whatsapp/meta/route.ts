@@ -172,7 +172,7 @@ async function processIncoming(msg: IncomingMessage) {
     if (success) {
       const supabase = getSupabaseAdmin();
       const { data } = await supabase
-        .from("upay_users")
+        .from("tella_users")
         .select("wallet_address")
         .eq("id", sideEffect.userId)
         .single();
@@ -194,7 +194,7 @@ async function processIncoming(msg: IncomingMessage) {
     } else {
       await sendWhatsAppMessage({
         to: normalizedNumber,
-        body: "I couldn't set up your wallet just now — I'll retry automatically. You can keep using UPay in the meantime.",
+        body: "I couldn't set up your wallet just now — I'll retry automatically. You can keep using tella in the meantime.",
       });
     }
   }

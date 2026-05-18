@@ -1,4 +1,4 @@
-import type { UpayUser, PendingAction } from "@/lib/supabase/types";
+import type { tellaUser, PendingAction } from "@/lib/supabase/types";
 import { deletePending } from "@/lib/pending_actions/repository";
 import { sendUsdc } from "@/lib/wallet/circle";
 
@@ -20,7 +20,7 @@ export async function executePendingSend({
   user,
   pending,
 }: {
-  user: UpayUser;
+  user: tellaUser;
   pending: PendingAction;
 }): Promise<ExecuteSendResult> {
   if (user.wallet_status !== "active" || !user.circle_wallet_id) {

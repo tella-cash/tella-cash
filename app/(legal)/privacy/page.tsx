@@ -27,7 +27,7 @@ export default function PrivacyPage() {
         <p>
           This Privacy Policy explains how{" "}
           <Placeholder>[Legal Entity Name]</Placeholder> (&ldquo;Tella,&rdquo;
-          &ldquo;UPay,&rdquo; &ldquo;we,&rdquo; &ldquo;us&rdquo;) collects,
+          &ldquo;tella,&rdquo; &ldquo;we,&rdquo; &ldquo;us&rdquo;) collects,
           uses, shares, and protects personal information when you use our
           WhatsApp-based money interface and our website at{" "}
           <Placeholder>[tella.app]</Placeholder> (the &ldquo;Service&rdquo;).

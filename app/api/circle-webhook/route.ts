@@ -153,7 +153,7 @@ async function handleInboundTransaction(
  * "0x1234567890abcdef..." → "0x1234…cdef"
  *
  * For now the source is always an address — eventually we could resolve
- * it back to a UPay user name if the sender is also on UPay.
+ * it back to a tella user name if the sender is also on tella.
  */
 function formatSourceAddress(address: string | undefined): string {
   if (!address) return "an external wallet";

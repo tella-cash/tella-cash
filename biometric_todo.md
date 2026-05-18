@@ -12,9 +12,9 @@ pnpm add @simplewebauthn/server @simplewebauthn/browser
 ## 2. Run SQL migrations
 
 ```sql
-create table if not exists upay_webauthn_credentials (
+create table if not exists tella_webauthn_credentials (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references upay_user(id) on delete cascade,
+  user_id uuid not null references tella_user(id) on delete cascade,
   credential_id text unique not null,
   public_key bytea not null,
   counter bigint not null default 0,
@@ -24,23 +24,24 @@ create table if not exists upay_webauthn_credentials (
   last_used_at timestamptz
 );
 
-create table if not exists upay_webauthn_challenges (
+create table if not exists tella_webauthn_challenges (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references upay_user(id) on delete cascade,
+  user_id uuid not null references tella_user(id) on delete cascade,
   kind text not null check (kind in ('registration', 'authentication')),
   challenge text not null,
   expires_at timestamptz not null,
   created_at timestamptz not null default now()
 );
 
-create index if not exists upay_webauthn_credentials_user_idx
-  on upay_webauthn_credentials(user_id);
+create index if not exists tella_webauthn_credentials_user_idx
+  on tella_webauthn_credentials(user_id);
 
-alter table upay_webauthn_credentials enable row level security;
-alter table upay_webauthn_challenges enable row level security;
+alter table tella_webauthn_credentials enable row level security;
+alter table tella_webauthn_challenges enable row level security;
 ```
 
 ## 3. Add env vars to Vercel
+
 WEBAUTHN_RP_ID=tella.cash
 WEBAUTHN_ORIGIN=https://tella.cash
 WEBAUTHN_RP_NAME=tella

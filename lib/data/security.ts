@@ -24,7 +24,7 @@ export const SECURITY_CARDS: SecurityCard[] = [
     id: "biometric",
     title: "Biometric lock on the chat itself",
     body:
-      "Hide your UPAY thread inside WhatsApp's locked chats folder — face or fingerprint required to even open it. Security down to the conversation level, not just the transaction.",
+      "Hide your tella thread inside WhatsApp's locked chats folder — face or fingerprint required to even open it. Security down to the conversation level, not just the transaction.",
     illustration: "biometric",
   },
 ];

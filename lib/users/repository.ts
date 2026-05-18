@@ -1,15 +1,15 @@
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import type { UpayUser } from "@/lib/supabase/types";
+import type { tellaUser } from "@/lib/supabase/types";
 
 export async function findOrCreateUser({
   whatsappNumber,
 }: {
   whatsappNumber: string;
-}): Promise<{ user: UpayUser; isNew: boolean }> {
+}): Promise<{ user: tellaUser; isNew: boolean }> {
   const supabase = getSupabaseAdmin();
 
   const { data: existing, error: findError } = await supabase
-    .from("upay_users")
+    .from("tella_users")
     .select("*")
     .eq("whatsapp_number", whatsappNumber)
     .maybeSingle();
@@ -19,11 +19,11 @@ export async function findOrCreateUser({
   }
 
   if (existing) {
-    return { user: existing as UpayUser, isNew: false };
+    return { user: existing as tellaUser, isNew: false };
   }
 
   const { data: created, error: createError } = await supabase
-    .from("upay_users")
+    .from("tella_users")
     .insert({
       whatsapp_number: whatsappNumber,
       onboarding_step: "awaiting_name",
@@ -35,7 +35,7 @@ export async function findOrCreateUser({
     throw new Error(`findOrCreateUser insert failed: ${createError.message}`);
   }
 
-  return { user: created as UpayUser, isNew: true };
+  return { user: created as tellaUser, isNew: true };
 }
 
 
@@ -45,10 +45,10 @@ export async function completeOnboarding({
 }: {
   userId: string;
   name: string;
-}): Promise<UpayUser> {
+}): Promise<tellaUser> {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
-    .from("upay_users")
+    .from("tella_users")
     .update({
       profile_name: name,
       onboarding_step: "completed",
@@ -58,14 +58,14 @@ export async function completeOnboarding({
     .single();
 
   if (error) throw new Error(`completeOnboarding failed: ${error.message}`);
-  return data as UpayUser;
+  return data as tellaUser;
 }
 
 
 export async function markWalletPending(userId: string): Promise<void> {
   const supabase = getSupabaseAdmin();
   const { error } = await supabase
-    .from("upay_users")
+    .from("tella_users")
     .update({ wallet_status: "pending" })
     .eq("id", userId);
   if (error) throw new Error(`markWalletPending failed: ${error.message}`);
@@ -82,7 +82,7 @@ export async function setWalletActive({
 }): Promise<void> {
   const supabase = getSupabaseAdmin();
   const { error } = await supabase
-    .from("upay_users")
+    .from("tella_users")
     .update({
       circle_wallet_id: walletId,
       wallet_address: address,
@@ -95,7 +95,7 @@ export async function setWalletActive({
 export async function markWalletFailed(userId: string): Promise<void> {
   const supabase = getSupabaseAdmin();
   const { error } = await supabase
-    .from("upay_users")
+    .from("tella_users")
     .update({ wallet_status: "failed" })
     .eq("id", userId);
   if (error) throw new Error(`markWalletFailed failed: ${error.message}`);
@@ -103,24 +103,24 @@ export async function markWalletFailed(userId: string): Promise<void> {
 
 export async function findUserByWhatsApp(
   whatsappNumber: string,
-): Promise<UpayUser | null> {
+): Promise<tellaUser | null> {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
-    .from("upay_users")
+    .from("tella_users")
     .select("*")
     .eq("whatsapp_number", whatsappNumber)
     .maybeSingle();
 
   if (error) throw new Error(`findUserByWhatsApp failed: ${error.message}`);
-  return (data as UpayUser | null) ?? null;
+  return (data as tellaUser | null) ?? null;
 }
 
 export async function findUserByCircleWalletId(
   circleWalletId: string,
-): Promise<UpayUser | null> {
+): Promise<tellaUser | null> {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
-    .from("upay_users")
+    .from("tella_users")
     .select("*")
     .eq("circle_wallet_id", circleWalletId)
     .maybeSingle();
@@ -128,5 +128,5 @@ export async function findUserByCircleWalletId(
   if (error) {
     throw new Error(`findUserByCircleWalletId failed: ${error.message}`);
   }
-  return (data as UpayUser | null) ?? null;
+  return (data as tellaUser | null) ?? null;
 }

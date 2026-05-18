@@ -25,7 +25,7 @@ export default function TermsPage() {
 
       <Section title="1. Who we are">
         <p>
-          Tella (&ldquo;Tella,&rdquo; &ldquo;UPay,&rdquo; &ldquo;we,&rdquo;
+          Tella (&ldquo;Tella,&rdquo; &ldquo;tella,&rdquo; &ldquo;we,&rdquo;
           &ldquo;us&rdquo;) is a messaging-based interface that lets you hold,
           send, and receive digital dollars (USDC) and convert between USDC and
           Nigerian Naira (NGN) through a WhatsApp chat. These Terms of Service

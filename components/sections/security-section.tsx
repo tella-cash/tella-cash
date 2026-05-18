@@ -5,7 +5,7 @@ const PILLARS = [
     id: "encryption",
     title: "End-to-end encrypted",
     body:
-      "Every message between you and UPay rides WhatsApp's encrypted channel. Nobody in the middle — not us, not your carrier — can read what you send.",
+      "Every message between you and tella rides WhatsApp's encrypted channel. Nobody in the middle - not us, not your carrier - can read what you send.",
     illustration: <EncryptionGlyph />,
   },
   {
@@ -19,7 +19,7 @@ const PILLARS = [
     id: "custody",
     title: "Institutional custody",
     body:
-      "Wallet keys are managed by Circle — the issuer of USDC. The same infrastructure trusted by banks and exchanges secures your account.",
+      "Wallet keys are managed by Circle - the issuer of USDC. The same infrastructure trusted by banks and exchanges secures your account.",
     illustration: <CustodyGlyph />,
   },
 ];
@@ -28,23 +28,21 @@ export function SecuritySection() {
   return (
     <section
       id="security"
-      className="relative overflow-hidden bg-ink-900 py-32 text-surface-50 lg:py-40"
+      className="relative overflow-hidden bg-ink-900 py-[60px] text-surface-50 lg:py-40"
     >
       <div className="relative mx-auto max-w-7xl px-[10px] sm:px[72px]">
         <Reveal>
-          <div className="mx-auto max-w-3xl text-center">
-            <div className="inline-flex items-center gap-3 text-xs font-mono text-surface-50/40">
-              <span className="h-px w-8 bg-surface-50/30" />
+          <div className="mx-auto max-w-[600px] text-center">
+            <div className="text-xs font-mono text-surface-50/40">
               <span className="uppercase tracking-[0.2em]">Security</span>
-              <span className="h-px w-8 bg-surface-50/30" />
             </div>
-            <h2 className="mt-8 text-[clamp(2.25rem,5vw,4.5rem)] font-normal leading-[1.02] tracking-[-0.03em]">
+            <h2 className="mt-8 text-[72px] text-center font-normal leading-[1.02] tracking-[-0.03em]">
               Built on rails you{" "}
-              <span className="italic text-accent-300">already trust.</span>
+              <span className="text-[#0057FF]">already trust.</span>
             </h2>
             <p className="mx-auto mt-6 max-w-xl text-lg leading-relaxed text-surface-50/60">
-              Two billion people use WhatsApp every day. UPay layers payment
-              logic on top — without changing what makes that channel feel
+              Two billion people use WhatsApp every day. tella layers payment
+              logic on top - without changing what makes that channel feel
               safe.
             </p>
           </div>
