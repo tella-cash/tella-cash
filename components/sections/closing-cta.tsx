@@ -16,21 +16,13 @@ export function ClosingCta() {
   const bubbleY = useTransform(scrollYProgress, [0, 1], [60, -60]);
 
   return (
-    <section ref={ref} className="relative overflow-hidden py-40 lg:py-56">
-      {/* Oversized bubble decoration */}
-      <motion.div
-        style={{ y: bubbleY }}
-        aria-hidden="true"
-        className="pointer-events-none absolute -right-32 top-1/3 h-[500px] w-[500px] rounded-[50%_45%_45%_50%/50%_50%_55%_50%] bg-accent-500/10 blur-2xl"
-      />
-
-      <div className="relative mx-auto max-w-7xl px-6">
+    <section ref={ref} className="py-[60px] px-[72px] bg-red-800">
+      <div className="px-6 bg-white">
         <motion.div style={{ scale }} className="max-w-4xl">
-          <h2 className="text-[clamp(3rem,9vw,8rem)] font-normal leading-[0.95] tracking-[-0.04em] text-ink-900">
+          <h2 className="text-[48px] font-normal text-ink-900">
             Open WhatsApp.
             <br />
             <span className="italic text-accent-500">Send a message.</span>
-            <br />
             That's it.
           </h2>
 

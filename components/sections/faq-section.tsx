@@ -4,22 +4,15 @@ import type { FaqItem } from "@/lib/data/faqs";
 
 export function FaqSection() {
   return (
-    <section id="faqs" className="bg-surface-50 py-32 lg:py-40">
+    <section id="faqs" className="bg-surface-50 py-12 lg:py-20">
       <div className="mx-auto max-w-3xl px-6">
         <Reveal>
           <div className="text-center">
-            <div className="inline-flex items-center gap-3 text-xs font-mono text-ink-400">
-              <span className="h-px w-8 bg-ink-300" />
-              <span className="uppercase tracking-[0.2em]">FAQ</span>
-              <span className="h-px w-8 bg-ink-300" />
-            </div>
-            <h2 className="mt-8 text-[clamp(2.25rem,5vw,4.5rem)] font-normal leading-[1.02] tracking-[-0.03em] text-ink-900">
-              Questions, <span className="italic text-accent-500">answered.</span>
-            </h2>
+            <span className="uppercase text-[24px] text-ink-900">FAQS?</span>
           </div>
         </Reveal>
 
-        <div className="mt-16">
+        <div className="mt-2">
           {FAQS.map((faq, idx) => (
             <Reveal key={faq.id} delay={idx * 0.05}>
               <FaqRow faq={faq} defaultOpen={idx === 0} />
