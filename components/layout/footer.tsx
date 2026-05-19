@@ -4,7 +4,7 @@ import { SITE } from "@/lib/data/site";
 
 export function Footer() {
   return (
-    <footer className="bg-ink-900 text-surface-50">
+    <footer className="bg-ink-900 py-[40px] text-surface-50">
       <div className="mx-auto flex max-w-7xl flex-col gap-12 px-6 py-1  2 lg:flex-row lg:items-end lg:justify-between">
         <div className="space-y-5">
           <BrandMark />
