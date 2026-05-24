@@ -1,11 +1,10 @@
 import { loadConfirmContext } from "@/lib/confirm/context";
-import { hasAnyCredential } from "@/lib/webauthn/repository";
 import { ConfirmClient } from "./confirm-client";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Confirm send · UPay",
+  title: "Confirm send · tella",
   // Don't leak the token to third parties via Referer.
   other: { referrer: "no-referrer" },
 };
@@ -30,7 +29,6 @@ export default async function ConfirmPage({
     );
   }
 
-  const hasCredential = await hasAnyCredential(ctx.user.id);
   const hasPin = Boolean(ctx.user.pin_hash);
 
   return (
@@ -43,7 +41,6 @@ export default async function ConfirmPage({
           ctx.pending.payload.recipientName ??
           formatAddress(ctx.pending.payload.recipientAddress),
       }}
-      hasCredential={hasCredential}
       hasPin={hasPin}
     />
   );

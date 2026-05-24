@@ -1,38 +1,86 @@
-import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import {
+  randomBytes,
+  scrypt as scryptCb,
+  timingSafeEqual,
+  type ScryptOptions,
+} from "node:crypto";
+import { promisify } from "node:util";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+
+// promisify drops the 4-arg (options) overload from its type signature,
+// so we re-assert it. Runtime accepts options fine — this is purely typing.
+const scrypt = promisify(scryptCb) as (
+  password: string | Buffer,
+  salt: string | Buffer,
+  keylen: number,
+  options?: ScryptOptions,
+) => Promise<Buffer>;
 
 const KEY_LENGTH = 64;
 const SALT_BYTES = 16;
-// scrypt cost params: N=2^15, r=8, p=1 — recommended baseline that runs in
-// well under 100ms on Vercel Fluid Compute and stays inside the default
-// memory budget of 128MB.
-const SCRYPT_OPTS = { N: 1 << 15, r: 8, p: 1 } as const;
+
+// scrypt cost params for a 4-digit PIN.
+//
+// Real security here is rate-limiting + lockout on the confirm flow,
+// since the keyspace is only 10,000. scrypt is defense-in-depth.
+//
+// N=2^14 → ~16 MB working memory. We override maxmem because OpenSSL's
+// default 32 MB ceiling has been observed to reject this on some Node
+// builds (Vercel runtime among them) due to internal overhead.
+const SCRYPT_PARAMS = {
+  N: 1 << 14,
+  r: 8,
+  p: 1,
+  maxmem: 128 * 1024 * 1024,
+} as const;
 
 const PIN_PATTERN = /^\d{4,8}$/;
+const HASH_SCHEME = "scrypt";
 
 export function isValidPin(pin: string): boolean {
   return PIN_PATTERN.test(pin);
 }
 
-export function hashPin(pin: string): { hash: string; salt: string } {
-  const salt = randomBytes(SALT_BYTES).toString("base64");
-  const hash = scryptSync(pin, salt, KEY_LENGTH, SCRYPT_OPTS).toString(
-    "base64",
-  );
-  return { hash, salt };
+async function deriveKey(
+  pin: string,
+  salt: Buffer,
+  params: { N: number; r: number; p: number },
+): Promise<Buffer> {
+  return scrypt(pin, salt, KEY_LENGTH, {
+    ...params,
+    maxmem: SCRYPT_PARAMS.maxmem,
+  });
 }
 
-export function verifyPin({
-  pin,
-  hash,
-  salt,
-}: {
-  pin: string;
-  hash: string;
-  salt: string;
-}): boolean {
-  const candidate = scryptSync(pin, salt, KEY_LENGTH, SCRYPT_OPTS);
-  const expected = Buffer.from(hash, "base64");
+export async function hashPin(pin: string): Promise<string> {
+  const salt = randomBytes(SALT_BYTES);
+  const key = await deriveKey(pin, salt, SCRYPT_PARAMS);
+  return [
+    HASH_SCHEME,
+    SCRYPT_PARAMS.N,
+    SCRYPT_PARAMS.r,
+    SCRYPT_PARAMS.p,
+    salt.toString("base64"),
+    key.toString("base64"),
+  ].join("$");
+}
+
+export async function verifyPin(pin: string, stored: string): Promise<boolean> {
+  const parts = stored.split("$");
+  if (parts.length !== 6 || parts[0] !== HASH_SCHEME) return false;
+
+  const N = Number(parts[1]);
+  const r = Number(parts[2]);
+  const p = Number(parts[3]);
+  if (!Number.isInteger(N) || !Number.isInteger(r) || !Number.isInteger(p)) {
+    return false;
+  }
+
+  const salt = Buffer.from(parts[4], "base64");
+  const expected = Buffer.from(parts[5], "base64");
+
+  const candidate = await deriveKey(pin, salt, { N, r, p });
+
   if (candidate.length !== expected.length) return false;
   return timingSafeEqual(candidate, expected);
 }
@@ -47,11 +95,11 @@ export async function setPinForUser({
   if (!isValidPin(pin)) {
     throw new Error("PIN must be 4–8 digits");
   }
-  const { hash, salt } = hashPin(pin);
+  const pin_hash = await hashPin(pin);
   const supabase = getSupabaseAdmin();
   const { error } = await supabase
-    .from("upay_users")
-    .update({ pin_hash: hash, pin_salt: salt })
+    .from("tella_users")
+    .update({ pin_hash })
     .eq("id", userId);
 
   if (error) throw new Error(`setPinForUser failed: ${error.message}`);

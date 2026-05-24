@@ -4,10 +4,7 @@ import { cn } from "@/lib/utils/cn";
 
 interface FeatureSectionProps {
   id?: string;
-  /** Section index, used for the small numeric tag (01, 02, etc.). */
-  index: string;
-  eyebrow: string;
-  /** Headline accepts ReactNode so callers can mix italics/highlights. */
+  index:string;
   heading: ReactNode;
   description: string;
   visual: ReactNode;
@@ -18,7 +15,6 @@ interface FeatureSectionProps {
 export function FeatureSection({
   id,
   index,
-  eyebrow,
   heading,
   description,
   visual,
@@ -26,23 +22,26 @@ export function FeatureSection({
   toneClassName,
 }: FeatureSectionProps) {
   return (
-    <section id={id} className={cn("relative py-32 lg:py-40", toneClassName)}>
-      <div className="mx-auto grid max-w-7xl items-center gap-20 px-6 lg:grid-cols-2 lg:gap-24">
+    <section
+      id={id}
+      className={cn(
+        "sticky -top-[var(--feature-stick-top)] overflow-hidden bg-surface-50 min-h-[calc(100vh-var(--feature-stick-top))] h-full",
+        toneClassName,
+      )}
+    >
+      <div className="mx-auto grid h-full max-w-7xl items-center gap-8 lg:gap-20 px-6 lg:grid-cols-2 lg:gap-24">
         <Reveal
           from={reverse ? "right" : "left"}
           className={cn("max-w-xl", reverse && "lg:order-2 lg:ml-auto")}
         >
-          <div className="flex items-center gap-4 text-xs font-mono text-ink-400">
-            <span>{index}</span>
-            <span className="h-px w-8 bg-ink-300" />
-            <span className="uppercase tracking-[0.2em]">{eyebrow}</span>
+          <div className="flex gap-2 items-center mt-4">
+            <span className="text-white bg-[#0057FF] w-[39px] h-[30px] rounded-full text-center">{index}</span>
+            <h2 className="text-[16px] lg:text-[20px] font-normal leading-[1.02] tracking-[-0.03em] text-[#00256B]">
+              {heading}
+            </h2>
           </div>
 
-          <h2 className="mt-8 text-[clamp(2.25rem,4.5vw,4rem)] font-normal leading-[1.02] tracking-[-0.03em] text-ink-900">
-            {heading}
-          </h2>
-
-          <p className="mt-6 text-lg leading-relaxed text-ink-500">
+          <p className="mt-6 text-[13px] lg:text-[16px] leading-relaxed text-ink-500">
             {description}
           </p>
         </Reveal>

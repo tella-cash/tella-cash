@@ -94,7 +94,7 @@ async function processMessageAsync(
       // Re-fetch the user so we have the freshly-saved wallet_address.
       const supabase = getSupabaseAdmin();
       const { data } = await supabase
-        .from("upay_users")
+        .from("tella_users")
         .select("wallet_address")
         .eq("id", sideEffect.userId)
         .single();
@@ -116,7 +116,7 @@ async function processMessageAsync(
     } else {
       await sendWhatsAppMessage({
         to: fromNumber,
-        body: "I couldn't set up your wallet just now — I'll retry automatically. You can keep using UPay in the meantime.",
+        body: "I couldn't set up your wallet just now — I'll retry automatically. You can keep using tella in the meantime.",
       });
     }
   }

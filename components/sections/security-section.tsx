@@ -1,16 +1,11 @@
 import { Reveal } from "@/components/interactive/reveal";
 
-/**
- * Security pillars data — kept inline here since it's only used in this
- * file. Each pillar pairs a short headline with a paragraph and a small
- * geometric illustration component.
- */
 const PILLARS = [
   {
     id: "encryption",
     title: "End-to-end encrypted",
     body:
-      "Every message between you and UPay rides WhatsApp's encrypted channel. Nobody in the middle — not us, not your carrier — can read what you send.",
+      "Every message between you and tella rides WhatsApp's encrypted channel. Nobody in the middle - not us, not your carrier - can read what you send.",
     illustration: <EncryptionGlyph />,
   },
   {
@@ -24,51 +19,30 @@ const PILLARS = [
     id: "custody",
     title: "Institutional custody",
     body:
-      "Wallet keys are managed by Circle — the issuer of USDC. The same infrastructure trusted by banks and exchanges secures your account.",
+      "Wallet keys are managed by Circle - the issuer of USDC. The same infrastructure trusted by banks and exchanges secures your account.",
     illustration: <CustodyGlyph />,
   },
 ];
 
-/**
- * SecuritySection
- *
- * Three-pillar grid with a centered editorial heading. Background switches
- * to ink-900 for this one section so it acts as a visual stopper between
- * the lighter feature sections — a Mercury-style trick where one section
- * inverts to draw weight to a serious topic.
- */
 export function SecuritySection() {
   return (
     <section
       id="security"
-      className="relative overflow-hidden bg-ink-900 py-32 text-surface-50 lg:py-40"
+      className="relative overflow-hidden bg-ink-900 py-[40px] md:py-[60px] text-surface-50"
     >
-      {/* Subtle grid overlay so the dark slab has texture */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 opacity-[0.04]"
-        style={{
-          backgroundImage:
-            "linear-gradient(to right, #fff 1px, transparent 1px), linear-gradient(to bottom, #fff 1px, transparent 1px)",
-          backgroundSize: "64px 64px",
-        }}
-      />
-
-      <div className="relative mx-auto max-w-7xl px-6">
+      <div className="relative mx-auto max-w-7xl px-[10px] sm:px[72px]">
         <Reveal>
-          <div className="mx-auto max-w-3xl text-center">
-            <div className="inline-flex items-center gap-3 text-xs font-mono text-surface-50/40">
-              <span className="h-px w-8 bg-surface-50/30" />
+          <div className="mx-auto max-w-[600px] text-center">
+            <div className="text-xs font-mono text-surface-50/40">
               <span className="uppercase tracking-[0.2em]">Security</span>
-              <span className="h-px w-8 bg-surface-50/30" />
             </div>
-            <h2 className="mt-8 text-[clamp(2.25rem,5vw,4.5rem)] font-normal leading-[1.02] tracking-[-0.03em]">
+            <h2 className="mt-8 text-[24px] lg:text-[72px] text-center font-normal leading-[1.02] tracking-[-0.03em]">
               Built on rails you{" "}
-              <span className="italic text-accent-300">already trust.</span>
+              <span className="text-[#0057FF]">already trust.</span>
             </h2>
-            <p className="mx-auto mt-6 max-w-xl text-lg leading-relaxed text-surface-50/60">
-              Two billion people use WhatsApp every day. UPay layers payment
-              logic on top — without changing what makes that channel feel
+            <p className="mx-auto mt-6 max-w-xl text-[14px] lg:text-lg leading-relaxed text-surface-50/60">
+              Two billion people use WhatsApp every day. tella layers payment
+              logic on top - without changing what makes that channel feel
               safe.
             </p>
           </div>
@@ -76,9 +50,9 @@ export function SecuritySection() {
 
         <div className="mt-20 grid gap-8 md:grid-cols-3">
           {PILLARS.map((p, i) => (
-            <Reveal key={p.id} delay={i * 0.1}>
+            <Reveal key={p.id} delay={i * 0.2}>
               <article className="flex h-full flex-col gap-6 rounded-3xl border border-surface-50/10 bg-surface-50/[0.02] p-8">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-surface-50/[0.04] text-accent-300">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-surface-50/[0.04] text-[#0057FF]">
                   {p.illustration}
                 </div>
                 <div>

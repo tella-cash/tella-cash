@@ -1,4 +1,7 @@
+import type { ReactNode } from "react";
+import Image from "next/image";
 import { PhoneFrame } from "@/components/ui/phone-frame";
+import logo from "@/public/logo.svg";
 
 /**
  * Phone illustrations for the four feature sections. Each is a static
@@ -7,16 +10,93 @@ import { PhoneFrame } from "@/components/ui/phone-frame";
  * of the product, chosen to communicate the feature at a glance.
  */
 
-/** Compact phone screen header — same shape as hero, simpler interior. */
-function ScreenHeader() {
+/** Shared chat surface — dark Tella/WhatsApp header + wallpaper message area. */
+function ChatScreen({ children }: { children: ReactNode }) {
   return (
-    <div className="flex items-center gap-3 border-b border-ink-200/40 bg-surface-50 px-4 pb-3 pt-12">
-      <div className="grid h-9 w-9 place-items-center rounded-full bg-accent-500 text-xs font-semibold text-white">
-        U
+    <div className="flex h-full flex-col">
+      {/* WhatsApp-style dark header */}
+      <div className="flex items-center gap-2 bg-[#1F2C34] px-2.5 pb-2.5 pt-12 text-white">
+        <button
+          type="button"
+          aria-label="Back"
+          className="flex items-center gap-0.5 text-white"
+        >
+          <svg viewBox="0 0 24 24" className="h-5 w-5">
+            <path
+              d="M14 6l-6 6 6 6"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              fill="none"
+            />
+          </svg>
+          <span className="text-[13px] font-medium">1</span>
+        </button>
+
+        <div className="grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-full bg-white">
+          <Image src={logo} alt="Tella" width={20} height={20} />
+        </div>
+
+        <div className="min-w-0 flex-1 leading-tight">
+          <div className="flex items-center gap-1">
+            <p className="text-[14px] font-semibold">Tella</p>
+            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0">
+              <circle cx="12" cy="12" r="10" fill="#22C55E" />
+              <path
+                d="M8 12.2l2.6 2.6 5-5"
+                stroke="white"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+              />
+            </svg>
+          </div>
+          <p className="text-[10px] text-white/60">Online</p>
+        </div>
+
+        <button
+          type="button"
+          aria-label="Video call"
+          className="grid h-9 w-9 shrink-0 place-items-center text-white"
+        >
+          <svg viewBox="0 0 24 24" className="h-5 w-5">
+            <rect
+              x="2"
+              y="6"
+              width="14"
+              height="12"
+              rx="2"
+              stroke="currentColor"
+              strokeWidth="2"
+              fill="none"
+            />
+            <path d="M22 7v10l-6-4v-2l6-4z" fill="currentColor" />
+          </svg>
+        </button>
+
+        <button
+          type="button"
+          aria-label="Voice call"
+          className="grid h-9 w-9 shrink-0 place-items-center text-white"
+        >
+          <svg viewBox="0 0 24 24" className="h-5 w-5">
+            <path
+              d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.37 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.33 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"
+              stroke="currentColor"
+              strokeWidth="2"
+              fill="none"
+              strokeLinejoin="round"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
       </div>
-      <div className="leading-tight">
-        <p className="text-[13px] font-medium text-ink-900">UPay</p>
-        <p className="text-[10px] text-ink-500">online</p>
+
+      {/* Messages on wallpaper */}
+      <div className="flex flex-1 flex-col gap-2 overflow-hidden bg-[url('/whatsapp-bg.png')] bg-cover bg-center p-3">
+        {children}
       </div>
     </div>
   );
@@ -62,41 +142,38 @@ export function SendIllustration() {
   return (
     <div className="relative mx-auto w-fit">
       <PhoneFrame>
-        <div className="flex h-full flex-col">
-          <ScreenHeader />
-          <div className="flex flex-1 flex-col gap-2 bg-surface-100 p-3">
-            <Bubble side="out" time="11:02">
-              send 25 to folake
-            </Bubble>
-            <Bubble side="in" time="11:02">
-              Send 25 USDC to Folake Adeyemi? Reply yes to confirm.
-            </Bubble>
-            <Bubble side="out" time="11:03">
-              yes
-            </Bubble>
-            <div className="flex justify-start">
-              <div className="w-[82%] rounded-2xl rounded-bl-md bg-white p-3 shadow-sm ring-1 ring-ink-200/40">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-medium uppercase tracking-wider text-ink-500">
-                    Sent
-                  </span>
-                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] font-medium text-emerald-700">
-                    ✓ Confirmed
-                  </span>
-                </div>
-                <p className="mt-1.5 font-display text-2xl leading-none text-ink-900">
-                  $25.00 <span className="text-base text-ink-500">USDC</span>
-                </p>
-                <p className="mt-1 text-[11px] text-ink-500">
-                  to Folake Adeyemi
-                </p>
-                <p className="mt-2 font-mono text-[9px] text-ink-300">
-                  tx_4P7M2N · 11:03
-                </p>
+        <ChatScreen>
+          <Bubble side="out" time="11:02">
+            send 25 to folake
+          </Bubble>
+          <Bubble side="in" time="11:02">
+            Send 25 USDC to Folake Adeyemi? Reply yes to confirm.
+          </Bubble>
+          <Bubble side="out" time="11:03">
+            yes
+          </Bubble>
+          <div className="flex justify-start">
+            <div className="w-[82%] rounded-2xl rounded-bl-md bg-white p-3 shadow-sm ring-1 ring-ink-200/40">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-medium uppercase tracking-wider text-ink-500">
+                  Sent
+                </span>
+                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] font-medium text-emerald-700">
+                  ✓ Confirmed
+                </span>
               </div>
+              <p className="mt-1.5 font-display text-2xl leading-none text-ink-900">
+                $25.00 <span className="text-base text-ink-500">USDC</span>
+              </p>
+              <p className="mt-1 text-[11px] text-ink-500">
+                to Folake Adeyemi
+              </p>
+              <p className="mt-2 font-mono text-[9px] text-ink-300">
+                tx_4P7M2N · 11:03
+              </p>
             </div>
           </div>
-        </div>
+        </ChatScreen>
       </PhoneFrame>
     </div>
   );
@@ -109,34 +186,31 @@ export function BalanceIllustration() {
   return (
     <div className="relative mx-auto w-fit">
       <PhoneFrame>
-        <div className="flex h-full flex-col">
-          <ScreenHeader />
-          <div className="flex flex-1 flex-col gap-2 bg-surface-100 p-3">
-            <Bubble side="out" time="14:40">
-              what's my balance?
-            </Bubble>
-            <div className="flex justify-start">
-              <div className="w-[88%] rounded-2xl rounded-bl-md bg-white p-3 shadow-sm ring-1 ring-ink-200/40">
-                <p className="text-[10px] font-medium uppercase tracking-wider text-ink-500">
-                  Available
-                </p>
-                <p className="mt-1 font-display text-3xl leading-none text-ink-900">
-                  $142.50
-                </p>
-                <div className="mt-3 space-y-1.5 border-t border-ink-200/40 pt-3 text-[11px]">
-                  <div className="flex justify-between text-ink-700">
-                    <span>USDC</span>
-                    <span className="font-mono">142.50</span>
-                  </div>
-                  <div className="flex justify-between text-ink-400">
-                    <span>Last 24h</span>
-                    <span className="text-emerald-600">+$25.00</span>
-                  </div>
+        <ChatScreen>
+          <Bubble side="out" time="14:40">
+            what's my balance?
+          </Bubble>
+          <div className="flex justify-start">
+            <div className="w-[88%] rounded-2xl rounded-bl-md bg-white p-3 shadow-sm ring-1 ring-ink-200/40">
+              <p className="text-[10px] font-medium uppercase tracking-wider text-ink-500">
+                Available
+              </p>
+              <p className="mt-1 font-display text-3xl leading-none text-ink-900">
+                $142.50
+              </p>
+              <div className="mt-3 space-y-1.5 border-t border-ink-200/40 pt-3 text-[11px]">
+                <div className="flex justify-between text-ink-700">
+                  <span>USDC</span>
+                  <span className="font-mono">142.50</span>
+                </div>
+                <div className="flex justify-between text-ink-400">
+                  <span>Last 24h</span>
+                  <span className="text-emerald-600">+$25.00</span>
                 </div>
               </div>
             </div>
           </div>
-        </div>
+        </ChatScreen>
       </PhoneFrame>
     </div>
   );
@@ -149,35 +223,32 @@ export function ReceiveIllustration() {
   return (
     <div className="relative mx-auto w-fit">
       <PhoneFrame>
-        <div className="flex h-full flex-col">
-          <ScreenHeader />
-          <div className="flex flex-1 flex-col gap-2 bg-surface-100 p-3">
-            <div className="flex justify-start">
-              <div className="w-[88%] rounded-2xl rounded-bl-md bg-white p-3 shadow-sm ring-1 ring-ink-200/40">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-medium uppercase tracking-wider text-accent-600">
-                    Received
-                  </span>
-                  <span className="rounded-full bg-accent-50 px-2 py-0.5 text-[9px] font-medium text-accent-600">
-                    ↓ New
-                  </span>
-                </div>
-                <p className="mt-1.5 font-display text-2xl leading-none text-ink-900">
-                  $50.00 <span className="text-base text-ink-500">USDC</span>
-                </p>
-                <p className="mt-1 text-[11px] text-ink-500">
-                  from Adaeze Nwosu
-                </p>
-                <p className="mt-2 font-mono text-[9px] text-ink-300">
-                  tx_9X3K1B · 09:22
-                </p>
+        <ChatScreen>
+          <div className="flex justify-start">
+            <div className="w-[88%] rounded-2xl rounded-bl-md bg-white p-3 shadow-sm ring-1 ring-ink-200/40">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-medium uppercase tracking-wider text-accent-600">
+                  Received
+                </span>
+                <span className="rounded-full bg-accent-50 px-2 py-0.5 text-[9px] font-medium text-accent-600">
+                  ↓ New
+                </span>
               </div>
+              <p className="mt-1.5 font-display text-2xl leading-none text-ink-900">
+                $50.00 <span className="text-base text-ink-500">USDC</span>
+              </p>
+              <p className="mt-1 text-[11px] text-ink-500">
+                from Adaeze Nwosu
+              </p>
+              <p className="mt-2 font-mono text-[9px] text-ink-300">
+                tx_9X3K1B · 09:22
+              </p>
             </div>
-            <Bubble side="in" time="9:22">
-              You've received $50 from Adaeze. New balance: $192.50.
-            </Bubble>
           </div>
-        </div>
+          <Bubble side="in" time="9:22">
+            You've received $50 from Adaeze. New balance: $192.50.
+          </Bubble>
+        </ChatScreen>
       </PhoneFrame>
     </div>
   );
@@ -190,28 +261,25 @@ export function ContextIllustration() {
   return (
     <div className="relative mx-auto w-fit">
       <PhoneFrame>
-        <div className="flex h-full flex-col">
-          <ScreenHeader />
-          <div className="flex flex-1 flex-col gap-2 bg-surface-100 p-3">
-            <Bubble side="out" time="Mon">
-              sent 5 to chuks for lunch
-            </Bubble>
-            <Bubble side="in" time="Mon">
-              ✓ Sent $5 to Chuks Okafor.
-            </Bubble>
-            <div className="my-1 flex items-center gap-2 text-[9px] uppercase tracking-widest text-ink-300">
-              <span className="h-px flex-1 bg-ink-200" />
-              today
-              <span className="h-px flex-1 bg-ink-200" />
-            </div>
-            <Bubble side="out" time="13:20">
-              send him the same again
-            </Bubble>
-            <Bubble side="in" time="13:20">
-              Sending $5 USDC to Chuks Okafor — confirm?
-            </Bubble>
+        <ChatScreen>
+          <Bubble side="out" time="Mon">
+            sent 5 to chuks for lunch
+          </Bubble>
+          <Bubble side="in" time="Mon">
+            ✓ Sent $5 to Chuks Okafor.
+          </Bubble>
+          <div className="my-1 flex items-center gap-2 text-[9px] uppercase tracking-widest text-ink-300">
+            <span className="h-px flex-1 bg-ink-200" />
+            today
+            <span className="h-px flex-1 bg-ink-200" />
           </div>
-        </div>
+          <Bubble side="out" time="13:20">
+            send him the same again
+          </Bubble>
+          <Bubble side="in" time="13:20">
+            Sending $5 USDC to Chuks Okafor — confirm?
+          </Bubble>
+        </ChatScreen>
       </PhoneFrame>
     </div>
   );

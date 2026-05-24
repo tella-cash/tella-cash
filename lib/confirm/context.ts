@@ -1,8 +1,8 @@
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import type { PendingAction, UpayUser } from "@/lib/supabase/types";
+import type { PendingAction, tellaUser } from "@/lib/supabase/types";
 
 export interface ConfirmContext {
-  user: UpayUser;
+  user: tellaUser;
   pending: PendingAction;
 }
 
@@ -24,7 +24,7 @@ export async function loadConfirmContext(
   const supabase = getSupabaseAdmin();
 
   const { data: pending, error: pendingErr } = await supabase
-    .from("upay_pending_action")
+    .from("tella_pending_action")
     .select("*")
     .eq("id", token)
     .gt("expires_at", new Date().toISOString())
@@ -34,11 +34,11 @@ export async function loadConfirmContext(
   if (!pending) return null;
 
   const { data: user, error: userErr } = await supabase
-    .from("upay_users")
+    .from("tella_users")
     .select("*")
     .eq("id", (pending as PendingAction).user_id)
     .single();
 
   if (userErr) throw new Error(`loadConfirmContext: ${userErr.message}`);
-  return { user: user as UpayUser, pending: pending as PendingAction };
+  return { user: user as tellaUser, pending: pending as PendingAction };
 }

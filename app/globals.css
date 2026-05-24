@@ -1,18 +1,5 @@
 @import "tailwindcss";
 
-/**
- * UPay design tokens — premium, quiet, Mercury-style.
- *
- * The system rests on three colors: a near-white surface that's slightly
- * warm so it doesn't feel sterile, deep ink for text that's not pure black
- * (pure black is too harsh against the warm white), and one electric-blue
- * accent that does all the heavy lifting for emphasis, CTAs, and active
- * states.
- *
- * Restraint is the point. Every visual element should justify its presence
- * either by communicating something or by carrying brand. Decoration for
- * its own sake doesn't belong here.
- */
 @theme {
   /* Surface — warm near-whites */
   --color-surface-0: #ffffff;
@@ -41,6 +28,7 @@
   --font-display: "Instrument Serif", "Times New Roman", ui-serif, serif;
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-works: "Newsreader", "Suisse Works", ui-serif, serif;
 
   /* Radii — restrained */
   --radius-sm: 0.375rem;
@@ -57,34 +45,27 @@
 /* Base reset / typography */
 html {
   scroll-behavior: auto; /* Lenis owns scrolling now */
+  font-family: var(--font-works);
 }
 
 body {
   background: var(--color-surface-50);
   color: var(--color-ink-900);
-  font-family: var(--font-sans);
   font-feature-settings: "ss01", "cv11";
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
-/* Display headings use the serif. Mercury / Stripe both lean serif for
-   heroes — adds editorial weight that sans-serif can't match. */
 h1, h2, h3 {
-  font-family: var(--font-display);
   letter-spacing: -0.02em;
   line-height: 1.05;
 }
 
 h4, h5, h6 {
-  font-family: var(--font-sans);
   letter-spacing: -0.015em;
   font-weight: 500;
 }
 
-/* Hide native cursor when our custom one is active. The .has-custom-cursor
-   class is applied by the cursor component itself once mounted, so non-JS
-   users still see the native cursor as fallback. */
 .has-custom-cursor,
 .has-custom-cursor * {
   cursor: none !important;
@@ -142,4 +123,51 @@ h4, h5, h6 {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* Legal pages — Terms, Privacy */
+.legal-prose {
+  font-size: 0.975rem;
+  line-height: 1.7;
+  color: var(--color-ink-700);
+}
+
+.legal-prose p {
+  margin: 0;
+}
+
+.legal-prose ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.legal-prose ul ul {
+  list-style: circle;
+  margin-top: 0.5rem;
+  padding-left: 1.25rem;
+}
+
+.legal-prose strong {
+  color: var(--color-ink-900);
+  font-weight: 600;
+}
+
+.legal-prose .legal-link {
+  color: var(--color-accent-600);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  transition: color 120ms ease;
+}
+
+.legal-prose .legal-link:hover {
+  color: var(--color-accent-700);
+}
+
+.legal-prose table {
+  font-size: 0.9rem;
 }

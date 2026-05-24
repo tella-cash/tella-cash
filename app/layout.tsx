@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Instrument_Serif, JetBrains_Mono } from "next/font/google";
+import { Inter, Instrument_Serif, JetBrains_Mono, Newsreader } from "next/font/google";
 import "@/app/globals.css";
 import { SmoothScroll } from "@/components/interactive/smooth-scroll";
 import { CustomCursor } from "@/components/interactive/custom-cursor";
@@ -37,10 +37,18 @@ const jetbrainsMono = JetBrains_Mono({
   display: "swap",
 });
 
+// Newsreader — closest free match to Suisse Works.
+const newsreader = Newsreader({
+  subsets: ["latin"],
+  style: ["normal", "italic"],
+  variable: "--font-works",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
-  title: "UPay — Money, by message.",
+  title: "Tella — USDC to Naira, by message",
   description:
-    "Send, receive, and track money over WhatsApp. No app to install, no menus to learn.",
+    "Send USDC and receive Naira straight from a WhatsApp chat. No app to install, no menus to learn — just write.",
 };
 
 export default function RootLayout({
@@ -51,7 +59,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${instrumentSerif.variable} ${jetbrainsMono.variable}`}
+      className={`${inter.variable} ${instrumentSerif.variable} ${jetbrainsMono.variable} ${newsreader.variable}`}
     >
       <body className="relative min-h-screen overflow-x-hidden">
         <SmoothScroll>

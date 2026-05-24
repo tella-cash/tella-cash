@@ -38,18 +38,14 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!ctx.user.pin_hash || !ctx.user.pin_salt) {
+  if (!ctx.user.pin_hash) {
     return NextResponse.json(
       { error: "No PIN set" },
       { status: 409 },
     );
   }
 
-  const ok = verifyPin({
-    pin: body.pin,
-    hash: ctx.user.pin_hash,
-    salt: ctx.user.pin_salt,
-  });
+  const ok = await verifyPin(body.pin, ctx.user.pin_hash);
   if (!ok) {
     return NextResponse.json(
       { error: "Incorrect PIN" },

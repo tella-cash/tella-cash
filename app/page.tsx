@@ -20,63 +20,53 @@ export default function HomePage() {
       <main>
         <Hero />
 
-        <FeatureSection
-          id="features"
-          index="01"
-          eyebrow="Send"
-          heading={
-            <>
-              Type the amount.{" "}
-              <span className="italic text-accent-500">Type the name.</span>{" "}
-              That's the whole flow.
-            </>
-          }
-          description="No recipient lookups, no copy-pasted addresses, no IBAN forms. Tell UPay what you want to do in plain English. It confirms before any money moves."
-          visual={<SendIllustration />}
-        />
+        <div
+          className="relative"
+          style={{ ["--feature-stick-top" as string]: "220px" }}
+        >
+          {/* Sticky header — pins below the navbar while the feature cards stack underneath */}
+          <div className="sticky top-[45px] z-10 bg-[#E6EEFF]">
+            <div className="px-[10px] sm:px-[72px] pt-10 pb-[24px]">
+              <h2 className="text-[36px] font-medium text-ink-900">
+                Built for daily use.
+              </h2>
+              <p className="mt-2 text-base text-ink-500">
+                Four small moments that make Tella feel like part of the conversation.
+              </p>
+            </div>
+          </div>
 
-        <FeatureSection
-          index="02"
-          eyebrow="Balance"
-          heading={
-            <>
-              A balance you can{" "}
-              <span className="italic text-accent-500">just ask for.</span>
-            </>
-          }
-          description="Open WhatsApp. Type 'balance.' That's the whole product. No dashboards, no apps to install, no expired sessions."
-          visual={<BalanceIllustration />}
-          reverse
-          toneClassName="bg-surface-100/40"
-        />
+          <FeatureSection
+            id="features"
+            index='1'
+            heading='Send money like a message'
+            description="Just type what you want to do. Tella understands, confirms, and moves your money no forms, no addresses."
+            visual={<SendIllustration />}
+          />
 
-        <FeatureSection
-          index="03"
-          eyebrow="Receive"
-          heading={
-            <>
-              Money lands in your chat,{" "}
-              <span className="italic text-accent-500">not a separate inbox.</span>
-            </>
-          }
-          description="Incoming payments arrive as messages. New balance, sender's name, transaction reference — all there, in the same thread you already check."
-          visual={<ReceiveIllustration />}
-        />
+          <FeatureSection
+            index='2'
+            heading='Your balance, one message away'
+            description="Ask for your balance in WhatsApp and get instant updates no apps, dashboards, or complicated interfaces."
+            visual={<BalanceIllustration />}
+            reverse
+          />
 
-        <FeatureSection
-          index="04"
-          eyebrow="Context"
-          heading={
-            <>
-              It remembers,{" "}
-              <span className="italic text-accent-500">so you don't have to.</span>
-            </>
-          }
-          description="Reference earlier conversations naturally. 'Send him the same as last week' resolves to the right person, the right amount, the right wallet."
-          visual={<ContextIllustration />}
-          reverse
-          toneClassName="bg-surface-100/40"
-        />
+          <FeatureSection
+            index='3'
+            heading='Payments that arrives like messages'
+            description="Receive instant USDC payments directly in WhatsApp with sender details, transaction updates, and balance confirmations in one conversation."
+            visual={<ReceiveIllustration />}
+          />
+
+          <FeatureSection
+            index='4'
+            heading='Talk naturally. Tella understands'
+            description="Send money the way you naturally speak. Tella understands context, remembers past transactions, and confirms before anything moves."
+            visual={<ContextIllustration />}
+            reverse
+          />
+        </div>
 
         <SecuritySection />
         <UseCasesSection />

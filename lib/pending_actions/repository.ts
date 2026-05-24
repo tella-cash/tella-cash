@@ -18,7 +18,7 @@ export async function createPendingSend({
   ).toISOString();
 
   const { data, error } = await supabase
-    .from("upay_pending_action")
+    .from("tella_pending_action")
     .upsert(
       {
         user_id: userId,
@@ -40,7 +40,7 @@ export async function getActivePending(
 ): Promise<PendingAction | null> {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
-    .from("upay_pending_action")
+    .from("tella_pending_action")
     .select("*")
     .eq("user_id", userId)
     .gt("expires_at", new Date().toISOString())
@@ -53,7 +53,7 @@ export async function getActivePending(
 export async function deletePending(actionId: string): Promise<void> {
   const supabase = getSupabaseAdmin();
   const { error } = await supabase
-    .from("upay_pending_action")
+    .from("tella_pending_action")
     .delete()
     .eq("id", actionId);
   if (error) throw new Error(`deletePending failed: ${error.message}`);
