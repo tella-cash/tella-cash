@@ -61,6 +61,12 @@ export default function RootLayout({
       lang="en"
       className={`${inter.variable} ${instrumentSerif.variable} ${jetbrainsMono.variable} ${newsreader.variable}`}
     >
+      <head>
+        <meta
+          name="facebook-domain-verification"
+          content="a29vfcnfljyix4jzf8nj06d2ulnh8m"
+        />
+      </head>
       <body className="relative min-h-screen overflow-x-hidden">
         <SmoothScroll>
           <CustomCursor />
