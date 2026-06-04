@@ -36,7 +36,7 @@ export function Navbar() {
 
   return (
     <motion.header
-      className="fixed inset-x-0 top-0 z-50 backdrop-blur-md px-[10px] sm:px[72px]"
+      className="sticky inset-x-0 top-0 z-50 backdrop-blur-md px-[10px] sm:px[72px]"
       style={{
         backgroundColor: useTransform(
           bgOpacity,
