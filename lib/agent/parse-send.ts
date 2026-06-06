@@ -1,4 +1,5 @@
 import { normalizePhone, isEvmAddress } from "@/lib/utils/phone";
+import { parseAmount } from "@/lib/agent/parse-amount";
 
 export interface ParsedSendIntent {
   amount: string;
@@ -11,17 +12,18 @@ export interface ParsedSendIntent {
 export function parseSendIntent(input: string): ParsedSendIntent | null {
   const trimmed = input.trim();
   if (!/^send\b/i.test(trimmed)) return null;
-  const match = trimmed.match(
-    /^send\s+\$?₦?(\d+(?:\.\d+)?)\s*(?:usdc\s+)?to\s+(.+)$/i,
-  );
+
+  // Split "send <amount> to <recipient>" on the first " to ". The amount
+  // portion is parsed separately so it can be digits, words, or carry a
+  // currency symbol/word; phone numbers and 0x addresses never contain " to ".
+  const match = trimmed.match(/^send\s+(.+?)\s+to\s+(.+)$/i);
   if (!match) return null;
 
-  const [, amountStr, recipientRaw] = match;
-  const amount = amountStr;
-  const recipientTrimmed = recipientRaw.trim();
+  const [, amountRaw, recipientRaw] = match;
+  const amount = parseAmount(amountRaw);
+  if (!amount) return null;
 
-  const amountNum = parseFloat(amount);
-  if (!isFinite(amountNum) || amountNum <= 0) return null;
+  const recipientTrimmed = recipientRaw.trim();
 
   if (isEvmAddress(recipientTrimmed)) {
     return {

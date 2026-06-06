@@ -1,6 +1,10 @@
 import { NextResponse, after } from "next/server";
 import twilio from "twilio";
-import { sendWhatsAppMessage } from "@/lib/twilio/client";
+import {
+  sendWhatsAppMessage,
+  sendWhatsAppButtons,
+  sendWhatsAppList,
+} from "@/lib/twilio/client";
 import { handleIncomingMessage } from "@/lib/agent/handler";
 import { findOrCreateUser } from "@/lib/users/repository";
 import { provisionWalletForUser } from "@/lib/wallet/provision";
@@ -13,6 +17,9 @@ interface TwilioWebhookPayload {
   MessageSid: string;
   NumMedia: string;
   ProfileName?: string;
+  // Present when the user taps a quick-reply button or list row; carries
+  // the button/row title so we can route it like typed text.
+  ButtonText?: string;
 }
 
 export async function POST(request: Request) {
@@ -34,7 +41,9 @@ export async function POST(request: Request) {
 
   const payload = params as unknown as TwilioWebhookPayload;
   const fromNumber = payload.From;
-  const userMessage = payload.Body ?? "";
+  // A tapped button/row arrives as ButtonText; fall back to it when Body
+  // is empty so menu taps route through the same classifier as typed text.
+  const userMessage = payload.Body || payload.ButtonText || "";
 
   console.log("[whatsapp] incoming", {
     sid: payload.MessageSid,
@@ -76,13 +85,19 @@ async function processMessageAsync(
     whatsappNumber: fromNumber,
   });
 
-  const { reply, sideEffect } = await handleIncomingMessage({
+  const { reply, interactive, sideEffect } = await handleIncomingMessage({
     user,
     text: userMessage,
     isNew,
   });
 
-  await sendWhatsAppMessage({ to: fromNumber, body: reply });
+  if (interactive === "buttons") {
+    await sendWhatsAppButtons({ to: fromNumber, body: reply });
+  } else if (interactive === "list") {
+    await sendWhatsAppList({ to: fromNumber, body: reply });
+  } else {
+    await sendWhatsAppMessage({ to: fromNumber, body: reply });
+  }
 
   // Handle post-reply side effects. We send the primary reply first so the
   // user sees acknowledgement immediately, then deliver the wallet address

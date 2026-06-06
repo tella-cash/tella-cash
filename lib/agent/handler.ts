@@ -22,6 +22,12 @@ interface IncomingMessage {
 
 export interface HandlerResult {
   reply: string;
+  /**
+   * When set, the reply is delivered as a WhatsApp interactive message
+   * (the `reply` text becomes the message body). Falls back to plain text
+   * if the matching Content Template isn't provisioned.
+   */
+  interactive?: "buttons" | "list";
   sideEffect?: { kind: "provision_wallet"; userId: string };
 }
 
@@ -65,7 +71,7 @@ export async function handleIncomingMessage(
     return { reply: await handlePendingResponse({ pending, text }) };
   }
 
-  return { reply: await handleOnboardedUser({ user, text }) };
+  return handleOnboardedUser({ user, text });
 }
 
 async function handleNameEntry({
@@ -147,50 +153,53 @@ async function handleOnboardedUser({
 }: {
   user: tellaUser;
   text: string;
-}): Promise<string> {
+}): Promise<HandlerResult> {
   const name = firstName(user);
   const trimmed = text.trim();
 
-  if (!trimmed) return pickReply(REPLIES.empty, { name });
+  if (!trimmed) return { reply: pickReply(REPLIES.empty, { name }) };
 
   // Debug health-check stays deterministic.
-  if (trimmed.toLowerCase() === "ping") return "pong ✓";
+  if (trimmed.toLowerCase() === "ping") return { reply: "pong ✓" };
 
   // A structured send carries real parameters (amount + recipient), so it
   // always wins over keyword classification.
   const intent = parseSendIntent(text);
-  if (intent) return startSendFlow({ user, intent });
+  if (intent) return { reply: await startSendFlow({ user, intent }) };
 
   switch (classifyIntent(text)) {
     case "balance":
-      return getBalanceReply(user);
+      return { reply: await getBalanceReply(user) };
     case "address":
-      return addressReply(user);
+      return { reply: addressReply(user) };
     case "send":
       // Send-ish but not parseable — show them the format.
-      return pickReply(REPLIES.sendHelp, { name });
+      return { reply: pickReply(REPLIES.sendHelp, { name }) };
     case "greeting":
-      return pickReply(REPLIES.greeting, { name });
+      // Quick triage with tappable buttons.
+      return { reply: pickReply(REPLIES.greeting, { name }), interactive: "buttons" };
     case "help":
-      return pickReply(REPLIES.help, { name });
+      // Fuller menu with descriptions.
+      return { reply: pickReply(REPLIES.help, { name }), interactive: "list" };
     case "about":
-      return pickReply(REPLIES.about, { name });
+      return { reply: pickReply(REPLIES.about, { name }) };
     case "how_it_works":
-      return pickReply(REPLIES.howItWorks, { name });
+      return { reply: pickReply(REPLIES.howItWorks, { name }) };
     case "fees":
-      return pickReply(REPLIES.fees, { name });
+      return { reply: pickReply(REPLIES.fees, { name }) };
     case "security":
-      return pickReply(REPLIES.security, { name });
+      return { reply: pickReply(REPLIES.security, { name }) };
     case "thanks":
-      return pickReply(REPLIES.thanks, { name });
+      return { reply: pickReply(REPLIES.thanks, { name }) };
     case "goodbye":
-      return pickReply(REPLIES.goodbye, { name });
+      return { reply: pickReply(REPLIES.goodbye, { name }) };
     case "affirm":
-      return pickReply(REPLIES.affirm, { name });
+      return { reply: pickReply(REPLIES.affirm, { name }) };
     case "cancel":
-      return pickReply(REPLIES.cancelNothing, { name });
+      return { reply: pickReply(REPLIES.cancelNothing, { name }) };
     default:
-      return pickReply(REPLIES.unknown, { name });
+      // Help them recover with the quick menu.
+      return { reply: pickReply(REPLIES.unknown, { name }), interactive: "buttons" };
   }
 }
 
