@@ -1,5 +1,6 @@
 export const SITE = {
   brandName: "tella",
+  legalName: "BELIEF INTEGRATED GLOBAL",
   whatsappLink:
     "https://wa.me/14155238886?text=" + encodeURIComponent("join oil-needs"),
   twitterUrl: "https://x.com/",

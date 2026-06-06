@@ -11,6 +11,9 @@ export function Footer() {
           <p className="max-w-sm text-sm text-surface-50/50">
             Money, by message. Built for the way people already talk.
           </p>
+          <p className="text-sm text-surface-50/50">
+            Tella is a service operated by {SITE.legalName}.
+          </p>
         </div>
 
         <nav aria-label="Footer">
@@ -55,7 +58,9 @@ export function Footer() {
 
       <div className="border-t border-surface-50/10">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-6 text-xs text-surface-50/40">
-          <span>© {new Date().getFullYear()} Tella</span>
+          <span>
+            © {new Date().getFullYear()} {SITE.legalName}. All rights reserved.
+          </span>
           <span className="font-mono">v0.2</span>
         </div>
       </div>

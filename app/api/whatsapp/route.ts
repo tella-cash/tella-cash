@@ -24,18 +24,26 @@ interface TwilioWebhookPayload {
 
 export async function POST(request: Request) {
   const signature = request.headers.get("x-twilio-signature") ?? "";
-  const url = process.env.TWILIO_WEBHOOK_URL!;
   const rawBody = await request.text();
   const params = Object.fromEntries(new URLSearchParams(rawBody));
 
-  const isValid = twilio.validateRequest(
-    process.env.TWILIO_AUTH_TOKEN!,
-    signature,
-    url,
-    params,
+  // Twilio signs the exact URL it posts to, so we validate against the live
+  // request URL (host + proto from headers) and the configured
+  // TWILIO_WEBHOOK_URL, passing if either matches. Deriving from the live
+  // request makes this resilient to domain changes (e.g. moving to a custom
+  // domain) that would otherwise silently break a stale env URL and 403
+  // every inbound message.
+  const authToken = process.env.TWILIO_AUTH_TOKEN ?? "";
+  const candidateUrls = buildCandidateUrls(request);
+  const isValid = candidateUrls.some((candidate) =>
+    twilio.validateRequest(authToken, signature, candidate, params),
   );
 
   if (!isValid && process.env.NODE_ENV === "production") {
+    console.warn("[whatsapp] signature validation failed", {
+      candidateUrls,
+      hasSignature: Boolean(signature),
+    });
     return NextResponse.json({ error: "Invalid signature" }, { status: 403 });
   }
 
@@ -59,7 +67,9 @@ export async function POST(request: Request) {
     try {
       await processMessageAsync(fromNumber, userMessage, payload);
     } catch (err) {
-      console.error("[whatsapp] processing error", err);
+      // Last-resort net: processMessageAsync handles its own errors, so
+      // reaching here means something unexpected slipped through.
+      logProcessingError("unexpected", err);
     }
   });
 
@@ -69,8 +79,17 @@ export async function POST(request: Request) {
   );
 }
 
+const FALLBACK_MESSAGE =
+  "⚠️ I'm having a bit of trouble on my end right now. Please try again in a moment — your funds are safe.";
+
 /**
  * Run the agent and send the reply back through Twilio's REST API.
+ *
+ * Errors are handled per stage so an outage (e.g. the database being
+ * unreachable) results in a friendly "try again" message instead of silent
+ * failure — and so the user never sees a dead bot with no response. Twilio
+ * is independent of the database, so the fallback can still be delivered
+ * even when the data layer is down.
  *
  * If the handler flags a wallet-provisioning side effect, fire it after the
  * primary reply is sent and follow up with a separate message containing
@@ -81,58 +100,119 @@ async function processMessageAsync(
   userMessage: string,
   payload: TwilioWebhookPayload,
 ) {
-  const { user, isNew } = await findOrCreateUser({
-    whatsappNumber: fromNumber,
-  });
-
-  const { reply, interactive, sideEffect } = await handleIncomingMessage({
-    user,
-    text: userMessage,
-    isNew,
-  });
-
-  if (interactive === "buttons") {
-    await sendWhatsAppButtons({ to: fromNumber, body: reply });
-  } else if (interactive === "list") {
-    await sendWhatsAppList({ to: fromNumber, body: reply });
-  } else {
-    await sendWhatsAppMessage({ to: fromNumber, body: reply });
+  let lookup: Awaited<ReturnType<typeof findOrCreateUser>>;
+  try {
+    lookup = await findOrCreateUser({ whatsappNumber: fromNumber });
+  } catch (err) {
+    logProcessingError("findOrCreateUser", err);
+    await sendFallbackMessage(fromNumber);
+    return;
   }
 
-  // Handle post-reply side effects. We send the primary reply first so the
-  // user sees acknowledgement immediately, then deliver the wallet address
-  // (or a failure note) as a follow-up message.
-  if (sideEffect?.kind === "provision_wallet") {
-    const success = await provisionWalletForUser(sideEffect.userId);
+  let result: Awaited<ReturnType<typeof handleIncomingMessage>>;
+  try {
+    result = await handleIncomingMessage({
+      user: lookup.user,
+      text: userMessage,
+      isNew: lookup.isNew,
+    });
+  } catch (err) {
+    logProcessingError("handleIncomingMessage", err);
+    await sendFallbackMessage(fromNumber);
+    return;
+  }
 
-    if (success) {
-      // Re-fetch the user so we have the freshly-saved wallet_address.
-      const supabase = getSupabaseAdmin();
-      const { data } = await supabase
-        .from("tella_users")
-        .select("wallet_address")
-        .eq("id", sideEffect.userId)
-        .single();
+  const { reply, interactive, sideEffect } = result;
 
-      const address = (data as { wallet_address: string } | null)
-        ?.wallet_address;
-      if (address) {
-        await sendWhatsAppMessage({
-          to: fromNumber,
-          body: [
-            "✅ Your wallet is ready!",
-            "",
-            `Address: \`${address}\``,
-            "",
-            "Send USDC to this address on Arc to fund your account. Try \"what's my balance?\" once you have funds.",
-          ].join("\n"),
-        });
-      }
+  try {
+    if (interactive === "buttons") {
+      await sendWhatsAppButtons({ to: fromNumber, body: reply });
+    } else if (interactive === "list") {
+      await sendWhatsAppList({ to: fromNumber, body: reply });
     } else {
-      await sendWhatsAppMessage({
-        to: fromNumber,
-        body: "I couldn't set up your wallet just now — I'll retry automatically. You can keep using tella in the meantime.",
-      });
+      await sendWhatsAppMessage({ to: fromNumber, body: reply });
+    }
+  } catch (err) {
+    // Twilio send failed — we can't reach the user at all, so just log.
+    logProcessingError("sendReply", err);
+    return;
+  }
+
+  // Post-reply side effects are best-effort: the user already has their
+  // reply, so a failure here is logged but not surfaced again.
+  if (sideEffect?.kind === "provision_wallet") {
+    try {
+      await handleProvisionSideEffect(fromNumber, sideEffect.userId);
+    } catch (err) {
+      logProcessingError("provisionWallet", err);
     }
   }
+}
+
+/**
+ * Provision the user's wallet, then follow up with the address (or a retry
+ * note). We send the primary reply first so the user sees acknowledgement
+ * immediately, then deliver the address as a separate message.
+ */
+async function handleProvisionSideEffect(fromNumber: string, userId: string) {
+  const success = await provisionWalletForUser(userId);
+
+  if (!success) {
+    await sendWhatsAppMessage({
+      to: fromNumber,
+      body: "I couldn't set up your wallet just now — I'll retry automatically. You can keep using tella in the meantime.",
+    });
+    return;
+  }
+
+  // Re-fetch the user so we have the freshly-saved wallet_address.
+  const supabase = getSupabaseAdmin();
+  const { data } = await supabase
+    .from("tella_users")
+    .select("wallet_address")
+    .eq("id", userId)
+    .single();
+
+  const address = (data as { wallet_address: string } | null)?.wallet_address;
+  if (address) {
+    await sendWhatsAppMessage({
+      to: fromNumber,
+      body: [
+        "✅ Your wallet is ready!",
+        "",
+        `Address: \`${address}\``,
+        "",
+        "Send USDC to this address on Arc to fund your account. Try \"what's my balance?\" once you have funds.",
+      ].join("\n"),
+    });
+  }
+}
+
+/** Best-effort "something's wrong" reply. Independent of the data layer. */
+async function sendFallbackMessage(to: string) {
+  try {
+    await sendWhatsAppMessage({ to, body: FALLBACK_MESSAGE });
+  } catch (err) {
+    // Twilio itself is unreachable — nothing left to do but log.
+    logProcessingError("sendFallback", err);
+  }
+}
+
+/**
+ * Log a processing error with the underlying cause unwrapped. A bare
+ * "fetch failed" hides the real reason (DNS, connection refused, timeout);
+ * the `cause` chain surfaces it so outages are diagnosable from logs.
+ */
+function logProcessingError(stage: string, err: unknown) {
+  const e = err as { message?: string; cause?: unknown; stack?: string };
+  const cause = e?.cause;
+  const causeMessage =
+    cause instanceof Error ? cause.message : cause ? String(cause) : undefined;
+
+  console.error("[whatsapp] processing error", {
+    stage,
+    message: e?.message ?? String(err),
+    cause: causeMessage,
+    stack: e?.stack,
+  });
 }

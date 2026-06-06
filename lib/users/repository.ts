@@ -15,7 +15,9 @@ export async function findOrCreateUser({
     .maybeSingle();
 
   if (findError) {
-    throw new Error(`findOrCreateUser lookup failed: ${findError.message}`);
+    throw new Error(`findOrCreateUser lookup failed: ${findError.message}`, {
+      cause: findError,
+    });
   }
 
   if (existing) {
@@ -32,7 +34,9 @@ export async function findOrCreateUser({
     .single();
 
   if (createError) {
-    throw new Error(`findOrCreateUser insert failed: ${createError.message}`);
+    throw new Error(`findOrCreateUser insert failed: ${createError.message}`, {
+      cause: createError,
+    });
   }
 
   return { user: created as tellaUser, isNew: true };
