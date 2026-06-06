@@ -17,7 +17,7 @@ export function ClosingCta() {
   const bubbleY = useTransform(scrollYProgress, [0, 1], [60, -60]);
 
   return (
-    <section ref={ref} className="py-[60px] px-[72px]" style={{ backgroundImage: "url('/closing-cta-bg.png')", backgroundSize: "cover", backgroundPosition: "center" }}>
+    <section ref={ref} className="px-3 py-[60px] md:px-[72px]" style={{ backgroundImage: "url('/closing-cta-bg.png')", backgroundSize: "cover", backgroundPosition: "center" }}>
       <div className="px-[20px] py-[60px] rounded-[32px] bg-white">
         <motion.div style={{ scale }}>
           <h2 className="text-[48px] font-semibold text-center text-ink-900">

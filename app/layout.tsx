@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Inter, Instrument_Serif, JetBrains_Mono, Newsreader } from "next/font/google";
 import "@/app/globals.css";
 import { SmoothScroll } from "@/components/interactive/smooth-scroll";
-import { CustomCursor } from "@/components/interactive/custom-cursor";
 
 /**
  * Inter — body text. Variable weight so we don't need to load multiple
@@ -69,7 +68,6 @@ export default function RootLayout({
       </head>
       <body className="relative min-h-screen overflow-x-hidden">
         <SmoothScroll>
-          <CustomCursor />
           {children}
         </SmoothScroll>
       </body>

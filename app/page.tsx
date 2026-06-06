@@ -20,18 +20,15 @@ export default function HomePage() {
       <main>
         <Hero />
 
-        <div
-          className="relative"
-          style={{ ["--feature-stick-top" as string]: "220px" }}
-        >
+        <div className="relative bg-[#E6EEFF] md:min-h-screen">
           {/* Sticky header — pins below the navbar while the feature cards stack underneath */}
-          <div className="sticky top-[45px] z-10 bg-[#E6EEFF]">
-            <div className="px-[10px] sm:px-[72px] pt-10 pb-[24px]">
-              <h2 className="text-[36px] font-medium text-ink-900">
-                Built for daily use.
+          <div className="relative z-10 bg-[#E6EEFF] md:sticky md:top-[72px]">
+            <div className="mx-auto max-w-[1440px] px-3 pb-6 pt-5 md:px-[72px] md:pt-10">
+              <h2 className="max-w-[636px] text-2xl font-medium leading-8 text-black md:text-[36px] md:leading-[44px] md:tracking-[-0.02em]">
+                How it works
               </h2>
-              <p className="mt-2 text-base text-ink-500">
-                Four small moments that make Tella feel like part of the conversation.
+              <p className="mt-2 max-w-[636px] text-sm leading-5 text-black md:text-base md:leading-6">
+                From message to money in seconds. Send, receive, and track stablecoins directly from WhatsApp using simple natural language.
               </p>
             </div>
           </div>
