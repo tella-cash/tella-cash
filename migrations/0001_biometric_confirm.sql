@@ -7,12 +7,17 @@ alter table public.tella_users
   add column if not exists pin_hash text,
   add column if not exists pin_salt text;
 
--- 2. WebAuthn credentials. One row per (user, device).
+-- 2. WebAuthn credentials. One row per passkey. With synced passkeys
+--    (iCloud Keychain / Google Password Manager) a single credential
+--    follows the user across their devices.
+--    public_key is the COSE key stored as base64url text — simpler to
+--    round-trip through PostgREST than bytea, and matches what the
+--    @simplewebauthn helpers serialize to/from.
 create table if not exists public.tella_webauthn_credentials (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.tella_users(id) on delete cascade,
   credential_id text not null unique,
-  public_key bytea not null,
+  public_key text not null,
   counter bigint not null default 0,
   transports text[],
   device_label text,
