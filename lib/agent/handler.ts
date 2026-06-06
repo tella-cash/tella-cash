@@ -157,7 +157,8 @@ async function handleOnboardedUser({
   const name = firstName(user);
   const trimmed = text.trim();
 
-  if (!trimmed) return { reply: pickReply(REPLIES.empty, { name }) };
+  if (!trimmed)
+    return { reply: pickReply(REPLIES.empty, { name }), interactive: "buttons" };
 
   // Debug health-check stays deterministic.
   if (trimmed.toLowerCase() === "ping") return { reply: "pong ✓" };
@@ -169,12 +170,12 @@ async function handleOnboardedUser({
 
   switch (classifyIntent(text)) {
     case "balance":
-      return { reply: await getBalanceReply(user) };
+      return { reply: await getBalanceReply(user), interactive: "buttons" };
     case "address":
-      return { reply: addressReply(user) };
+      return { reply: addressReply(user), interactive: "buttons" };
     case "send":
-      // Send-ish but not parseable — show them the format.
-      return { reply: pickReply(REPLIES.sendHelp, { name }) };
+      // Send-ish but not parseable — show them the format plus quick taps.
+      return { reply: pickReply(REPLIES.sendHelp, { name }), interactive: "buttons" };
     case "greeting":
       // Quick triage with tappable buttons.
       return { reply: pickReply(REPLIES.greeting, { name }), interactive: "buttons" };
@@ -182,21 +183,22 @@ async function handleOnboardedUser({
       // Fuller menu with descriptions.
       return { reply: pickReply(REPLIES.help, { name }), interactive: "list" };
     case "about":
-      return { reply: pickReply(REPLIES.about, { name }) };
+      return { reply: pickReply(REPLIES.about, { name }), interactive: "buttons" };
     case "how_it_works":
-      return { reply: pickReply(REPLIES.howItWorks, { name }) };
+      return { reply: pickReply(REPLIES.howItWorks, { name }), interactive: "buttons" };
     case "fees":
-      return { reply: pickReply(REPLIES.fees, { name }) };
+      return { reply: pickReply(REPLIES.fees, { name }), interactive: "buttons" };
     case "security":
-      return { reply: pickReply(REPLIES.security, { name }) };
+      return { reply: pickReply(REPLIES.security, { name }), interactive: "buttons" };
     case "thanks":
-      return { reply: pickReply(REPLIES.thanks, { name }) };
+      return { reply: pickReply(REPLIES.thanks, { name }), interactive: "buttons" };
     case "goodbye":
+      // No menu on a sign-off — let the conversation rest.
       return { reply: pickReply(REPLIES.goodbye, { name }) };
     case "affirm":
-      return { reply: pickReply(REPLIES.affirm, { name }) };
+      return { reply: pickReply(REPLIES.affirm, { name }), interactive: "buttons" };
     case "cancel":
-      return { reply: pickReply(REPLIES.cancelNothing, { name }) };
+      return { reply: pickReply(REPLIES.cancelNothing, { name }), interactive: "buttons" };
     default:
       // Help them recover with the quick menu.
       return { reply: pickReply(REPLIES.unknown, { name }), interactive: "buttons" };

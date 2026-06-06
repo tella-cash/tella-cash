@@ -209,14 +209,16 @@ async function handleProvisionSideEffect(fromNumber: string, userId: string) {
 
   const address = (data as { wallet_address: string } | null)?.wallet_address;
   if (address) {
-    await sendWhatsAppMessage({
+    // First message a new user gets after onboarding — surface the quick-reply
+    // menu so they have a one-tap next step instead of a dead end.
+    await sendWhatsAppButtons({
       to: fromNumber,
       body: [
         "✅ Your wallet is ready!",
         "",
         `Address: \`${address}\``,
         "",
-        "Send USDC to this address on Arc to fund your account. Try \"what's my balance?\" once you have funds.",
+        "Send USDC to this address on Arc to fund your account, then tap below to get started.",
       ].join("\n"),
     });
   }
