@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "tsx lib/agent/intents.test.ts"
   },
   "dependencies": {
     "@circle-fin/developer-controlled-wallets": "^10.3.1",

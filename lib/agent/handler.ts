@@ -10,6 +10,8 @@ import {
 } from "@/lib/pending_actions/repository";
 import { getWalletBalances } from "@/lib/wallet/circle";
 import { parseSendIntent, parseConfirmation } from "@/lib/agent/parse-send";
+import { classifyIntent } from "@/lib/agent/intents";
+import { REPLIES, pickReply } from "@/lib/agent/replies";
 import { buildConfirmUrl } from "@/lib/confirm/url";
 
 interface IncomingMessage {
@@ -135,6 +137,10 @@ function buildPendingPrompt(pending: PendingAction): string {
   ].join("\n");
 }
 
+function firstName(user: tellaUser): string {
+  return user.profile_name?.split(" ")[0] ?? "there";
+}
+
 async function handleOnboardedUser({
   user,
   text,
@@ -142,53 +148,61 @@ async function handleOnboardedUser({
   user: tellaUser;
   text: string;
 }): Promise<string> {
-  const trimmed = text.trim().toLowerCase();
-  const name = user.profile_name?.split(" ")[0] ?? "there";
+  const name = firstName(user);
+  const trimmed = text.trim();
 
-  if (!trimmed) {
-    return `Hi ${name}! Send me a message like "send 5 usdc to +234..." to get started.`;
-  }
+  if (!trimmed) return pickReply(REPLIES.empty, { name });
 
-  if (trimmed === "ping") return "pong ✓";
+  // Debug health-check stays deterministic.
+  if (trimmed.toLowerCase() === "ping") return "pong ✓";
 
+  // A structured send carries real parameters (amount + recipient), so it
+  // always wins over keyword classification.
   const intent = parseSendIntent(text);
-  if (intent) {
-    return startSendFlow({ user, intent });
-  }
+  if (intent) return startSendFlow({ user, intent });
 
-  if (trimmed.includes("address") || trimmed.includes("my wallet")) {
-    if (user.wallet_status === "active" && user.wallet_address) {
-      return [
-        "Your tella wallet address:",
-        "",
-        `\`${user.wallet_address}\``,
-        "",
-        "You can receive USDC at this address on Arc.",
-      ].join("\n");
-    }
-    if (user.wallet_status === "pending") {
-      return "Your wallet is still being set up — give it a moment and ask again.";
-    }
-    return "Your wallet isn't ready yet. I'll have another go at setting it up shortly.";
+  switch (classifyIntent(text)) {
+    case "balance":
+      return getBalanceReply(user);
+    case "address":
+      return addressReply(user);
+    case "send":
+      // Send-ish but not parseable — show them the format.
+      return pickReply(REPLIES.sendHelp, { name });
+    case "greeting":
+      return pickReply(REPLIES.greeting, { name });
+    case "help":
+      return pickReply(REPLIES.help, { name });
+    case "about":
+      return pickReply(REPLIES.about, { name });
+    case "how_it_works":
+      return pickReply(REPLIES.howItWorks, { name });
+    case "fees":
+      return pickReply(REPLIES.fees, { name });
+    case "security":
+      return pickReply(REPLIES.security, { name });
+    case "thanks":
+      return pickReply(REPLIES.thanks, { name });
+    case "goodbye":
+      return pickReply(REPLIES.goodbye, { name });
+    case "affirm":
+      return pickReply(REPLIES.affirm, { name });
+    case "cancel":
+      return pickReply(REPLIES.cancelNothing, { name });
+    default:
+      return pickReply(REPLIES.unknown, { name });
   }
+}
 
-  if (trimmed.includes("balance")) {
-    return getBalanceReply(user);
+function addressReply(user: tellaUser): string {
+  const name = firstName(user);
+  if (user.wallet_status === "active" && user.wallet_address) {
+    return pickReply(REPLIES.address, { name, address: user.wallet_address });
   }
-
-  if (trimmed.includes("help") || trimmed === "hi" || trimmed === "hello") {
-    return [
-      `Hey ${name} 👋`,
-      "",
-      "Try one of these:",
-      '• "what\'s my address?"',
-      '• "what\'s my balance?"',
-      '• "send 5 usdc to +234..."',
-      '• "send 5 usdc to 0x..."',
-    ].join("\n");
+  if (user.wallet_status === "pending") {
+    return pickReply(REPLIES.walletPending, { name });
   }
-
-  return `I got your message: "${text}". (LLM not wired up yet.)`;
+  return pickReply(REPLIES.walletNotReady, { name });
 }
 
 async function startSendFlow({
@@ -259,8 +273,10 @@ async function startSendFlow({
 }
 
 async function getBalanceReply(user: tellaUser): Promise<string> {
+  const name = firstName(user);
+
   if (user.wallet_status !== "active" || !user.circle_wallet_id) {
-    return "Your wallet isn't ready yet. Once it's set up I'll be able to show your balance.";
+    return pickReply(REPLIES.walletNotReady, { name });
   }
 
   let balances;
@@ -268,19 +284,17 @@ async function getBalanceReply(user: tellaUser): Promise<string> {
     balances = await getWalletBalances(user.circle_wallet_id);
   } catch (err) {
     console.error("[balance] fetch failed", { userId: user.id, err });
-    return "I couldn't fetch your balance right now. Try again in a moment.";
+    return pickReply(REPLIES.balanceError, { name });
   }
 
   const nonZero = balances.filter((b) => parseFloat(b.amount) > 0);
   if (nonZero.length === 0) {
-    return [
-      "Your wallet is empty 👀",
-      "",
-      "Send USDC to this address to fund up:",
-      `\`${user.wallet_address}\``,
-    ].join("\n");
+    return pickReply(REPLIES.balanceEmpty, {
+      name,
+      address: user.wallet_address ?? "",
+    });
   }
 
   const lines = nonZero.map((b) => `• ${b.amount} ${b.symbol}`);
-  return ["Here's what you've got:", "", ...lines].join("\n");
+  return [pickReply(REPLIES.balanceIntro, { name }), "", ...lines].join("\n");
 }
