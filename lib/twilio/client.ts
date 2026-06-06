@@ -1,4 +1,5 @@
 import twilio from "twilio";
+import { buildConfirmUrl } from "@/lib/confirm/url";
 
 let _client: ReturnType<typeof twilio> | null = null;
 
@@ -99,4 +100,44 @@ export function sendWhatsAppList({
     process.env.TWILIO_LIST_CONTENT_SID,
     "list",
   );
+}
+
+/**
+ * Send a confirm-send message with a tap-to-open "Confirm send" URL button
+ * (WhatsApp call-to-action), so the user lands on the confirm page in one
+ * tap instead of fishing a raw link out of the text.
+ *
+ * The CTA template bakes in the base URL and takes the token as a variable:
+ *   body  → {{1}}
+ *   url   → <APP_BASE_URL>/confirm/{{2}}
+ *
+ * If TWILIO_CONFIRM_CONTENT_SID isn't provisioned yet, fall back to a plain
+ * text message with the full link appended — same destination, less polish.
+ */
+export async function sendWhatsAppConfirm({
+  to,
+  body,
+  token,
+}: SendWhatsAppMessageArgs & { token: string }): Promise<string> {
+  const from = process.env.TWILIO_WHATSAPP_FROM;
+  if (!from) {
+    throw new Error("Missing TWILIO_WHATSAPP_FROM environment variable");
+  }
+
+  const contentSid = process.env.TWILIO_CONFIRM_CONTENT_SID;
+  if (!contentSid) {
+    return sendWhatsAppMessage({
+      to,
+      body: `${body}\n\n${buildConfirmUrl(token)}`,
+    });
+  }
+
+  const message = await getClient().messages.create({
+    from,
+    to,
+    contentSid,
+    contentVariables: JSON.stringify({ "1": body, "2": token }),
+  });
+  console.log("[twilio] sent confirm cta", { sid: message.sid, to });
+  return message.sid;
 }

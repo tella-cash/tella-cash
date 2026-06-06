@@ -12,7 +12,6 @@ import { getWalletBalances } from "@/lib/wallet/circle";
 import { parseSendIntent, parseConfirmation } from "@/lib/agent/parse-send";
 import { classifyIntent } from "@/lib/agent/intents";
 import { REPLIES, pickReply } from "@/lib/agent/replies";
-import { buildConfirmUrl } from "@/lib/confirm/url";
 
 interface IncomingMessage {
   user: tellaUser;
@@ -28,6 +27,13 @@ export interface HandlerResult {
    * if the matching Content Template isn't provisioned.
    */
   interactive?: "buttons" | "list";
+  /**
+   * When set, the reply is a confirm-send prompt and is delivered with a
+   * tap-to-open "Confirm send" URL button (the token points at the confirm
+   * page). Falls back to plain text + link if the CTA template isn't
+   * provisioned.
+   */
+  confirm?: { token: string };
   sideEffect?: { kind: "provision_wallet"; userId: string };
 }
 
@@ -68,7 +74,7 @@ export async function handleIncomingMessage(
 
   const pending = await getActivePending(user.id);
   if (pending) {
-    return { reply: await handlePendingResponse({ pending, text }) };
+    return handlePendingResponse({ pending, text });
   }
 
   return handleOnboardedUser({ user, text });
@@ -116,28 +122,35 @@ async function handlePendingResponse({
 }: {
   pending: PendingAction;
   text: string;
-}): Promise<string> {
+}): Promise<HandlerResult> {
   const decision = parseConfirmation(text);
 
   if (decision === "no") {
     await deletePending(pending.id);
-    return "Cancelled. Let me know if you want to try again.";
+    return {
+      reply: "Cancelled. Let me know if you want to try again.",
+      interactive: "buttons",
+    };
   }
 
   // "yes" no longer confirms in chat — sends require biometric/PIN in
-  // the browser. Re-send the link for any unrecognized reply (and for
-  // "yes" too) so the user always has a fresh tap-to-confirm.
-  return buildPendingPrompt(pending);
+  // the browser. Re-send the confirm button for any unrecognized reply
+  // (and for "yes" too) so the user always has a fresh tap-to-confirm.
+  return confirmResult(pending);
 }
 
-function buildPendingPrompt(pending: PendingAction): string {
+/** A confirm-send prompt + the CTA token that opens the confirm page. */
+function confirmResult(pending: PendingAction): HandlerResult {
+  return { reply: buildConfirmBody(pending), confirm: { token: pending.id } };
+}
+
+function buildConfirmBody(pending: PendingAction): string {
   const p = pending.payload;
   const recipientLabel = p.recipientName ?? p.recipientAddress;
   return [
     `Confirm send: *${p.amount} ${p.token}* to ${recipientLabel}`,
     "",
-    `Tap to authorize with Face ID / Touch ID:`,
-    buildConfirmUrl(pending.id),
+    "Tap *Confirm send* below to authorize with Face ID, your fingerprint, or your PIN.",
     "",
     "Reply *no* to cancel.",
   ].join("\n");
@@ -166,7 +179,7 @@ async function handleOnboardedUser({
   // A structured send carries real parameters (amount + recipient), so it
   // always wins over keyword classification.
   const intent = parseSendIntent(text);
-  if (intent) return { reply: await startSendFlow({ user, intent }) };
+  if (intent) return startSendFlow({ user, intent });
 
   switch (classifyIntent(text)) {
     case "balance":
@@ -222,11 +235,18 @@ async function startSendFlow({
 }: {
   user: tellaUser;
   intent: ReturnType<typeof parseSendIntent>;
-}): Promise<string> {
-  if (!intent) return "I couldn't understand that send instruction. Try \"send 5 usdc to +234...\".";
+}): Promise<HandlerResult> {
+  if (!intent)
+    return {
+      reply:
+        'I couldn\'t understand that send instruction. Try "send 5 usdc to +234...".',
+    };
 
   if (user.wallet_status !== "active" || !user.circle_wallet_id) {
-    return "Your wallet isn't ready yet. Once it's set up you'll be able to send.";
+    return {
+      reply:
+        "Your wallet isn't ready yet. Once it's set up you'll be able to send.",
+    };
   }
 
   let recipientAddress: string;
@@ -238,30 +258,31 @@ async function startSendFlow({
       user.wallet_address &&
       intent.recipient.address.toLowerCase() === user.wallet_address.toLowerCase()
     ) {
-      return "That's your own address — can't send to yourself.";
+      return { reply: "That's your own address — can't send to yourself." };
     }
     recipientAddress = intent.recipient.address;
   } else {
     const recipient = await findUserByWhatsApp(intent.recipient.whatsappNumber);
 
     if (!recipient) {
-      return [
-        "That number isn't on tella yet 👀",
-        "",
-        "I can only send to tella users by phone number for now. If you have their wallet address, you can send to that directly:",
-        '• "send 5 usdc to 0x..."',
-      ].join("\n");
+      return {
+        reply: [
+          "That number isn't on tella yet 👀",
+          "",
+          "I can only send to tella users by phone number for now. If you have their wallet address, you can send to that directly:",
+          '• "send 5 usdc to 0x..."',
+        ].join("\n"),
+      };
     }
 
     if (recipient.id === user.id) {
-      return "That's your own number — can't send to yourself.";
+      return { reply: "That's your own number — can't send to yourself." };
     }
 
-    if (
-      recipient.wallet_status !== "active" ||
-      !recipient.wallet_address
-    ) {
-      return `${recipient.profile_name ?? "That user"} hasn't finished setting up their wallet yet. Try again in a moment.`;
+    if (recipient.wallet_status !== "active" || !recipient.wallet_address) {
+      return {
+        reply: `${recipient.profile_name ?? "That user"} hasn't finished setting up their wallet yet. Try again in a moment.`,
+      };
     }
 
     recipientAddress = recipient.wallet_address;
@@ -280,7 +301,7 @@ async function startSendFlow({
     },
   });
 
-  return buildPendingPrompt(pending);
+  return confirmResult(pending);
 }
 
 async function getBalanceReply(user: tellaUser): Promise<string> {

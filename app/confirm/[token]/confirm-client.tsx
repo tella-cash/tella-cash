@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   startRegistration,
   startAuthentication,
@@ -9,6 +9,19 @@ import {
   type PublicKeyCredentialCreationOptionsJSON,
   type PublicKeyCredentialRequestOptionsJSON,
 } from "@simplewebauthn/browser";
+
+// Capability is static for the page's lifetime, so there's nothing to
+// subscribe to. useSyncExternalStore reads it post-hydration without a
+// setState-in-effect, and the server snapshot (assume supported) keeps the
+// first client render in sync to avoid a hydration mismatch.
+const NOOP_SUBSCRIBE = () => () => {};
+function useWebAuthnReady(): boolean {
+  return useSyncExternalStore(
+    NOOP_SUBSCRIBE,
+    () => browserSupportsWebAuthn(),
+    () => true,
+  );
+}
 
 interface SendSummary {
   amount: string;
@@ -29,32 +42,37 @@ type Stage =
  * The interactive surface of the confirmation page. Biometric (WebAuthn /
  * synced passkeys) is the primary path, with a PIN fallback for devices or
  * browsers that can't do WebAuthn. Every path ends in the same place: the
- * verify route executes the send and DMs the receipt.
+ * verify route executes the send, DMs the receipt, and we bounce the user
+ * straight back to WhatsApp.
  */
 export function ConfirmClient({
   token,
   summary,
   hasPin,
   hasPasskey,
+  returnUrl,
 }: {
   token: string;
   summary: SendSummary;
   hasPin: boolean;
   hasPasskey: boolean;
+  returnUrl: string;
 }) {
   const [stage, setStage] = useState<Stage>({ kind: "choose" });
-  const [webauthnReady, setWebauthnReady] = useState(true);
+  const webauthnReady = useWebAuthnReady();
+  // Synchronous re-entry guard so a fast double-tap can't kick off two
+  // ceremonies (and two send attempts) before the UI swaps to "working".
+  const busyRef = useRef(false);
 
-  // navigator isn't available during SSR, so feature-detect after mount.
-  // If the browser can't do WebAuthn, skip the chooser and go to PIN.
-  useEffect(() => {
-    if (!browserSupportsWebAuthn()) {
-      setWebauthnReady(false);
-      setStage({ kind: "pin", mode: hasPin ? "verify" : "setup" });
-    }
-  }, [hasPin]);
+  // If the browser can't do WebAuthn, the chooser collapses straight to the
+  // PIN form rather than offering a biometric button that would only fail.
+  const effectiveStage: Stage =
+    stage.kind === "choose" && !webauthnReady
+      ? { kind: "pin", mode: hasPin ? "verify" : "setup" }
+      : stage;
 
   function goHome() {
+    busyRef.current = false;
     setStage(
       webauthnReady
         ? { kind: "choose" }
@@ -63,6 +81,8 @@ export function ConfirmClient({
   }
 
   async function runBiometric() {
+    if (busyRef.current) return;
+    busyRef.current = true;
     try {
       if (hasPasskey) {
         setStage({ kind: "working", label: "Waiting for confirmation…" });
@@ -95,6 +115,7 @@ export function ConfirmClient({
         setStage({ kind: "success", reference: reference(data) });
       }
     } catch (err) {
+      busyRef.current = false;
       setStage({ kind: "error", message: humanizeWebAuthnError(err) });
     }
   }
@@ -121,15 +142,23 @@ export function ConfirmClient({
       </section>
 
       <section className="mt-8 flex-1">
-        {stage.kind === "working" && (
-          <p className="text-sm text-ink-500">{stage.label}</p>
+        {effectiveStage.kind === "working" && (
+          <div className="flex items-center gap-3 text-sm text-ink-500">
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-ink-300 border-t-ink-900" />
+            {effectiveStage.label}
+          </div>
         )}
 
-        {stage.kind === "success" && <SuccessView reference={stage.reference} />}
+        {effectiveStage.kind === "success" && (
+          <SuccessView
+            reference={effectiveStage.reference}
+            returnUrl={returnUrl}
+          />
+        )}
 
-        {stage.kind === "error" && (
+        {effectiveStage.kind === "error" && (
           <div>
-            <p className="text-sm text-red-600">{stage.message}</p>
+            <p className="text-sm text-red-600">{effectiveStage.message}</p>
             <button
               onClick={goHome}
               className="mt-4 text-sm underline underline-offset-4"
@@ -139,7 +168,7 @@ export function ConfirmClient({
           </div>
         )}
 
-        {stage.kind === "choose" && (
+        {effectiveStage.kind === "choose" && (
           <ChooseView
             hasPasskey={hasPasskey}
             onBiometric={runBiometric}
@@ -149,12 +178,14 @@ export function ConfirmClient({
           />
         )}
 
-        {stage.kind === "pin" && (
+        {effectiveStage.kind === "pin" && (
           <PinForm
             token={token}
-            mode={stage.mode}
+            mode={effectiveStage.mode}
             onStageChange={setStage}
-            onUseBiometric={webauthnReady ? () => setStage({ kind: "choose" }) : undefined}
+            onUseBiometric={
+              webauthnReady ? () => setStage({ kind: "choose" }) : undefined
+            }
           />
         )}
       </section>
@@ -171,6 +202,10 @@ function ChooseView({
   onBiometric: () => void;
   onUsePin: () => void;
 }) {
+  // Disable on first click so the button can't be tapped twice before the
+  // view transitions to the working state.
+  const [clicked, setClicked] = useState(false);
+
   return (
     <div className="space-y-4">
       <p className="text-sm text-ink-500">
@@ -179,14 +214,19 @@ function ChooseView({
           : "Confirm with Face ID or your fingerprint. You'll set this up once — it then works across your devices."}
       </p>
       <button
-        onClick={onBiometric}
-        className="w-full rounded-full bg-ink-900 px-6 py-4 text-base font-medium text-surface-50 transition-transform active:scale-[0.98]"
+        onClick={() => {
+          setClicked(true);
+          onBiometric();
+        }}
+        disabled={clicked}
+        className="w-full rounded-full bg-ink-900 px-6 py-4 text-base font-medium text-surface-50 transition-transform active:scale-[0.98] disabled:opacity-60"
       >
         Confirm with Face ID / fingerprint
       </button>
       <button
         onClick={onUsePin}
-        className="w-full text-center text-sm text-ink-500 underline underline-offset-4"
+        disabled={clicked}
+        className="w-full text-center text-sm text-ink-500 underline underline-offset-4 disabled:opacity-60"
       >
         Use a PIN instead
       </button>
@@ -207,10 +247,13 @@ function PinForm({
 }) {
   const [pin, setPin] = useState("");
   const [pin2, setPin2] = useState("");
+  const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
   const isSetup = mode === "setup";
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (busyRef.current) return;
     if (!/^\d{4,8}$/.test(pin)) {
       onStageChange({ kind: "error", message: "PIN must be 4–8 digits." });
       return;
@@ -219,6 +262,8 @@ function PinForm({
       onStageChange({ kind: "error", message: "PINs don't match." });
       return;
     }
+    busyRef.current = true;
+    setBusy(true);
     try {
       if (isSetup) {
         onStageChange({ kind: "working", label: "Saving PIN…" });
@@ -242,6 +287,8 @@ function PinForm({
         reference: data.transactionId.slice(0, 8),
       });
     } catch (err) {
+      busyRef.current = false;
+      setBusy(false);
       onStageChange({
         kind: "error",
         message: err instanceof Error ? err.message : "Something went wrong.",
@@ -264,7 +311,8 @@ function PinForm({
         value={pin}
         onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
         maxLength={8}
-        className="w-full rounded-xl border border-ink-200 bg-surface-50 px-4 py-3 text-lg tracking-widest"
+        disabled={busy}
+        className="w-full rounded-xl border border-ink-200 bg-surface-50 px-4 py-3 text-lg tracking-widest disabled:opacity-60"
         placeholder="••••"
         autoFocus
       />
@@ -276,17 +324,19 @@ function PinForm({
           value={pin2}
           onChange={(e) => setPin2(e.target.value.replace(/\D/g, ""))}
           maxLength={8}
-          className="w-full rounded-xl border border-ink-200 bg-surface-50 px-4 py-3 text-lg tracking-widest"
+          disabled={busy}
+          className="w-full rounded-xl border border-ink-200 bg-surface-50 px-4 py-3 text-lg tracking-widest disabled:opacity-60"
           placeholder="Re-enter PIN"
         />
       )}
       <button
         type="submit"
-        className="w-full rounded-full bg-ink-900 px-6 py-4 text-base font-medium text-surface-50 transition-transform active:scale-[0.98]"
+        disabled={busy}
+        className="w-full rounded-full bg-ink-900 px-6 py-4 text-base font-medium text-surface-50 transition-transform active:scale-[0.98] disabled:opacity-60"
       >
-        {isSetup ? "Save PIN & send" : "Confirm send"}
+        {busy ? "Working…" : isSetup ? "Save PIN & send" : "Confirm send"}
       </button>
-      {onUseBiometric && (
+      {onUseBiometric && !busy && (
         <button
           type="button"
           onClick={onUseBiometric}
@@ -299,7 +349,23 @@ function PinForm({
   );
 }
 
-function SuccessView({ reference }: { reference: string }) {
+function SuccessView({
+  reference,
+  returnUrl,
+}: {
+  reference: string;
+  returnUrl: string;
+}) {
+  // Bounce back to WhatsApp automatically once the send is confirmed; the
+  // button below is the manual fallback for browsers that block the
+  // programmatic navigation (or desktop where the deep link is slower).
+  useEffect(() => {
+    const t = setTimeout(() => {
+      window.location.href = returnUrl;
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [returnUrl]);
+
   return (
     <div className="text-center">
       <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-accent-50 text-2xl">
@@ -307,12 +373,12 @@ function SuccessView({ reference }: { reference: string }) {
       </div>
       <p className="mt-6 font-display text-2xl text-ink-900">Sent</p>
       <p className="mt-2 text-sm text-ink-500">
-        Reference{" "}
-        <code className="font-mono text-ink-900">{reference}</code>
+        Reference <code className="font-mono text-ink-900">{reference}</code>
       </p>
+      <p className="mt-6 text-sm text-ink-500">Taking you back to WhatsApp…</p>
       <Link
-        href="whatsapp://send"
-        className="mt-8 inline-block rounded-full bg-ink-900 px-6 py-3 text-sm font-medium text-surface-50"
+        href={returnUrl}
+        className="mt-4 inline-block rounded-full bg-ink-900 px-6 py-3 text-sm font-medium text-surface-50"
       >
         Back to WhatsApp ↗
       </Link>

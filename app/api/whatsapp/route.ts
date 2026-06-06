@@ -4,6 +4,7 @@ import {
   sendWhatsAppMessage,
   sendWhatsAppButtons,
   sendWhatsAppList,
+  sendWhatsAppConfirm,
 } from "@/lib/twilio/client";
 import { handleIncomingMessage } from "@/lib/agent/handler";
 import { findOrCreateUser } from "@/lib/users/repository";
@@ -156,10 +157,16 @@ async function processMessageAsync(
     return;
   }
 
-  const { reply, interactive, sideEffect } = result;
+  const { reply, interactive, confirm, sideEffect } = result;
 
   try {
-    if (interactive === "buttons") {
+    if (confirm) {
+      await sendWhatsAppConfirm({
+        to: fromNumber,
+        body: reply,
+        token: confirm.token,
+      });
+    } else if (interactive === "buttons") {
       await sendWhatsAppButtons({ to: fromNumber, body: reply });
     } else if (interactive === "list") {
       await sendWhatsAppList({ to: fromNumber, body: reply });

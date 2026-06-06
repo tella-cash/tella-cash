@@ -89,9 +89,40 @@ async function main() {
   });
   console.log("  created:", list.sid);
 
+  // Confirm-send call-to-action. A single "Confirm send" URL button that
+  // opens the confirm page in one tap. WhatsApp URL buttons allow a dynamic
+  // suffix on a static base, so the base is baked in here from APP_BASE_URL
+  // and the pending-action token is passed as {{2}} at send time.
+  const base = process.env.APP_BASE_URL;
+  if (!base) {
+    throw new Error(
+      "Missing APP_BASE_URL — set it (e.g. https://www.tella.cash) before creating the confirm CTA template.",
+    );
+  }
+  console.log("\nCreating confirm-send CTA template…");
+  const confirm = await createContent({
+    friendly_name: "tella_confirm_cta",
+    language: "en",
+    variables: { "1": "Confirm your send", "2": "TOKEN" },
+    types: {
+      "twilio/call-to-action": {
+        body: "{{1}}",
+        actions: [
+          {
+            type: "URL",
+            title: "Confirm send",
+            url: `${base.replace(/\/$/, "")}/confirm/{{2}}`,
+          },
+        ],
+      },
+    },
+  });
+  console.log("  created:", confirm.sid);
+
   console.log("\nDone! Add these to your .env (and Vercel env vars):\n");
   console.log(`TWILIO_MENU_CONTENT_SID=${buttons.sid}`);
   console.log(`TWILIO_LIST_CONTENT_SID=${list.sid}`);
+  console.log(`TWILIO_CONFIRM_CONTENT_SID=${confirm.sid}`);
 }
 
 main().catch((err) => {

@@ -45,8 +45,19 @@ export default async function ConfirmPage({
       }}
       hasPin={hasPin}
       hasPasskey={hasPasskey}
+      returnUrl={whatsappReturnUrl()}
     />
   );
+}
+
+/**
+ * Deep link back to the bot's WhatsApp chat, used to auto-return the user
+ * after a successful confirm. Derived from the Twilio sender number; falls
+ * back to a bare wa.me which still reopens WhatsApp.
+ */
+function whatsappReturnUrl(): string {
+  const digits = (process.env.TWILIO_WHATSAPP_FROM ?? "").replace(/\D/g, "");
+  return digits ? `https://wa.me/${digits}` : "https://wa.me/";
 }
 
 function formatAddress(address: string): string {
