@@ -60,9 +60,5 @@ export function formatSendResultForChat(result: ExecuteSendResult): string {
     }
     return "I couldn't complete that transfer. Your balance is unchanged. Want to try again?";
   }
-  return [
-    `✓ Sent ${result.amount} ${result.token} to ${result.recipientLabel}.`,
-    "",
-    `Reference: \`${result.transactionId.slice(0, 8)}\``,
-  ].join("\n");
+  return `✓ Sent ${result.amount} ${result.token} to ${result.recipientLabel}.`;
 }

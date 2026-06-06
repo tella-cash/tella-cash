@@ -80,14 +80,18 @@ export async function GET() {
 /**
  * Dispatch a verified Circle notification to the right handler.
  *
- * Today only inbound transactions are subscribed; switching on
- * notificationType keeps room to add outbound and failed handlers later
+ * Inbound notifies the recipient of received funds; outbound follows up a
+ * completed send with its on-chain explorer link (the txHash isn't known
+ * at submit time, so the immediate "✓ Sent" receipt can't include it).
+ * Switching on notificationType keeps room to add failed handlers later
  * without restructuring the route.
  */
 async function processNotification(payload: CircleNotification) {
   switch (payload.notificationType) {
     case "transactions.inbound":
       return handleInboundTransaction(payload.notification);
+    case "transactions.outbound":
+      return handleOutboundTransaction(payload.notification);
     default:
       console.log("[circle-webhook] unhandled type", payload.notificationType);
   }
@@ -126,7 +130,7 @@ async function handleInboundTransaction(
 
   const amount = notification.amounts?.[0] ?? "0";
   const token = notification.tokenSymbol ?? "USDC";
-  const sourceLabel = formatSourceAddress(notification.sourceAddress);
+  const sourceLabel = shortenAddress(notification.sourceAddress);
 
   const message = [
     `💰 Received ${amount} ${token}`,
@@ -149,13 +153,89 @@ async function handleInboundTransaction(
 }
 
 /**
- * Format a 0x sender address into something readable in chat.
+ * Handle a completed outbound USDC transaction.
+ *
+ *   1. Skip until COMPLETE — earlier states have no txHash yet, and we
+ *      only want to surface a link to a transaction that actually landed.
+ *   2. Bail if there's still no txHash (shouldn't happen on COMPLETE, but
+ *      a link to nothing is worse than no link).
+ *   3. Find the sender by walletId (outbound walletId is the source).
+ *   4. Follow up the immediate "✓ Sent" receipt with the explorer link.
+ *
+ * This is the second of two messages a sender sees: the PIN-verify route
+ * sends the instant receipt (with a Circle reference), this adds the live
+ * on-chain link once the chain confirms a few seconds later.
+ */
+async function handleOutboundTransaction(
+  notification: CircleNotification["notification"],
+) {
+  if (notification.state !== "COMPLETE") {
+    console.log("[circle-webhook] outbound not yet complete, skipping", {
+      state: notification.state,
+      walletId: notification.walletId,
+    });
+    return;
+  }
+
+  if (!notification.txHash) {
+    console.warn("[circle-webhook] outbound complete but no txHash", {
+      walletId: notification.walletId,
+    });
+    return;
+  }
+
+  const user = await findUserByCircleWalletId(notification.walletId);
+  if (!user) {
+    console.warn("[circle-webhook] no user for walletId", {
+      walletId: notification.walletId,
+    });
+    return;
+  }
+
+  const amount = notification.amounts?.[0];
+  const token = notification.tokenSymbol ?? "USDC";
+  const destLabel = shortenAddress(notification.destinationAddress);
+
+  const message = [
+    "🔗 Confirmed on-chain",
+    "",
+    amount
+      ? `Sent ${amount} ${token} to ${destLabel}`
+      : `Sent to ${destLabel}`,
+    "",
+    buildExplorerTxUrl(notification.txHash),
+  ].join("\n");
+
+  await sendWhatsAppMessage({
+    to: user.whatsapp_number,
+    body: message,
+  });
+
+  console.log("[circle-webhook] notified user of outbound", {
+    userId: user.id,
+    txHash: notification.txHash,
+  });
+}
+
+/**
+ * Build an Arc block-explorer link for a transaction hash. Defaults to the
+ * testnet explorer; override with ARC_EXPLORER_TX_URL (no trailing slash)
+ * when pointing at mainnet.
+ */
+function buildExplorerTxUrl(txHash: string): string {
+  const base =
+    process.env.ARC_EXPLORER_TX_URL ?? "https://testnet.arcscan.app/tx";
+  return `${base.replace(/\/$/, "")}/${txHash}`;
+}
+
+/**
+ * Format a 0x address into something readable in chat.
  * "0x1234567890abcdef..." → "0x1234…cdef"
  *
- * For now the source is always an address — eventually we could resolve
- * it back to a tella user name if the sender is also on tella.
+ * Used for both inbound senders and outbound recipients — eventually we
+ * could resolve an address back to a tella user name if they're on tella.
  */
-function formatSourceAddress(address: string | undefined): string {
+function shortenAddress(address: string | undefined): string {
   if (!address) return "an external wallet";
   if (address.length < 12) return address;
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
