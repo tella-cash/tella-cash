@@ -79,6 +79,40 @@ export async function POST(request: Request) {
   );
 }
 
+/**
+ * Build the list of URLs to validate the Twilio signature against.
+ *
+ * Twilio signs the exact public URL it POSTs to, but behind Vercel's proxy
+ * `request.url` can carry an internal host that won't match that signature
+ * and 403s every inbound message. We reconstruct the public URL from the
+ * forwarding headers and also include the configured TWILIO_WEBHOOK_URL, so
+ * validation passes if either one matches.
+ */
+function buildCandidateUrls(request: Request): string[] {
+  const urls = new Set<string>();
+  const { pathname, search } = new URL(request.url);
+
+  // The raw request URL as Next.js sees it.
+  urls.add(request.url);
+
+  // The public-facing URL reconstructed from proxy headers — this is what
+  // Twilio actually signed.
+  const proto = request.headers.get("x-forwarded-proto") ?? "https";
+  const host =
+    request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+  if (host) {
+    urls.add(`${proto}://${host}${pathname}${search}`);
+  }
+
+  // The configured webhook URL — stable even if the live host changes.
+  const configured = process.env.TWILIO_WEBHOOK_URL;
+  if (configured) {
+    urls.add(configured);
+  }
+
+  return [...urls];
+}
+
 const FALLBACK_MESSAGE =
   "⚠️ I'm having a bit of trouble on my end right now. Please try again in a moment — your funds are safe.";
 
