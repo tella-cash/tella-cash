@@ -66,19 +66,6 @@ h4, h5, h6 {
   font-weight: 500;
 }
 
-.has-custom-cursor,
-.has-custom-cursor * {
-  cursor: none !important;
-}
-
-@media (pointer: coarse) {
-  /* Touch devices — never hide the system cursor / interactions. */
-  .has-custom-cursor,
-  .has-custom-cursor * {
-    cursor: auto !important;
-  }
-}
-
 /* Selection styling — picks up the accent color */
 ::selection {
   background: var(--color-accent-500);

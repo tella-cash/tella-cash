@@ -13,6 +13,8 @@ interface RevealProps {
   className?: string;
   /** How far through the element's height into the viewport before triggering. */
   amount?: number;
+  /** Render statically without motion. */
+  disabled?: boolean;
 }
 
 /**
@@ -35,6 +37,7 @@ export function Reveal({
   from = "bottom",
   className,
   amount = 0.2,
+  disabled = false,
 }: RevealProps) {
   const ref = useRef<HTMLDivElement | null>(null);
   const isInView = useInView(ref, { once: true, amount });
@@ -56,6 +59,10 @@ export function Reveal({
       },
     },
   };
+
+  if (disabled) {
+    return <div className={className}>{children}</div>;
+  }
 
   return (
     <motion.div
