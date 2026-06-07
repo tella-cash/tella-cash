@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   startRegistration,
   startAuthentication,
@@ -9,19 +9,6 @@ import {
   type PublicKeyCredentialCreationOptionsJSON,
   type PublicKeyCredentialRequestOptionsJSON,
 } from "@simplewebauthn/browser";
-
-// Capability is static for the page's lifetime, so there's nothing to
-// subscribe to. useSyncExternalStore reads it post-hydration without a
-// setState-in-effect, and the server snapshot (assume supported) keeps the
-// first client render in sync to avoid a hydration mismatch.
-const NOOP_SUBSCRIBE = () => () => {};
-function useWebAuthnReady(): boolean {
-  return useSyncExternalStore(
-    NOOP_SUBSCRIBE,
-    () => browserSupportsWebAuthn(),
-    () => true,
-  );
-}
 
 interface SendSummary {
   amount: string;
@@ -35,6 +22,21 @@ type Stage =
   | { kind: "working"; label: string }
   | { kind: "success"; reference: string }
   | { kind: "error"; message: string };
+
+const EASE = [0.16, 1, 0.3, 1] as const;
+
+// Capability is static for the page's lifetime, so there's nothing to
+// subscribe to. useSyncExternalStore reads it post-hydration without a
+// setState-in-effect, and the server snapshot (assume supported) keeps the
+// first client render in sync to avoid a hydration mismatch.
+const NOOP_SUBSCRIBE = () => () => {};
+function useWebAuthnReady(): boolean {
+  return useSyncExternalStore(
+    NOOP_SUBSCRIBE,
+    () => browserSupportsWebAuthn(),
+    () => true,
+  );
+}
 
 /**
  * ConfirmClient
@@ -121,75 +123,92 @@ export function ConfirmClient({
   }
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-md flex-col px-6 py-12">
-      <header className="mt-4">
-        <p className="text-xs uppercase tracking-[0.18em] text-ink-400">
-          tella
-        </p>
-        <h1 className="mt-2 font-display text-3xl leading-tight text-ink-900">
+    <motion.div
+      initial={{ opacity: 0, y: 24, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.6, ease: EASE }}
+      className="overflow-hidden rounded-[28px] border border-ink-200/70 bg-surface-0 shadow-card"
+    >
+      {/* Amount + recipient */}
+      <div className="px-7 pt-8 pb-7">
+        <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.2em] text-ink-400">
+          <ShieldIcon className="h-3.5 w-3.5 text-accent-500" />
           Confirm send
-        </h1>
-      </header>
+        </div>
 
-      <section className="mt-8 rounded-2xl border border-ink-200 bg-surface-50/60 p-6">
-        <p className="text-xs uppercase tracking-wider text-ink-400">Sending</p>
-        <p className="mt-2 font-display text-4xl leading-none text-ink-900">
-          {summary.amount} {summary.token}
-        </p>
-        <p className="mt-4 text-sm text-ink-500">
-          to <span className="text-ink-900">{summary.recipientLabel}</span>
-        </p>
-      </section>
+        <div className="mt-5 flex items-end gap-2">
+          <span className="font-display text-[64px] leading-[0.85] text-ink-900">
+            {summary.amount}
+          </span>
+          <span className="mb-1.5 font-works text-xl text-ink-400">
+            {summary.token}
+          </span>
+        </div>
 
-      <section className="mt-8 flex-1">
-        {effectiveStage.kind === "working" && (
-          <div className="flex items-center gap-3 text-sm text-ink-500">
-            <span className="h-4 w-4 animate-spin rounded-full border-2 border-ink-300 border-t-ink-900" />
-            {effectiveStage.label}
+        <div className="mt-6 flex items-center gap-3 rounded-2xl bg-surface-100/70 px-4 py-3">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-accent-500 text-sm font-semibold text-white">
+            <Avatar label={summary.recipientLabel} />
           </div>
-        )}
-
-        {effectiveStage.kind === "success" && (
-          <SuccessView
-            reference={effectiveStage.reference}
-            returnUrl={returnUrl}
-          />
-        )}
-
-        {effectiveStage.kind === "error" && (
-          <div>
-            <p className="text-sm text-red-600">{effectiveStage.message}</p>
-            <button
-              onClick={goHome}
-              className="mt-4 text-sm underline underline-offset-4"
-            >
-              Try again
-            </button>
+          <div className="min-w-0">
+            <p className="text-[11px] uppercase tracking-wider text-ink-400">
+              To
+            </p>
+            <p className="truncate font-medium text-ink-900">
+              {summary.recipientLabel}
+            </p>
           </div>
-        )}
+        </div>
+      </div>
 
-        {effectiveStage.kind === "choose" && (
-          <ChooseView
-            hasPasskey={hasPasskey}
-            onBiometric={runBiometric}
-            onUsePin={() =>
-              setStage({ kind: "pin", mode: hasPin ? "verify" : "setup" })
-            }
-          />
-        )}
+      {/* Action area */}
+      <div className="border-t border-ink-200/70 bg-surface-50/60 px-7 py-7">
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={effectiveStage.kind}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.22, ease: EASE }}
+          >
+            {effectiveStage.kind === "working" && (
+              <WorkingView label={effectiveStage.label} />
+            )}
 
-        {effectiveStage.kind === "pin" && (
-          <PinForm
-            token={token}
-            mode={effectiveStage.mode}
-            onStageChange={setStage}
-            onUseBiometric={
-              webauthnReady ? () => setStage({ kind: "choose" }) : undefined
-            }
-          />
-        )}
-      </section>
-    </main>
+            {effectiveStage.kind === "success" && (
+              <SuccessView
+                reference={effectiveStage.reference}
+                returnUrl={returnUrl}
+              />
+            )}
+
+            {effectiveStage.kind === "error" && (
+              <ErrorView message={effectiveStage.message} onRetry={goHome} />
+            )}
+
+            {effectiveStage.kind === "choose" && (
+              <ChooseView
+                hasPasskey={hasPasskey}
+                onBiometric={runBiometric}
+                onUsePin={() =>
+                  setStage({ kind: "pin", mode: hasPin ? "verify" : "setup" })
+                }
+              />
+            )}
+
+            {effectiveStage.kind === "pin" && (
+              <PinForm
+                token={token}
+                mode={effectiveStage.mode}
+                onStageChange={setStage}
+                onUseBiometric={
+                  webauthnReady ? () => setStage({ kind: "choose" }) : undefined
+                }
+              />
+            )}
+          </motion.div>
+        </AnimatePresence>
+      </div>
+    </motion.div>
   );
 }
 
@@ -207,29 +226,34 @@ function ChooseView({
   const [clicked, setClicked] = useState(false);
 
   return (
-    <div className="space-y-4">
-      <p className="text-sm text-ink-500">
+    <div className="space-y-3">
+      <p className="text-sm leading-relaxed text-ink-500">
         {hasPasskey
-          ? "Confirm this send with Face ID, your fingerprint, or your device passkey."
-          : "Confirm with Face ID or your fingerprint. You'll set this up once — it then works across your devices."}
+          ? "Authorize this send with Face ID, your fingerprint, or your device passkey."
+          : "Authorize with Face ID or your fingerprint. Set it up once — it then works across your devices."}
       </p>
+
       <button
         onClick={() => {
           setClicked(true);
           onBiometric();
         }}
         disabled={clicked}
-        className="w-full rounded-full bg-ink-900 px-6 py-4 text-base font-medium text-surface-50 transition-transform active:scale-[0.98] disabled:opacity-60"
+        className="group flex w-full items-center justify-center gap-2.5 rounded-2xl bg-accent-500 px-6 py-4 text-base font-medium text-white shadow-accent transition-all hover:bg-accent-600 active:scale-[0.98] disabled:opacity-60"
       >
-        Confirm with Face ID / fingerprint
+        <FingerprintIcon className="h-5 w-5" />
+        {hasPasskey ? "Confirm with biometrics" : "Set up & confirm"}
       </button>
+
       <button
         onClick={onUsePin}
         disabled={clicked}
-        className="w-full text-center text-sm text-ink-500 underline underline-offset-4 disabled:opacity-60"
+        className="w-full rounded-2xl px-6 py-3 text-sm font-medium text-ink-500 transition-colors hover:text-ink-900 disabled:opacity-60"
       >
         Use a PIN instead
       </button>
+
+      <SecurityNote />
     </div>
   );
 }
@@ -297,11 +321,11 @@ function PinForm({
   }
 
   return (
-    <form onSubmit={submit} className="space-y-4">
-      <p className="text-sm text-ink-500">
+    <form onSubmit={submit} className="space-y-3">
+      <p className="text-sm leading-relaxed text-ink-500">
         {isSetup
-          ? "Set a 4–8 digit PIN. You'll use this to confirm sends going forward."
-          : "Enter your PIN to confirm."}
+          ? "Set a 4–8 digit PIN. You'll use it to confirm sends going forward."
+          : "Enter your PIN to authorize this send."}
       </p>
       <input
         type="password"
@@ -312,7 +336,7 @@ function PinForm({
         onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
         maxLength={8}
         disabled={busy}
-        className="w-full rounded-xl border border-ink-200 bg-surface-50 px-4 py-3 text-lg tracking-widest disabled:opacity-60"
+        className="w-full rounded-2xl border border-ink-200 bg-surface-0 px-4 py-3.5 text-center text-2xl tracking-[0.3em] text-ink-900 outline-none transition focus:border-accent-500 focus:ring-4 focus:ring-accent-100 disabled:opacity-60"
         placeholder="••••"
         autoFocus
       />
@@ -325,14 +349,14 @@ function PinForm({
           onChange={(e) => setPin2(e.target.value.replace(/\D/g, ""))}
           maxLength={8}
           disabled={busy}
-          className="w-full rounded-xl border border-ink-200 bg-surface-50 px-4 py-3 text-lg tracking-widest disabled:opacity-60"
-          placeholder="Re-enter PIN"
+          className="w-full rounded-2xl border border-ink-200 bg-surface-0 px-4 py-3.5 text-center text-2xl tracking-[0.3em] text-ink-900 outline-none transition focus:border-accent-500 focus:ring-4 focus:ring-accent-100 disabled:opacity-60"
+          placeholder="Re-enter"
         />
       )}
       <button
         type="submit"
         disabled={busy}
-        className="w-full rounded-full bg-ink-900 px-6 py-4 text-base font-medium text-surface-50 transition-transform active:scale-[0.98] disabled:opacity-60"
+        className="w-full rounded-2xl bg-accent-500 px-6 py-4 text-base font-medium text-white shadow-accent transition-all hover:bg-accent-600 active:scale-[0.98] disabled:opacity-60"
       >
         {busy ? "Working…" : isSetup ? "Save PIN & send" : "Confirm send"}
       </button>
@@ -340,12 +364,23 @@ function PinForm({
         <button
           type="button"
           onClick={onUseBiometric}
-          className="w-full text-center text-sm text-ink-500 underline underline-offset-4"
+          className="flex w-full items-center justify-center gap-2 rounded-2xl px-6 py-3 text-sm font-medium text-ink-500 transition-colors hover:text-ink-900"
         >
+          <FingerprintIcon className="h-4 w-4" />
           Use Face ID / fingerprint instead
         </button>
       )}
+      <SecurityNote />
     </form>
+  );
+}
+
+function WorkingView({ label }: { label: string }) {
+  return (
+    <div className="flex flex-col items-center gap-4 py-4 text-center">
+      <Spinner />
+      <p className="text-sm text-ink-500">{label}</p>
+    </div>
   );
 }
 
@@ -360,34 +395,181 @@ function SuccessView({
   // button below is the manual fallback for browsers that block the
   // programmatic navigation (or desktop where the deep link is slower).
   useEffect(() => {
-    const t = setTimeout(() => {
+    const t = window.setTimeout(() => {
       window.location.href = returnUrl;
-    }, 1500);
-    return () => clearTimeout(t);
+    }, 1600);
+    return () => window.clearTimeout(t);
   }, [returnUrl]);
 
   return (
-    <div className="text-center">
-      <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-accent-50 text-2xl">
-        ✓
-      </div>
-      <p className="mt-6 font-display text-2xl text-ink-900">Sent</p>
-      <p className="mt-2 text-sm text-ink-500">
-        Reference <code className="font-mono text-ink-900">{reference}</code>
-      </p>
-      <p className="mt-6 text-sm text-ink-500">Taking you back to WhatsApp…</p>
-      <Link
-        href={returnUrl}
-        className="mt-4 inline-block rounded-full bg-ink-900 px-6 py-3 text-sm font-medium text-surface-50"
+    <div className="py-2 text-center">
+      <motion.div
+        initial={{ scale: 0, rotate: -25 }}
+        animate={{ scale: 1, rotate: 0 }}
+        transition={{ type: "spring", stiffness: 260, damping: 18 }}
+        className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-accent-500 text-white shadow-accent"
       >
-        Back to WhatsApp ↗
-      </Link>
+        <CheckIcon className="h-7 w-7" />
+      </motion.div>
+      <p className="mt-6 font-display text-3xl text-ink-900">Sent</p>
+      <p className="mt-1 text-sm text-ink-500">
+        Reference{" "}
+        <code className="font-mono text-ink-700">{reference}</code>
+      </p>
+      <div className="mt-6 flex items-center justify-center gap-2 text-xs text-ink-400">
+        <Spinner small />
+        Taking you back to WhatsApp…
+      </div>
+      <a
+        href={returnUrl}
+        className="mt-5 inline-flex items-center justify-center gap-2 rounded-2xl bg-ink-900 px-6 py-3 text-sm font-medium text-surface-50 transition-transform active:scale-[0.98]"
+      >
+        Back to WhatsApp
+        <ArrowIcon className="h-4 w-4" />
+      </a>
       <p className="mt-4 text-xs text-ink-400">
-        Receipt has been sent to your chat. You can close this tab.
+        Your receipt is in the chat. You can close this tab.
       </p>
     </div>
   );
 }
+
+function ErrorView({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="py-2 text-center">
+      <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-red-50 text-xl text-red-500">
+        !
+      </div>
+      <p className="mx-auto mt-4 max-w-xs text-sm leading-relaxed text-ink-700">
+        {message}
+      </p>
+      <button
+        onClick={onRetry}
+        className="mt-6 w-full rounded-2xl border border-ink-200 px-6 py-3.5 text-sm font-medium text-ink-900 transition-colors hover:bg-surface-100 active:scale-[0.98]"
+      >
+        Try again
+      </button>
+    </div>
+  );
+}
+
+function SecurityNote() {
+  return (
+    <p className="flex items-center justify-center gap-1.5 pt-1 text-center text-xs text-ink-400">
+      <LockIcon className="h-3 w-3" />
+      Encrypted · tella never sees your biometrics
+    </p>
+  );
+}
+
+/* ---------- small presentational helpers ---------- */
+
+function Avatar({ label }: { label: string }) {
+  const isAddress = label.startsWith("0x") || label.includes("…");
+  if (isAddress) return <WalletIcon className="h-4 w-4" />;
+  const ch = label.trim().charAt(0).toUpperCase();
+  return <span>{ch || "·"}</span>;
+}
+
+function Spinner({ small }: { small?: boolean }) {
+  return (
+    <span
+      className={
+        small
+          ? "h-3.5 w-3.5 animate-spin rounded-full border-2 border-ink-300 border-t-accent-500"
+          : "h-8 w-8 animate-spin rounded-full border-[3px] border-ink-200 border-t-accent-500"
+      }
+    />
+  );
+}
+
+/* ---------- icons (currentColor for theming) ---------- */
+
+function FingerprintIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M12 10a2 2 0 0 1 2 2c0 3-.4 5-1 6.5" />
+      <path d="M8.5 8.5A5 5 0 0 1 17 12c0 2.5-.3 4.5-.8 6" />
+      <path d="M5.5 11a6.5 6.5 0 0 1 13 .5c0 2-.2 3.7-.6 5.2" />
+      <path d="M9 12a3 3 0 0 1 6 0c0 3.5-.5 6-1.2 8" />
+    </svg>
+  );
+}
+
+function ShieldIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M12 2 4 5v6c0 5 3.4 8.5 8 11 4.6-2.5 8-6 8-11V5l-8-3Zm-1 13-3-3 1.4-1.4L11 12.2l4.6-4.6L17 9l-6 6Z" />
+    </svg>
+  );
+}
+
+function LockIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M17 8h-1V6.5a4 4 0 0 0-8 0V8H7a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2Zm-7-1.5a2 2 0 0 1 4 0V8h-4V6.5Z" />
+    </svg>
+  );
+}
+
+function CheckIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="m5 13 4 4L19 7" />
+    </svg>
+  );
+}
+
+function ArrowIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M5 12h14m0 0-6-6m6 6-6 6" />
+    </svg>
+  );
+}
+
+function WalletIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M3 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2H3Zm0 2h16a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9Zm13 4a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z" />
+    </svg>
+  );
+}
+
+/* ---------- network helpers ---------- */
 
 async function postJson<T = Record<string, unknown>>(
   url: string,

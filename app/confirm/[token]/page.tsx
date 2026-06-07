@@ -1,6 +1,7 @@
 import { loadConfirmContext } from "@/lib/confirm/context";
 import { userHasCredential } from "@/lib/webauthn/repository";
 import { ConfirmClient } from "./confirm-client";
+import { ConfirmShell } from "./confirm-shell";
 
 export const dynamic = "force-dynamic";
 
@@ -20,13 +21,20 @@ export default async function ConfirmPage({
 
   if (!ctx) {
     return (
-      <main className="mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center px-6 py-16 text-center">
-        <h1 className="font-display text-3xl text-ink-900">Link expired</h1>
-        <p className="mt-3 text-ink-500">
-          This confirmation link is no longer valid. Head back to WhatsApp and
-          try the send again.
-        </p>
-      </main>
+      <ConfirmShell>
+        <div className="rounded-[28px] border border-ink-200/70 bg-surface-0 p-8 text-center shadow-card">
+          <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-surface-100 text-xl text-ink-400">
+            ⏱
+          </div>
+          <h1 className="mt-5 font-display text-3xl text-ink-900">
+            Link expired
+          </h1>
+          <p className="mt-3 text-sm leading-relaxed text-ink-500">
+            This confirmation link is no longer valid. Head back to WhatsApp and
+            start the send again.
+          </p>
+        </div>
+      </ConfirmShell>
     );
   }
 
@@ -34,19 +42,21 @@ export default async function ConfirmPage({
   const hasPasskey = await userHasCredential(ctx.user.id);
 
   return (
-    <ConfirmClient
-      token={token}
-      summary={{
-        amount: ctx.pending.payload.amount,
-        token: ctx.pending.payload.token,
-        recipientLabel:
-          ctx.pending.payload.recipientName ??
-          formatAddress(ctx.pending.payload.recipientAddress),
-      }}
-      hasPin={hasPin}
-      hasPasskey={hasPasskey}
-      returnUrl={whatsappReturnUrl()}
-    />
+    <ConfirmShell>
+      <ConfirmClient
+        token={token}
+        summary={{
+          amount: ctx.pending.payload.amount,
+          token: ctx.pending.payload.token,
+          recipientLabel:
+            ctx.pending.payload.recipientName ??
+            formatAddress(ctx.pending.payload.recipientAddress),
+        }}
+        hasPin={hasPin}
+        hasPasskey={hasPasskey}
+        returnUrl={whatsappReturnUrl()}
+      />
+    </ConfirmShell>
   );
 }
 
