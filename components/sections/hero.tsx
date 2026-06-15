@@ -52,7 +52,7 @@ export function Hero() {
           initial="hidden"
           animate="visible"
           className="lg:col-span-7 lg:w-[720px]"
-        >
+        > 
           <MaskReveal
             as="h1"
             trigger="mount"
