@@ -9,43 +9,43 @@ export const FAQS: FaqItem[] = [
     id: "what-is-tella",
     question: "What exactly is tella?",
     answer:
-      "tella is a messaging-based payment interface that lives inside WhatsApp. You hold and send USDC right from a chat, and when you want to spend locally, you cash out to your own Nigerian bank account. WhatsApp is just the interface — tella's platform does the work and settles on Arc. No separate app, no dashboard, just send a message and confirm.",
+      "tella is a messaging-based payment interface that lives inside WhatsApp. You hold, send, and receive USDC — a dollar-pegged stablecoin — right from a chat. No separate app, no dashboard, no learning curve. Just send a message and confirm.",
   },
   {
     id: "what-is-usdc",
     question: "What is USDC?",
     answer:
-      "USDC is a dollar-pegged stablecoin — one USDC is always worth one US dollar. If you earn, receive, or hold USDC and want its value in your Nigerian bank account for everyday spending, tella makes it as simple as sending a WhatsApp message.",
+      "USDC is a stablecoin pegged to the US dollar — one USDC is always worth one dollar. tella lets you hold, send, and receive it as easily as sending a WhatsApp message.",
   },
   {
     id: "how-it-works",
-    question: "How does cashing out work?",
+    question: "How does it work?",
     answer:
-      "Tell tella how much you'd like to cash out. You see a clear rate upfront, you confirm, and the value lands in your registered Nigerian bank account — usually within seconds. WhatsApp carries the conversation; tella's platform does the work and settles on Arc.",
+      "Tell tella what you want to do in plain language. You see a clear summary before anything happens, you confirm, and tella's platform settles the transaction on Arc — usually within seconds. WhatsApp carries the conversation; the platform does the work behind the scenes.",
   },
   {
-    id: "rates",
-    question: "What rate do I get?",
+    id: "fees",
+    question: "Are there any fees?",
     answer:
-      "tella shows you a clear rate before you confirm — no hidden fees, no markups buried in a surprise number. The rate shown when you confirm is the rate you get. You can also ask tella \"what's the rate?\" any time to check before you commit.",
+      "tella shows any applicable fee before you confirm — no hidden charges, no surprises. The amount you see when you confirm is the amount that applies. You can ask tella about fees any time before you commit.",
   },
   {
     id: "settlement",
-    question: "How fast does a payout arrive?",
+    question: "How fast is it?",
     answer:
-      "Usually within seconds. tella settles transactions on Arc — the stablecoin network built by Circle for near-instant finality — and the credit reaches your bank right away. Most cash-outs land before you can put your phone down.",
+      "Usually within seconds. tella settles on Arc — the stablecoin network built by Circle for near-instant finality. Most transactions complete before you can put your phone down.",
   },
   {
     id: "getting-started",
     question: "How do I get started?",
     answer:
-      "Tap any \"Try tella\" button on this page to open a WhatsApp chat. tella walks you through a quick setup — connect your USDC wallet and add your Nigerian bank account details. Once that's done, you're ready to send and get paid out anytime.",
+      "Tap any \"Try tella\" button on this page to open a WhatsApp chat. tella walks you through a quick setup, and you're ready to send and receive in minutes.",
   },
   {
-    id: "banks",
-    question: "Which Nigerian banks are supported?",
+    id: "no-app",
+    question: "Do I need to download an app?",
     answer:
-      "All of them. GTBank, Access, UBA, First Bank, Zenith, Kuda, OPay, Moniepoint, Palmpay, FCMB, Fidelity — every licensed bank and fintech with a valid Nigerian account number. If it has an account number, tella can credit it.",
+      "No. tella runs entirely inside WhatsApp — the app you already use every day. Nothing new to install, no extra password to remember, and no dashboard to learn.",
   },
   {
     id: "lost-phone",
