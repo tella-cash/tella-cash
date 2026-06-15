@@ -104,7 +104,7 @@ export default function PrivacyPage() {
 
         <p>
           <strong>From third parties:</strong> we receive verification
-          outcomes from our KYC provider, settlement data from our FX partner,
+          outcomes from our KYC provider, settlement data from the Arc network,
           and messaging metadata (e.g. delivery state) from Meta / WhatsApp
           and Twilio.
         </p>
@@ -184,7 +184,7 @@ export default function PrivacyPage() {
                 authentication infrastructure.
               </li>
               <li>
-                <Placeholder>[KYC provider, FX/settlement partner, analytics]</Placeholder>
+                <Placeholder>[KYC provider, analytics]</Placeholder>
                 .
               </li>
             </ul>

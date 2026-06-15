@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import Image from "next/image";
 import { Reveal } from "@/components/interactive/reveal";
+import { MaskReveal } from "@/components/interactive/mask-reveal";
 import { PhoneFrame } from "@/components/ui/phone-frame";
+import { EASE } from "@/lib/animation/variants";
 import { cn } from "@/lib/utils/cn";
 import logo from "@/public/logo.svg";
 
@@ -201,19 +204,24 @@ export function UseCasesSection() {
   return (
     <section id="use-cases" className="relative overflow-hidden bg-white px-3 py-10 sm:px-[72px]">
       <div className="mx-auto max-w-[1296px]">
-        <Reveal>
-          <div className="flex flex-col items-center gap-4 text-center">
-            <div>
-              <h2 className="text-2xl font-medium leading-8 text-black md:text-[36px] md:leading-[44px] md:tracking-[-0.02em]">
-                Move money directly from chat
-              </h2>
-              <p className="mt-2 text-sm leading-5 text-black md:text-xl md:leading-[30px]">
-                How Tellecash becomes part of everyday life
+        <div className="flex flex-col items-center gap-6 text-center">
+          <div className="flex flex-col items-center">
+            <MaskReveal
+              as="h2"
+              text="Move money directly from chat"
+              accent="from chat"
+              className="justify-center text-[32px] md:text-[52px] lg:text-[60px] font-medium leading-[1.04] tracking-[-0.02em] text-black"
+            />
+            <Reveal delay={0.15}>
+              <p className="mt-4 text-base leading-relaxed text-ink-700 md:text-xl">
+                How tella becomes part of everyday life
               </p>
-            </div>
+            </Reveal>
+          </div>
 
+          <Reveal delay={0.2}>
             <div
-              className="flex w-full max-w-full flex-wrap content-start items-start gap-2.5 rounded-xl bg-[#F5F5F5] p-2 md:w-auto md:flex-nowrap md:gap-1 md:overflow-x-auto"
+              className="flex w-full max-w-full flex-wrap content-start items-start gap-1.5 rounded-2xl bg-[#F5F5F5] p-2 md:w-auto md:flex-nowrap md:overflow-x-auto"
               role="tablist"
               aria-label="Use case examples"
             >
@@ -228,38 +236,56 @@ export function UseCasesSection() {
                     aria-selected={isActive}
                     aria-controls={`use-case-panel-${useCase.id}`}
                     className={cn(
-                      "shrink-0 rounded-lg p-3 text-sm leading-5 text-black transition-colors md:px-4 md:py-2 md:text-xl md:leading-[30px]",
-                      isActive ? "bg-white shadow-soft" : "hover:bg-white/60",
+                      "relative shrink-0 rounded-xl px-4 py-2.5 text-sm leading-5 transition-colors md:px-5 md:py-3 md:text-lg",
+                      isActive ? "text-black" : "text-ink-500 hover:text-black",
                     )}
                     onClick={() => setActiveIndex(index)}
                   >
+                    {isActive && (
+                      <motion.span
+                        layoutId="usecase-tab"
+                        className="absolute inset-0 -z-10 rounded-xl bg-white shadow-soft"
+                        transition={{ type: "spring", stiffness: 380, damping: 32 }}
+                      />
+                    )}
                     {useCase.label}
                   </button>
                 );
               })}
             </div>
-          </div>
-        </Reveal>
+          </Reveal>
+        </div>
 
         <Reveal delay={0.1}>
           <div
             id={`use-case-panel-${activeCase.id}`}
             role="tabpanel"
-            className="relative mt-5 flex min-h-[760px] items-center justify-center py-[60px] sm:mt-12 lg:min-h-[700px]"
+            className="relative mt-8 min-h-[760px] sm:mt-12 lg:min-h-[700px]"
           >
-            {activeCase.photos.map((photo, index) => (
-              <PersonaPhoto
-                key={`${activeCase.id}-${photo.title}`}
-                photo={photo}
-                index={index}
-              />
-            ))}
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeCase.id}
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -16 }}
+                transition={{ duration: 0.5, ease: EASE }}
+                className="absolute inset-0 flex items-center justify-center py-[60px]"
+              >
+                {activeCase.photos.map((photo, index) => (
+                  <PersonaPhoto
+                    key={`${activeCase.id}-${photo.title}`}
+                    photo={photo}
+                    index={index}
+                  />
+                ))}
 
-            <div className="relative z-10">
-              <PhoneFrame className="!w-[303px]">
-                <ChatSurface useCase={activeCase} />
-              </PhoneFrame>
-            </div>
+                <div className="relative z-10">
+                  <PhoneFrame className="!w-[303px] lg:!w-[330px]">
+                    <ChatSurface useCase={activeCase} />
+                  </PhoneFrame>
+                </div>
+              </motion.div>
+            </AnimatePresence>
           </div>
         </Reveal>
       </div>

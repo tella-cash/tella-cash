@@ -9,37 +9,37 @@ export const FAQS: FaqItem[] = [
     id: "what-is-tella",
     question: "What exactly is tella?",
     answer:
-      "tella is a WhatsApp bot that converts USDC to Nigerian Naira and sends the Naira straight to your bank account. No crypto exchange account, no separate app — just send a message, confirm the rate, and your bank is credited in seconds.",
+      "tella is a messaging-based payment interface that lives inside WhatsApp. You hold and send USDC right from a chat, and when you want to spend locally, you cash out to your own Nigerian bank account. WhatsApp is just the interface — tella's platform does the work and settles on Arc. No separate app, no dashboard, just send a message and confirm.",
   },
   {
     id: "what-is-usdc",
-    question: "What is USDC and why would I need to offramp it?",
+    question: "What is USDC?",
     answer:
-      "USDC is a dollar-pegged stablecoin — one USDC is always worth one US dollar. If you earn, receive, or hold USDC and need Nigerian Naira for everyday spending, that's an offramp. tella makes it as simple as sending a WhatsApp message.",
+      "USDC is a dollar-pegged stablecoin — one USDC is always worth one US dollar. If you earn, receive, or hold USDC and want its value in your Nigerian bank account for everyday spending, tella makes it as simple as sending a WhatsApp message.",
   },
   {
     id: "how-it-works",
-    question: "How does the offramp actually work?",
+    question: "How does cashing out work?",
     answer:
-      "Tell tella how much USDC you want to sell. It quotes you the live market rate with our competitive spread, you confirm, and tella settles the transaction on ARC — a blockchain built for near-zero second finality. The Naira lands in your registered Nigerian bank account within seconds.",
+      "Tell tella how much you'd like to cash out. You see a clear rate upfront, you confirm, and the value lands in your registered Nigerian bank account — usually within seconds. WhatsApp carries the conversation; tella's platform does the work and settles on Arc.",
   },
   {
     id: "rates",
     question: "What rate do I get?",
     answer:
-      "tella uses live market rates with a competitive spread — no hidden fees, no markups buried in a surprise number. The rate shown when you confirm is the rate you get. You can also ask tella \"what's the rate?\" any time to check before you commit.",
+      "tella shows you a clear rate before you confirm — no hidden fees, no markups buried in a surprise number. The rate shown when you confirm is the rate you get. You can also ask tella \"what's the rate?\" any time to check before you commit.",
   },
   {
     id: "settlement",
-    question: "How fast does it settle?",
+    question: "How fast does a payout arrive?",
     answer:
-      "Near-zero second finality. tella settles on ARC, a blockchain purpose-built for instant transactions. Most offramps complete before you can put your phone down. Your Naira does not queue.",
+      "Usually within seconds. tella settles transactions on Arc — the stablecoin network built by Circle for near-instant finality — and the credit reaches your bank right away. Most cash-outs land before you can put your phone down.",
   },
   {
     id: "getting-started",
     question: "How do I get started?",
     answer:
-      "Tap any \"Try tella\" button on this page to open a WhatsApp chat. tella walks you through a quick setup — link your USDC wallet address and add your Nigerian bank account details. Once that's done, you're ready to offramp anytime.",
+      "Tap any \"Try tella\" button on this page to open a WhatsApp chat. tella walks you through a quick setup — connect your USDC wallet and add your Nigerian bank account details. Once that's done, you're ready to send and get paid out anytime.",
   },
   {
     id: "banks",

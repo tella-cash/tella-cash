@@ -102,7 +102,7 @@ export default function DataDeletionPage() {
         <ul>
           <li>
             transaction records — amounts, timestamps, on-chain hashes,
-            counterparty wallet addresses, FX rates, and fees;
+            counterparty wallet addresses, payout rates, and fees;
           </li>
           <li>
             identity-verification records, including the documents you

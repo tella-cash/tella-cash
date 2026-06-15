@@ -1,4 +1,5 @@
 import { Reveal } from "@/components/interactive/reveal";
+import { MaskReveal } from "@/components/interactive/mask-reveal";
 
 const PILLARS = [
   {
@@ -19,7 +20,7 @@ const PILLARS = [
     id: "custody",
     title: "Institutional custody",
     body:
-      "Wallet keys are managed by Circle - the issuer of USDC. The same infrastructure trusted by banks and exchanges secures your account.",
+      "Wallet keys are managed by Circle - the issuer of USDC. The same infrastructure trusted by banks and global fintechs secures your account.",
     illustration: <CustodyGlyph />,
   },
 ];
@@ -31,35 +32,38 @@ export function SecuritySection() {
       className="relative overflow-hidden bg-ink-900 py-[40px] md:py-[60px] text-surface-50"
     >
       <div className="relative mx-auto max-w-7xl px-[10px] sm:px[72px]">
-        <Reveal>
-          <div className="mx-auto max-w-[600px] text-center">
-            <div className="text-xs font-mono text-surface-50/40">
-              <span className="uppercase tracking-[0.2em]">Security</span>
+        <div className="mx-auto max-w-[820px] text-center">
+          <Reveal>
+            <div className="font-mono text-xs uppercase tracking-[0.2em] text-surface-50/40">
+              Security
             </div>
-            <h2 className="mt-8 text-[24px] lg:text-[72px] text-center font-normal leading-[1.02] tracking-[-0.03em]">
-              Built on rails you{" "}
-              <span className="text-[#0057FF]">already trust.</span>
-            </h2>
-            <p className="mx-auto mt-6 max-w-xl text-[14px] lg:text-lg leading-relaxed text-surface-50/60">
+          </Reveal>
+          <MaskReveal
+            as="h2"
+            text="Built on rails you already trust."
+            accent="already trust."
+            className="mt-8 justify-center text-[34px] md:text-[56px] lg:text-[76px] font-normal leading-[1.02] tracking-[-0.03em]"
+          />
+          <Reveal delay={0.15}>
+            <p className="mx-auto mt-6 max-w-2xl text-base md:text-xl leading-relaxed text-surface-50/60">
               Two billion people use WhatsApp every day. tella layers payment
-              logic on top - without changing what makes that channel feel
-              safe.
+              logic on top — without changing what makes that channel feel safe.
             </p>
-          </div>
-        </Reveal>
+          </Reveal>
+        </div>
 
-        <div className="mt-20 grid gap-8 md:grid-cols-3">
+        <div className="mt-16 grid gap-6 md:mt-24 md:grid-cols-3 md:gap-8">
           {PILLARS.map((p, i) => (
-            <Reveal key={p.id} delay={i * 0.2}>
-              <article className="flex h-full flex-col gap-6 rounded-3xl border border-surface-50/10 bg-surface-50/[0.02] p-8">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-surface-50/[0.04] text-[#0057FF]">
+            <Reveal key={p.id} delay={i * 0.15}>
+              <article className="flex h-full flex-col gap-6 rounded-3xl border border-surface-50/10 bg-surface-50/[0.02] p-8 transition-colors duration-300 hover:border-surface-50/20 hover:bg-surface-50/[0.04] md:p-10">
+                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-surface-50/[0.04] text-[#0057FF]">
                   {p.illustration}
                 </div>
                 <div>
-                  <h3 className="font-sans text-xl font-medium tracking-tight text-surface-50">
+                  <h3 className="font-sans text-2xl font-medium tracking-tight text-surface-50">
                     {p.title}
                   </h3>
-                  <p className="mt-3 leading-relaxed text-surface-50/60">
+                  <p className="mt-3 text-base md:text-lg leading-relaxed text-surface-50/60">
                     {p.body}
                   </p>
                 </div>

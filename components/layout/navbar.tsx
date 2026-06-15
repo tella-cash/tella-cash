@@ -49,20 +49,21 @@ export function Navbar() {
         ),
       }}
     >
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+      <div className="mx-auto flex max-w-[1400px] items-center justify-between px-6 py-5">
         <Link href="/" aria-label="Tella - home" data-cursor="grow">
           <BrandMark />
         </Link>
 
         <nav aria-label="Primary" className="hidden md:block">
-          <ul className="flex items-center gap-10 font-medium text-sm text-ink-700">
+          <ul className="flex items-center gap-10 font-medium text-base text-ink-700">
             {NAV_LINKS.map((link) => (
               <li key={link.href}>
                 <a
                   href={link.href}
-                  className="transition-colors hover:text-ink-900"
+                  className="group relative transition-colors hover:text-ink-900"
                 >
                   {link.label}
+                  <span className="absolute -bottom-1 left-0 h-px w-full origin-left scale-x-0 bg-ink-900 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-x-100" />
                 </a>
               </li>
             ))}
@@ -70,7 +71,12 @@ export function Navbar() {
         </nav>
 
         <div className="hidden md:block">
-          <MagneticCta href={SITE.whatsappLink} target="_blank" rel="noopener">
+          <MagneticCta
+            href={SITE.whatsappLink}
+            target="_blank"
+            rel="noopener"
+            className="text-base"
+          >
             Try it now
           </MagneticCta>
         </div>

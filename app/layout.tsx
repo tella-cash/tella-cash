@@ -45,9 +45,9 @@ const newsreader = Newsreader({
 });
 
 export const metadata: Metadata = {
-  title: "Tella — USDC to Naira, by message",
+  title: "Tella — Stablecoin payments, by message",
   description:
-    "Send USDC and receive Naira straight from a WhatsApp chat. No app to install, no menus to learn — just write.",
+    "A messaging-based payment interface. Send and manage USDC straight from a WhatsApp chat — no app to install, no menus to learn. Just write.",
 };
 
 export default function RootLayout({

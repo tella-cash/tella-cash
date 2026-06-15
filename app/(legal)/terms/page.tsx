@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "Terms of Service · Tella",
   description:
-    "The terms that govern your use of Tella — a WhatsApp-based interface for sending USDC and receiving Naira.",
+    "The terms that govern your use of Tella — a messaging-based interface for sending and managing USDC.",
 };
 
 const LAST_UPDATED = "May 14, 2026";
@@ -27,8 +27,9 @@ export default function TermsPage() {
         <p>
           Tella (&ldquo;Tella,&rdquo; &ldquo;tella,&rdquo; &ldquo;we,&rdquo;
           &ldquo;us&rdquo;) is a messaging-based interface that lets you hold,
-          send, and receive digital dollars (USDC) and convert between USDC and
-          Nigerian Naira (NGN) through a WhatsApp chat. These Terms of Service
+          send, and receive digital dollars (USDC), and cash out to your own
+          Nigerian bank account in Naira (NGN) — all through a WhatsApp chat.
+          These Terms of Service
           (&ldquo;Terms&rdquo;) form a binding agreement between you and{" "}
           <Placeholder>[Legal Entity Name, registration number, address]</Placeholder>
           .
@@ -84,17 +85,18 @@ export default function TermsPage() {
             balance;
           </li>
           <li>
-            convert between USDC and NGN at quoted rates, where supported; and
+            cash out to your own Nigerian bank account in Naira (NGN) at quoted
+            rates, where supported; and
           </li>
           <li>
             view balances, transaction history, and recent counterparties.
           </li>
         </ul>
         <p>
-          Tella is an <strong>interface</strong>. The underlying movement of
-          digital assets occurs on public blockchains and through third-party
-          providers (including our wallet, messaging, and FX/settlement
-          partners). We do not control blockchains, and once a blockchain
+          Tella is an <strong>interface</strong>. WhatsApp carries the
+          conversation; Tella&rsquo;s own platform does the work, settling on
+          the Arc network through our wallet and messaging infrastructure. We do
+          not control blockchains, and once a blockchain
           transaction is broadcast it is generally <strong>irreversible</strong>
           .
         </p>
@@ -136,7 +138,7 @@ export default function TermsPage() {
           </li>
         </ul>
         <p>
-          Quoted FX rates are valid only for the short window shown in chat. We
+          Quoted payout rates are valid only for the short window shown in chat. We
           may decline, delay, or reverse a transaction where required by law,
           where we suspect fraud, or where settlement at the quoted rate is no
           longer possible.
@@ -145,7 +147,7 @@ export default function TermsPage() {
 
       <Section title="6. Fees">
         <p>
-          Tella may charge a spread on FX conversions and/or a flat fee for
+          Tella may charge a margin on the payout rate and/or a flat fee for
           certain transactions. Network/gas fees may also apply on-chain. Fees
           and applicable rates are shown in chat before you confirm. We may
           change our fees at any time on prospective transactions.
@@ -183,7 +185,7 @@ export default function TermsPage() {
         </p>
         <ul>
           <li>
-            the value of USDC and NGN can change, and exchange rates fluctuate;
+            the value of USDC and NGN can change, and payout rates fluctuate;
           </li>
           <li>
             blockchain transactions are typically irreversible — a typo,
@@ -211,8 +213,8 @@ export default function TermsPage() {
         <p>
           Tella relies on third parties, including (without limitation) Meta /
           WhatsApp for messaging, Circle for wallet and USDC infrastructure,
-          Twilio for messaging delivery, and our FX/settlement and identity
-          partners. Their terms and privacy practices govern your interaction
+          Twilio for messaging delivery, and our identity-verification
+          providers. Their terms and privacy practices govern your interaction
           with them. We are not responsible for outages, errors, or actions of
           third parties, except as required by law.
         </p>

@@ -100,17 +100,17 @@ export function FeatureSection({
             delay={0.15}
             className="order-1 flex flex-col items-start md:order-2"
           >
-            <div className="w-full border-b border-[#D2D2D2] py-4">
-              <div className="flex w-full items-center gap-3">
-                <span className="flex min-h-[30px] min-w-[39px] items-center justify-center rounded-full bg-[#0057FF] px-4 py-1.5 text-xs leading-[18px] text-white md:text-sm md:leading-5">
+            <div className="w-full border-b border-[#D2D2D2] py-5 md:py-6">
+              <div className="flex w-full items-center gap-3 md:gap-4">
+                <span className="flex min-h-[34px] min-w-[44px] items-center justify-center rounded-full bg-[#0057FF] px-4 py-1.5 text-sm leading-5 text-white md:text-base">
                   {index}
                 </span>
-                <h3 className="min-w-0 flex-1 text-base font-normal leading-6 text-[#00256B] md:text-xl md:font-medium md:leading-[30px]">
+                <h3 className="min-w-0 flex-1 text-xl font-medium leading-7 tracking-[-0.01em] text-[#00256B] md:text-2xl md:leading-9 lg:text-[30px] lg:leading-[1.15]">
                   {heading}
                 </h3>
               </div>
 
-              <p className="mt-3 text-xs leading-[18px] text-black md:text-base md:leading-6">
+              <p className="mt-4 text-sm leading-relaxed text-ink-700 md:text-lg">
                 {description}
               </p>
             </div>

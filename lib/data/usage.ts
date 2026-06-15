@@ -11,7 +11,7 @@ export const USAGE_SCENES: UsageScene[] = [
   {
     id: "street-food",
     title: "Freelance payout, paid out",
-    description: "Client settled in USDC. Offramped to Naira with tella and paid the landlord — all before lunch.",
+    description: "Client paid in USDC. Cashed out to the bank with tella and covered rent — all before lunch.",
     amount: "₦412,500",
     recipient: "GTBank",
     scene: "street-food",
@@ -19,7 +19,7 @@ export const USAGE_SCENES: UsageScene[] = [
   {
     id: "market",
     title: "Market run, sorted",
-    description: "Offramped just enough USDC for the weekend groceries. Rate locked, Naira in the account before you hit the gate.",
+    description: "Paid out just enough for the weekend groceries. Rate locked, money in the account before you hit the gate.",
     amount: "₦49,500",
     recipient: "Access Bank",
     scene: "market",
@@ -27,7 +27,7 @@ export const USAGE_SCENES: UsageScene[] = [
   {
     id: "split-bill",
     title: "Split the client payout",
-    description: "Agency paid in USDC. tella converted and sent each co-freelancer their share — no awkward IOUs.",
+    description: "Agency paid in USDC. tella split it and sent each co-freelancer their share — no awkward IOUs.",
     amount: "₦82,500",
     recipient: "OPay",
     scene: "split-bill",
@@ -35,7 +35,7 @@ export const USAGE_SCENES: UsageScene[] = [
   {
     id: "barber",
     title: "Quick account top-up",
-    description: "Running low between paydays? Voice-note tella to offramp a little USDC — topped up before the next appointment.",
+    description: "Running low between paydays? Voice-note tella to cash out a little — topped up before the next appointment.",
     amount: "₦33,000",
     recipient: "UBA",
     scene: "barber",

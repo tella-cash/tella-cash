@@ -1,6 +1,8 @@
 import { Navbar } from "@/components/layout/navbar";
 import { Footer } from "@/components/layout/footer";
 import { Hero } from "@/components/sections/hero";
+import { Reveal } from "@/components/interactive/reveal";
+import { MaskReveal } from "@/components/interactive/mask-reveal";
 import { FeatureSection } from "@/components/sections/feature-section";
 import { SecuritySection } from "@/components/sections/security-section";
 import { UseCasesSection } from "@/components/sections/use-cases-section";
@@ -24,12 +26,18 @@ export default function HomePage() {
           {/* Sticky header — pins below the navbar while the feature cards stack underneath */}
           <div className="relative z-10 bg-[#E6EEFF] md:sticky md:top-[72px]">
             <div className="mx-auto max-w-[1440px] px-3 pb-6 pt-5 md:px-[72px] md:pt-10">
-              <h2 className="max-w-[636px] text-2xl font-medium leading-8 text-black md:text-[36px] md:leading-[44px] md:tracking-[-0.02em]">
-                How it works
-              </h2>
-              <p className="mt-2 max-w-[636px] text-sm leading-5 text-black md:text-base md:leading-6">
-                From message to money in seconds. Send, receive, and track stablecoins directly from WhatsApp using simple natural language.
-              </p>
+              <MaskReveal
+                as="h2"
+                text="How it works"
+                className="max-w-[760px] text-[32px] md:text-[52px] lg:text-[60px] font-medium leading-[1.04] tracking-[-0.02em] text-black"
+              />
+              <Reveal delay={0.15}>
+                <p className="mt-4 max-w-[680px] text-base leading-relaxed text-ink-700 md:text-xl">
+                  From message to money in seconds. Send, receive, and track
+                  stablecoins directly from WhatsApp using simple natural
+                  language.
+                </p>
+              </Reveal>
             </div>
           </div>
 

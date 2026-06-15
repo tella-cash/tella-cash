@@ -8,16 +8,16 @@ export interface SecurityCard {
 export const SECURITY_CARDS: SecurityCard[] = [
   {
     id: "passcode",
-    title: "A PIN on every offramp",
+    title: "A PIN on every payment",
     body:
-      "Set a PIN during onboarding and decide when it's required — every transaction, only above a threshold, or for new bank accounts only. No USDC moves without your sign-off.",
+      "Set a PIN during onboarding and decide when it's required — every transaction, only above a threshold, or for new bank accounts only. Nothing moves without your sign-off.",
     illustration: "passcode",
   },
   {
     id: "certified",
-    title: "ARC-settled, encrypted, audited",
+    title: "Settled on Arc, encrypted, verifiable",
     body:
-      "Your offramps settle on ARC — a blockchain with near-zero second finality and independently verifiable transactions. The WhatsApp layer uses the same end-to-end encryption that secures every other message you send.",
+      "Your payments settle on Arc — a network with near-zero second finality and independently verifiable transactions. The WhatsApp layer uses the same end-to-end encryption that secures every other message you send.",
     illustration: "certified",
   },
   {
