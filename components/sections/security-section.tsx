@@ -29,7 +29,7 @@ export function SecuritySection() {
   return (
     <section
       id="security"
-      className="relative overflow-hidden bg-ink-900 py-[40px] md:py-[60px] text-surface-50"
+      className="relative overflow-hidden bg-ink-900 py-16 md:py-28 text-surface-50"
     >
       <div className="relative mx-auto max-w-7xl px-[10px] sm:px[72px]">
         <div className="mx-auto max-w-[820px] text-center">
@@ -42,7 +42,7 @@ export function SecuritySection() {
             as="h2"
             text="Built on rails you already trust."
             accent="already trust."
-            className="mt-8 justify-center text-[34px] md:text-[56px] lg:text-[76px] font-normal leading-[1.02] tracking-[-0.03em]"
+            className="mt-8 justify-center font-display text-[34px] md:text-[56px] lg:text-[76px] font-normal leading-[1.02] tracking-[-0.03em]"
           />
           <Reveal delay={0.15}>
             <p className="mx-auto mt-6 max-w-2xl text-base md:text-xl leading-relaxed text-surface-50/60">

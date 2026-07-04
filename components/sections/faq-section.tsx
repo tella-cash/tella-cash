@@ -25,7 +25,7 @@ export function FaqSection() {
             as="h2"
             text="Questions, answered."
             accent="answered."
-            className="mt-5 justify-center text-[32px] md:text-[52px] lg:text-[60px] font-medium leading-[1.04] tracking-[-0.02em] text-ink-900"
+            className="mt-5 justify-center font-display text-[32px] md:text-[52px] lg:text-[60px] font-medium leading-[1.04] tracking-[-0.02em] text-ink-900"
           />
         </div>
 

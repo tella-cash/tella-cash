@@ -202,7 +202,7 @@ export function UseCasesSection() {
   }, [activeIndex]);
 
   return (
-    <section id="use-cases" className="relative overflow-hidden bg-white px-3 py-10 sm:px-[72px]">
+    <section id="use-cases" className="relative overflow-hidden bg-white px-3 py-16 sm:px-[72px] md:py-24">
       <div className="mx-auto max-w-[1296px]">
         <div className="flex flex-col items-center gap-6 text-center">
           <div className="flex flex-col items-center">
@@ -210,7 +210,7 @@ export function UseCasesSection() {
               as="h2"
               text="Move money directly from chat"
               accent="from chat"
-              className="justify-center text-[32px] md:text-[52px] lg:text-[60px] font-medium leading-[1.04] tracking-[-0.02em] text-black"
+              className="justify-center font-display text-[32px] md:text-[52px] lg:text-[60px] font-medium leading-[1.04] tracking-[-0.02em] text-black"
             />
             <Reveal delay={0.15}>
               <p className="mt-4 text-base leading-relaxed text-ink-700 md:text-xl">

@@ -30,7 +30,7 @@ export function Hero() {
   return (
     <section
       ref={ref}
-      className="relative lg:h-screen font-works overflow-hidden pt-[104px] px-[10px] sm:px-[72px]"
+      className="relative lg:h-screen overflow-hidden pt-[104px] px-[10px] sm:px-[72px]"
     >
       {/* Drifting accent aurora — parallaxed, sits behind everything */}
       <motion.div
@@ -43,7 +43,14 @@ export function Hero() {
           className="animate-drift-slow absolute right-[-6rem] top-1/3 h-[360px] w-[360px] rounded-full bg-accent-500/15 blur-[130px]"
           style={{ animationDelay: "-5s" }}
         />
+        <div
+          className="animate-drift-slow absolute left-1/3 bottom-0 h-[280px] w-[280px] rounded-full bg-accent-300/10 blur-[110px]"
+          style={{ animationDelay: "-8s" }}
+        />
       </motion.div>
+
+      {/* Faint grain over the gradient so it reads as textured, not flat */}
+      <div aria-hidden className="bg-grain pointer-events-none absolute inset-0 -z-10" />
 
       <div className="mx-auto grid h-full max-w-[1400px] items-center gap-8 px-6 lg:grid-cols-12 lg:gap-12">
         {/* Copy column */}
@@ -52,7 +59,18 @@ export function Hero() {
           initial="hidden"
           animate="visible"
           className="lg:col-span-7 lg:w-[720px]"
-        > 
+        >
+          <motion.div
+            variants={fadeUp(0)}
+            className="mb-5 inline-flex items-center gap-2 rounded-full border border-ink-900/10 bg-white/60 px-3.5 py-1.5 text-xs font-medium text-ink-700 backdrop-blur-sm md:text-sm"
+          >
+            <span className="relative flex h-1.5 w-1.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-75" />
+              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            </span>
+            Live on WhatsApp — settles on Arc in ~1s
+          </motion.div>
+
           <MaskReveal
             as="h1"
             trigger="mount"
@@ -118,9 +136,9 @@ export function Hero() {
             variants={stagger(0.08, 0.85)}
             className="mt-12 hidden lg:flex flex-wrap items-center gap-x-6 gap-y-3 text-[15px] md:text-base text-ink-700"
           >
-            <TrustItem icon={lockIcon} size={16} label="End-to-end encrypted" />
-            <TrustItem icon={coinIcon} size={16} label="USDC native" />
-            <TrustItem icon={lightIcon} size={14} label="Sub-second finality" />
+            <TrustItem icon={lockIcon} height={16} ratio={18 / 21} label="End-to-end encrypted" />
+            <TrustItem icon={coinIcon} height={16} ratio={1} label="USDC native" />
+            <TrustItem icon={lightIcon} height={14} ratio={17 / 23} label="Sub-second finality" />
           </motion.div>
         </motion.div>
 
@@ -142,9 +160,9 @@ export function Hero() {
           animate="visible"
           className="lg:hidden flex flex-wrap justify-center items-center text-center gap-4 text-[15px] text-ink-700"
         >
-          <TrustItem icon={lockIcon} size={16} label="End-to-end encrypted" />
-          <TrustItem icon={coinIcon} size={16} label="USDC native" />
-          <TrustItem icon={lightIcon} size={14} label="Sub-second finality" />
+          <TrustItem icon={lockIcon} height={16} ratio={18 / 21} label="End-to-end encrypted" />
+          <TrustItem icon={coinIcon} height={16} ratio={1} label="USDC native" />
+          <TrustItem icon={lightIcon} height={14} ratio={17 / 23} label="Sub-second finality" />
         </motion.div>
       </div>
 
@@ -168,16 +186,20 @@ export function Hero() {
 
 function TrustItem({
   icon,
-  size,
+  height,
+  ratio,
   label,
 }: {
   icon: string;
-  size: number;
+  /** Rendered height in px; width is derived from the icon's true aspect ratio. */
+  height: number;
+  /** Icon's intrinsic width/height ratio, so non-square SVGs don't get squished. */
+  ratio: number;
   label: string;
 }) {
   return (
     <motion.span variants={fadeUp(0, 8)} className="flex items-center gap-2">
-      <Image src={icon} alt="" width={size} height={size} />
+      <Image src={icon} alt="" width={Math.round(height * ratio)} height={height} />
       {label}
     </motion.span>
   );
@@ -210,10 +232,12 @@ function HeroPhone() {
         initial={{ opacity: 0, y: 20, x: 10 }}
         animate={{ opacity: 1, y: 0, x: 0 }}
         transition={{ duration: 0.8, delay: 1.4, ease: EASE }}
-        className="animate-drift-slow absolute -right-6 bottom-24 z-10 w-44 rounded-2xl bg-ink-900 p-4 text-surface-50 shadow-card"
+        className="animate-drift-slow absolute -right-8 bottom-8 z-10 w-44 rounded-2xl bg-ink-900 p-4 text-surface-50 shadow-card ring-1 ring-white/10 sm:-right-10 lg:-bottom-2 lg:-right-12"
         style={{ animationDelay: "-3s" }}
       >
-        <p className="font-display text-3xl leading-none">~1s</p>
+        <p className="font-sans text-3xl font-semibold leading-none tabular-nums">
+          ~1s
+        </p>
         <p className="mt-2 text-[11px] leading-tight text-surface-50/60">
           Average settlement on Arc
         </p>
@@ -235,6 +259,12 @@ function HeroPhone() {
           <LiveChatThread />
         </PhoneFrame>
       </motion.div>
+
+      {/* Grounding shadow — gives the phone a sense of resting above the page */}
+      <div
+        aria-hidden
+        className="absolute -bottom-6 left-1/2 -z-10 h-10 w-[70%] -translate-x-1/2 rounded-[100%] bg-ink-900/15 blur-2xl"
+      />
     </div>
   );
 }

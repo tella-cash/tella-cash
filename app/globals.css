@@ -45,7 +45,10 @@
 /* Base reset / typography */
 html {
   scroll-behavior: auto; /* Lenis owns scrolling now */
-  font-family: var(--font-works);
+  font-family: var(--font-sans);
+  /* Framer Motion's page-level useScroll measures against this element;
+     it must be non-static for that measurement to be reliable. */
+  position: relative;
 }
 
 body {
@@ -96,6 +99,14 @@ h4, h5, h6 {
 
 .animate-drift-slow {
   animation: drift-slow 12s ease-in-out infinite;
+}
+
+/* Faint grain — breaks up flat gradients so the hero doesn't look like a
+   solid-color render. Kept extremely subtle (3% opacity). */
+.bg-grain {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.035;
+  mix-blend-mode: multiply;
 }
 
 /* Scrollbar — minimal */

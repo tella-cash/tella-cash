@@ -124,7 +124,7 @@ export function Navbar() {
               aria-label="Mobile"
               className="border-t border-ink-900/5 bg-surface-50/95 backdrop-blur-md"
             >
-              <ul className="flex flex-col gap-1 px-6 py-4 font-works font-semibold text-base text-ink-700">
+              <ul className="flex flex-col gap-1 px-6 py-4 font-semibold text-base text-ink-700">
                 {NAV_LINKS.map((link) => (
                   <li key={link.href}>
                     <a

@@ -29,7 +29,7 @@ export default function HomePage() {
               <MaskReveal
                 as="h2"
                 text="How it works"
-                className="max-w-[760px] text-[32px] md:text-[52px] lg:text-[60px] font-medium leading-[1.04] tracking-[-0.02em] text-black"
+                className="max-w-[760px] font-display text-[32px] md:text-[52px] lg:text-[60px] font-medium leading-[1.04] tracking-[-0.02em] text-black"
               />
               <Reveal delay={0.15}>
                 <p className="mt-4 max-w-[680px] text-base leading-relaxed text-ink-700 md:text-xl">
