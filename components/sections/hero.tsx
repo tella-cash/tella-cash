@@ -30,7 +30,7 @@ export function Hero() {
   return (
     <section
       ref={ref}
-      className="relative lg:h-screen overflow-hidden pt-[104px] px-[10px] sm:px-[72px]"
+      className="relative lg:h-screen overflow-hidden pt-[14px] px-[10px] sm:px-[72px]"
     >
       {/* Drifting accent aurora — parallaxed, sits behind everything */}
       <motion.div
@@ -58,7 +58,7 @@ export function Hero() {
           style={{ y: headlineY }}
           initial="hidden"
           animate="visible"
-          className="lg:col-span-7 lg:w-[720px]"
+          className="lg:col-span-7 lg:max-w-[720px]"
         >
           <motion.div
             variants={fadeUp(0)}
@@ -215,15 +215,15 @@ function HeroPhone() {
         initial={{ opacity: 0, y: 20, x: -10 }}
         animate={{ opacity: 1, y: 0, x: 0 }}
         transition={{ duration: 0.8, delay: 1.2, ease: EASE }}
-        className="animate-drift-slow absolute -left-24 top-28 z-10 flex w-40 items-center gap-3 rounded-2xl bg-white p-3 shadow-card ring-1 ring-ink-200/30 sm:-left-14 lg:-left-10"
+        className="animate-drift-slow absolute -left-20 top-28 z-10 hidden w-40 items-center gap-3 rounded-2xl bg-white p-3 shadow-card ring-1 ring-ink-200/30 lg:-left-16 lg:flex xl:-left-20"
       >
         <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-accent-50 text-xs font-semibold text-accent-600">
-          CO
+          GT
         </div>
         <div className="flex-1 leading-tight">
-          <p className="text-[10px] uppercase tracking-wider text-ink-400">Sent</p>
-          <p className="font-display text-base leading-none text-ink-900">$5.00</p>
-          <p className="text-[10px] text-ink-500">to Chuks Okafor</p>
+          <p className="text-[10px] uppercase tracking-wider text-ink-400">Cashed out</p>
+          <p className="font-display text-base leading-none text-ink-900">₦50,000</p>
+          <p className="text-[10px] text-ink-500">to GTBank</p>
         </div>
       </motion.div>
 
@@ -232,7 +232,7 @@ function HeroPhone() {
         initial={{ opacity: 0, y: 20, x: 10 }}
         animate={{ opacity: 1, y: 0, x: 0 }}
         transition={{ duration: 0.8, delay: 1.4, ease: EASE }}
-        className="animate-drift-slow absolute -right-8 bottom-8 z-10 w-44 rounded-2xl bg-ink-900 p-4 text-surface-50 shadow-card ring-1 ring-white/10 sm:-right-10 lg:-bottom-2 lg:-right-12"
+        className="animate-drift-slow absolute -right-8 bottom-8 z-10 hidden w-44 rounded-2xl bg-ink-900 p-4 text-surface-50 shadow-card ring-1 ring-white/10 lg:-bottom-2 lg:-right-12 lg:block"
         style={{ animationDelay: "-3s" }}
       >
         <p className="font-sans text-3xl font-semibold leading-none tabular-nums">

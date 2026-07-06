@@ -11,14 +11,14 @@ type Turn =
   | {
       kind: "receipt";
       amount: string;
-      recipient: string;
+      destination: string;
       reference: string;
       time: string;
     };
 
 const SCRIPT: { turn: Turn; displayMs: number }[] = [
   {
-    turn: { kind: "bubble", side: "out", text: "send 5 to chuks", time: "9:14" },
+    turn: { kind: "bubble", side: "out", text: "cash out 50k to gtbank", time: "9:14" },
     displayMs: 1400,
   },
   { turn: { kind: "typing", side: "in" }, displayMs: 900 },
@@ -26,10 +26,10 @@ const SCRIPT: { turn: Turn; displayMs: number }[] = [
     turn: {
       kind: "bubble",
       side: "in",
-      text: "Send 5 USDC to Chuks Okafor? Reply yes to confirm.",
+      text: "Cash out ₦50,000 to GTBank ••4521 at ₦1,650/USDC? Reply yes to confirm.",
       time: "9:14",
     },
-    displayMs: 2200,
+    displayMs: 2400,
   },
   {
     turn: { kind: "bubble", side: "out", text: "yes", time: "9:14" },
@@ -39,8 +39,8 @@ const SCRIPT: { turn: Turn; displayMs: number }[] = [
   {
     turn: {
       kind: "receipt",
-      amount: "5.00",
-      recipient: "Chuks Okafor",
+      amount: "50,000",
+      destination: "GTBank ••4521",
       reference: "tx_8K2L9F",
       time: "9:14",
     },
@@ -255,16 +255,16 @@ function TurnView({ turn }: { turn: Turn }) {
         <div className="w-[82%] rounded-2xl rounded-bl-md bg-white p-3 shadow-sm ring-1 ring-ink-200/40">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-medium uppercase tracking-wider text-ink-500">
-              Sent
+              Cashed out
             </span>
             <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] font-medium text-emerald-700">
               ✓ Confirmed
             </span>
           </div>
           <p className="mt-1.5 font-display text-2xl leading-none text-ink-900">
-            ${turn.amount} <span className="text-base text-ink-500">USDC</span>
+            ₦{turn.amount}
           </p>
-          <p className="mt-1 text-[11px] text-ink-500">to {turn.recipient}</p>
+          <p className="mt-1 text-[11px] text-ink-500">to {turn.destination}</p>
           <p className="mt-2 font-mono text-[9px] text-ink-300">
             {turn.reference} · {turn.time}
           </p>

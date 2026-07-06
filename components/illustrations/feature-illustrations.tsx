@@ -263,10 +263,10 @@ export function ContextIllustration() {
       <PhoneFrame>
         <ChatScreen>
           <Bubble side="out" time="Mon">
-            sent 5 to chuks for lunch
+            cash out 5k to gtbank
           </Bubble>
           <Bubble side="in" time="Mon">
-            ✓ Sent $5 to Chuks Okafor.
+            ✓ Cashed out ₦5,000 to GTBank.
           </Bubble>
           <div className="my-1 flex items-center gap-2 text-[9px] uppercase tracking-widest text-ink-300">
             <span className="h-px flex-1 bg-ink-200" />
@@ -274,10 +274,10 @@ export function ContextIllustration() {
             <span className="h-px flex-1 bg-ink-200" />
           </div>
           <Bubble side="out" time="13:20">
-            send him the same again
+            cash out the same again
           </Bubble>
           <Bubble side="in" time="13:20">
-            Sending $5 USDC to Chuks Okafor — confirm?
+            Cash out ₦5,000 to GTBank — confirm?
           </Bubble>
         </ChatScreen>
       </PhoneFrame>

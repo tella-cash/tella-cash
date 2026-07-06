@@ -59,7 +59,7 @@ export default function HomePage() {
 
           <FeatureSection
             index='3'
-            heading='Payments that arrives like messages'
+            heading='Payments that arrive like messages'
             description="Receive instant USDC payments directly in WhatsApp with sender details, transaction updates, and balance confirmations in one conversation."
             visual={<ReceiveIllustration />}
           />
