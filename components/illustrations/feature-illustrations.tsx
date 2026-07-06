@@ -144,10 +144,10 @@ export function SendIllustration() {
       <PhoneFrame>
         <ChatScreen>
           <Bubble side="out" time="11:02">
-            send 25 to folake
+            cash out 25k to access bank
           </Bubble>
           <Bubble side="in" time="11:02">
-            Send 25 USDC to Folake Adeyemi? Reply yes to confirm.
+            Cash out ₦25,000 to Access Bank ••1183? Reply yes to confirm.
           </Bubble>
           <Bubble side="out" time="11:03">
             yes
@@ -156,17 +156,17 @@ export function SendIllustration() {
             <div className="w-[82%] rounded-2xl rounded-bl-md bg-white p-3 shadow-sm ring-1 ring-ink-200/40">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-medium uppercase tracking-wider text-ink-500">
-                  Sent
+                  Cashed out
                 </span>
                 <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] font-medium text-emerald-700">
                   ✓ Confirmed
                 </span>
               </div>
               <p className="mt-1.5 font-display text-2xl leading-none text-ink-900">
-                $25.00 <span className="text-base text-ink-500">USDC</span>
+                ₦25,000
               </p>
               <p className="mt-1 text-[11px] text-ink-500">
-                to Folake Adeyemi
+                to Access Bank ••1183
               </p>
               <p className="mt-2 font-mono text-[9px] text-ink-300">
                 tx_4P7M2N · 11:03
@@ -193,21 +193,11 @@ export function BalanceIllustration() {
           <div className="flex justify-start">
             <div className="w-[88%] rounded-2xl rounded-bl-md bg-white p-3 shadow-sm ring-1 ring-ink-200/40">
               <p className="text-[10px] font-medium uppercase tracking-wider text-ink-500">
-                Available
+                Your available balance is
               </p>
               <p className="mt-1 font-display text-3xl leading-none text-ink-900">
-                $142.50
+                ₦235,125
               </p>
-              <div className="mt-3 space-y-1.5 border-t border-ink-200/40 pt-3 text-[11px]">
-                <div className="flex justify-between text-ink-700">
-                  <span>USDC</span>
-                  <span className="font-mono">142.50</span>
-                </div>
-                <div className="flex justify-between text-ink-400">
-                  <span>Last 24h</span>
-                  <span className="text-emerald-600">+$25.00</span>
-                </div>
-              </div>
             </div>
           </div>
         </ChatScreen>
@@ -235,10 +225,10 @@ export function ReceiveIllustration() {
                 </span>
               </div>
               <p className="mt-1.5 font-display text-2xl leading-none text-ink-900">
-                $50.00 <span className="text-base text-ink-500">USDC</span>
+                ₦50,000
               </p>
               <p className="mt-1 text-[11px] text-ink-500">
-                from Adaeze Nwosu
+                from Zara Designs
               </p>
               <p className="mt-2 font-mono text-[9px] text-ink-300">
                 tx_9X3K1B · 09:22
@@ -246,7 +236,7 @@ export function ReceiveIllustration() {
             </div>
           </div>
           <Bubble side="in" time="9:22">
-            You've received $50 from Adaeze. New balance: $192.50.
+            Payment received - Your balance is now ₦182,500 and is available anytime.
           </Bubble>
         </ChatScreen>
       </PhoneFrame>
@@ -277,7 +267,7 @@ export function ContextIllustration() {
             cash out the same again
           </Bubble>
           <Bubble side="in" time="13:20">
-            Cash out ₦5,000 to GTBank — confirm?
+            Cash out ₦5,000 to GTBank - confirm?
           </Bubble>
         </ChatScreen>
       </PhoneFrame>
