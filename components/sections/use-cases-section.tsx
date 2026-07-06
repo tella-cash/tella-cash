@@ -42,7 +42,7 @@ const USE_CASES: UseCase[] = [
   {
     id: "freelance",
     label: "Freelancers",
-    amount: "$1,200",
+    amount: "₦1,200,000",
     sentLabel: "invoice paid",
     photos: [
       {
@@ -61,7 +61,7 @@ const USE_CASES: UseCase[] = [
       },
     ],
     messages: [
-      { side: "out", text: "Invoice Nova Studio for 1200 USDC", time: "10:14" },
+      { side: "out", text: "Invoice Nova Studio for ₦1,200,000", time: "10:14" },
       { side: "in", text: "Invoice ready. Send payment link to Nova Studio?", time: "10:14" },
       { side: "out", text: "yes", time: "10:15" },
       {
@@ -70,7 +70,7 @@ const USE_CASES: UseCase[] = [
         time: "10:42",
         receipt: {
           status: "Paid",
-          amount: "$1,200",
+          amount: "₦1,200,000",
           detail: "from Nova Studio",
         },
       },
@@ -79,7 +79,7 @@ const USE_CASES: UseCase[] = [
   {
     id: "night-out",
     label: "Night Out",
-    amount: "$32",
+    amount: "₦32,000",
     sentLabel: "split settled",
     photos: [
       {
@@ -99,7 +99,7 @@ const USE_CASES: UseCase[] = [
     ],
     messages: [
       { side: "out", text: "Split dinner with Tobi, Ada, and Kunle", time: "21:08" },
-      { side: "in", text: "Total bill is 128 USDC. Everyone pays 32 USDC.", time: "21:08" },
+      { side: "in", text: "Total bill is ₦128,000. Everyone pays ₦32,000.", time: "21:08" },
       { side: "out", text: "send my share now", time: "21:09" },
       {
         side: "in",
@@ -107,7 +107,7 @@ const USE_CASES: UseCase[] = [
         time: "21:09",
         receipt: {
           status: "Sent",
-          amount: "$32",
+          amount: "₦32,000",
           detail: "to dinner split",
         },
       },
@@ -116,7 +116,7 @@ const USE_CASES: UseCase[] = [
   {
     id: "families",
     label: "Families",
-    amount: "$300",
+    amount: "₦300,000",
     sentLabel: "family support",
     photos: [
       {
@@ -135,8 +135,8 @@ const USE_CASES: UseCase[] = [
       },
     ],
     messages: [
-      { side: "out", text: "Send 300 USDC to Amara for school fees", time: "08:31" },
-      { side: "in", text: "Sending 300 USDC to Amara Okeke. Confirm?", time: "08:31" },
+      { side: "out", text: "Send ₦300,000 to Amara for school fees", time: "08:31" },
+      { side: "in", text: "Sending ₦300,000 to Amara Okeke. Confirm?", time: "08:31" },
       { side: "out", text: "confirm", time: "08:32" },
       {
         side: "in",
@@ -144,7 +144,7 @@ const USE_CASES: UseCase[] = [
         time: "08:32",
         receipt: {
           status: "Sent",
-          amount: "$300",
+          amount: "₦300,000",
           detail: "to Amara Okeke",
         },
       },
@@ -153,7 +153,7 @@ const USE_CASES: UseCase[] = [
   {
     id: "small-business",
     label: "Small business Owners",
-    amount: "$450",
+    amount: "₦450,000",
     sentLabel: "vendor paid",
     photos: [
       {
@@ -172,8 +172,8 @@ const USE_CASES: UseCase[] = [
       },
     ],
     messages: [
-      { side: "out", text: "Pay 450 USDC to Ayo Supplies", time: "15:26" },
-      { side: "in", text: "Ayo Supplies is in your saved vendors. Send 450 USDC?", time: "15:26" },
+      { side: "out", text: "Pay ₦450,000 to Ayo Supplies", time: "15:26" },
+      { side: "in", text: "Ayo Supplies is in your saved vendors. Send ₦450,000?", time: "15:26" },
       { side: "out", text: "yes and save receipt", time: "15:27" },
       {
         side: "in",
@@ -181,7 +181,7 @@ const USE_CASES: UseCase[] = [
         time: "15:27",
         receipt: {
           status: "Paid",
-          amount: "$450",
+          amount: "₦450,000",
           detail: "to Ayo Supplies",
         },
       },
