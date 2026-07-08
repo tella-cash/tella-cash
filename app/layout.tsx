@@ -65,6 +65,7 @@ export default function RootLayout({
           name="facebook-domain-verification"
           content="a29vfcnfljyix4jzf8nj06d2ulnh8m"
         />
+        <meta name="facebook-domain-verification" content="nam5vl9755j1i63x1s6ziul42qp2p9" />
       </head>
       <body className="relative min-h-screen overflow-x-hidden">
         <SmoothScroll>
