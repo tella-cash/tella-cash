@@ -2,7 +2,7 @@ export const SITE = {
   brandName: "tella",
   legalName: "TELLA CORE LTD",
   whatsappLink:
-    "https://wa.me/14155238886?text=" + encodeURIComponent("join oil-needs"),
+    "https://wa.me/2349043580863?text=" + encodeURIComponent("Hi tella"),
   twitterUrl: "https://x.com/",
   facebookUrl: "#",
   termsUrl: "/terms",

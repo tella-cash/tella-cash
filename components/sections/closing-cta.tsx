@@ -59,12 +59,6 @@ export function ClosingCta() {
                 />
                 Start now
               </MagneticCta>
-              <span className="text-xs uppercase tracking-[0.18em] text-ink-400">
-                First time? Send{" "}
-                <span className="font-mono lowercase tracking-normal text-ink-700">
-                  join oil-needs
-                </span>
-              </span>
             </div>
           </Reveal>
         </motion.div>

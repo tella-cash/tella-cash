@@ -1,5 +1,6 @@
 import { loadConfirmContext } from "@/lib/confirm/context";
 import { userHasCredential } from "@/lib/webauthn/repository";
+import type { WhatsAppChannel } from "@/lib/supabase/types";
 import { ConfirmClient } from "./confirm-client";
 import { ConfirmShell } from "./confirm-shell";
 
@@ -54,7 +55,7 @@ export default async function ConfirmPage({
         }}
         hasPin={hasPin}
         hasPasskey={hasPasskey}
-        returnUrl={whatsappReturnUrl()}
+        returnUrl={whatsappReturnUrl(ctx.user.whatsapp_channel)}
       />
     </ConfirmShell>
   );
@@ -62,11 +63,18 @@ export default async function ConfirmPage({
 
 /**
  * Deep link back to the bot's WhatsApp chat, used to auto-return the user
- * after a successful confirm. Derived from the Twilio sender number; falls
- * back to a bare wa.me which still reopens WhatsApp.
+ * after a successful confirm. Points at whichever number the user actually
+ * messages tella on — Meta's Cloud API number for `meta` users, the Twilio
+ * sender for `twilio` users — so the "back to chat" link doesn't dead-end
+ * on a different provider's number. Falls back to a bare wa.me which still
+ * reopens WhatsApp.
  */
-function whatsappReturnUrl(): string {
-  const digits = (process.env.TWILIO_WHATSAPP_FROM ?? "").replace(/\D/g, "");
+function whatsappReturnUrl(channel: WhatsAppChannel): string {
+  const raw =
+    channel === "meta"
+      ? (process.env.META_WHATSAPP_DISPLAY_NUMBER ?? "+2349043580863")
+      : (process.env.TWILIO_WHATSAPP_FROM ?? "");
+  const digits = raw.replace(/\D/g, "");
   return digits ? `https://wa.me/${digits}` : "https://wa.me/";
 }
 
