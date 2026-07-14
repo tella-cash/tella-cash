@@ -189,7 +189,7 @@ async function processIncoming(msg: IncomingMessage) {
     channel: "meta",
   });
 
-  const { reply, interactive, confirm, sideEffect } = await handleIncomingMessage({
+  const { reply, interactive, confirm, followUp, sideEffect } = await handleIncomingMessage({
     user,
     text: msg.text,
     isNew,
@@ -203,6 +203,13 @@ async function processIncoming(msg: IncomingMessage) {
     await sendWhatsAppList({ to: normalizedNumber, body: reply });
   } else {
     await sendWhatsAppMessage({ to: normalizedNumber, body: reply });
+  }
+
+  // Sent as its own plain message — nothing else in the bubble — so a
+  // long-press → Copy on WhatsApp grabs exactly this and nothing mixed in
+  // from the reply above (e.g. a wallet address).
+  if (followUp) {
+    await sendWhatsAppMessage({ to: normalizedNumber, body: followUp });
   }
 
   if (sideEffect?.kind === "provision_wallet") {

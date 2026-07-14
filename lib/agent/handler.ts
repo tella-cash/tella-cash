@@ -45,6 +45,13 @@ export interface HandlerResult {
    * provisioned.
    */
   confirm?: { token: string };
+  /**
+   * A second plain-text message sent immediately after `reply`, for
+   * content that should stand alone in its own bubble — a wallet address,
+   * so a long-press → Copy on WhatsApp grabs exactly that and nothing
+   * else mixed in from surrounding sentence text.
+   */
+  followUp?: string;
   sideEffect?: { kind: "provision_wallet"; userId: string };
 }
 
@@ -283,9 +290,9 @@ async function handleOnboardedUser({
 
   switch (classifyIntent(text)) {
     case "balance":
-      return { reply: await getBalanceReply(user), interactive: "buttons" };
+      return { ...(await getBalanceReply(user)), interactive: "buttons" };
     case "address":
-      return { reply: addressReply(user), interactive: "buttons" };
+      return { ...addressReply(user), interactive: "buttons" };
     case "history":
       return { reply: await getHistoryReply(user), interactive: "buttons" };
     case "send":
@@ -345,15 +352,18 @@ async function cancelMostRecentPendingSend(user: tellaUser): Promise<HandlerResu
   };
 }
 
-function addressReply(user: tellaUser): string {
+function addressReply(user: tellaUser): Pick<HandlerResult, "reply" | "followUp"> {
   const name = firstName(user);
   if (user.wallet_status === "active" && user.wallet_address) {
-    return pickReply(REPLIES.address, { name, address: user.wallet_address });
+    return {
+      reply: pickReply(REPLIES.address, { name, address: user.wallet_address }),
+      followUp: user.wallet_address,
+    };
   }
   if (user.wallet_status === "pending") {
-    return pickReply(REPLIES.walletPending, { name });
+    return { reply: pickReply(REPLIES.walletPending, { name }) };
   }
-  return pickReply(REPLIES.walletNotReady, { name });
+  return { reply: pickReply(REPLIES.walletNotReady, { name }) };
 }
 
 async function startSendFlow({
@@ -455,11 +465,13 @@ async function startSendFlow({
   return confirmResult(pending);
 }
 
-async function getBalanceReply(user: tellaUser): Promise<string> {
+async function getBalanceReply(
+  user: tellaUser,
+): Promise<Pick<HandlerResult, "reply" | "followUp">> {
   const name = firstName(user);
 
   if (user.wallet_status !== "active" || !user.circle_wallet_id) {
-    return pickReply(REPLIES.walletNotReady, { name });
+    return { reply: pickReply(REPLIES.walletNotReady, { name }) };
   }
 
   let balances;
@@ -467,19 +479,21 @@ async function getBalanceReply(user: tellaUser): Promise<string> {
     balances = await getWalletBalances(user.circle_wallet_id);
   } catch (err) {
     console.error("[balance] fetch failed", { userId: user.id, err });
-    return pickReply(REPLIES.balanceError, { name });
+    return { reply: pickReply(REPLIES.balanceError, { name }) };
   }
 
   const nonZero = balances.filter((b) => parseFloat(b.amount) > 0);
   if (nonZero.length === 0) {
-    return pickReply(REPLIES.balanceEmpty, {
-      name,
-      address: user.wallet_address ?? "",
-    });
+    return {
+      reply: pickReply(REPLIES.balanceEmpty, { name }),
+      followUp: user.wallet_address ?? undefined,
+    };
   }
 
   const lines = nonZero.map((b) => `• ${b.amount} ${b.symbol}`);
-  return [pickReply(REPLIES.balanceIntro, { name }), "", ...lines].join("\n");
+  return {
+    reply: [pickReply(REPLIES.balanceIntro, { name }), "", ...lines].join("\n"),
+  };
 }
 
 const DIRECTION_ICON = { sent: "↗", received: "↙" } as const;

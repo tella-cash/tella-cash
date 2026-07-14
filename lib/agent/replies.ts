@@ -120,11 +120,14 @@ export const REPLIES = {
     "Ready when you are! Try \"balance\" or \"send 5 usdc to +234…\".",
   ],
 
+  // The address itself is sent as its own follow-up message (see
+  // handler.ts's `followUp` field) — nothing else in that bubble, so a
+  // long-press → Copy grabs exactly the address and nothing else.
   address: [
-    "Here's your tella wallet address, {name} 📥\n\n`{address}`\n\nSend USDC here on Arc to top up.",
-    "Your address for receiving USDC:\n\n`{address}`\n\nAnything sent here on Arc lands in your wallet, {name}.",
-    "Got it 👇 This is where you receive USDC:\n\n`{address}`\n\nShare it freely to get paid.",
-    "Your wallet address, {name}:\n\n`{address}`\n\nFund up by sending USDC to it on Arc.",
+    "Here's your tella wallet address, {name} 📥 Tap and hold the message below to copy it.\n\nSend USDC here on Arc to top up.",
+    "Your address for receiving USDC — tap and hold the next message to copy it.\n\nAnything sent here on Arc lands in your wallet, {name}.",
+    "Got it 👇 Tap and hold the message below to copy your address.\n\nShare it freely to get paid.",
+    "Your wallet address is coming up next, {name} — tap and hold it to copy.\n\nFund up by sending USDC to it on Arc.",
   ],
 
   walletPending: [
@@ -147,11 +150,13 @@ export const REPLIES = {
     "Current balance 👇",
   ],
 
+  // Same deal as `address` — the address ships as its own follow-up
+  // message so it's cleanly copyable on its own.
   balanceEmpty: [
-    "Your wallet's empty right now, {name} 👀\n\nFund it by sending USDC to:\n`{address}`",
-    "Nothing in your wallet yet! Top up by sending USDC here:\n`{address}`",
-    "You're at zero for now, {name}. Send USDC to this address to fund up:\n`{address}`",
-    "Empty wallet 👛 Add USDC by sending to:\n`{address}`",
+    "Your wallet's empty right now, {name} 👀 Fund it by sending USDC to the address below — tap and hold to copy it.",
+    "Nothing in your wallet yet! Top up by sending USDC to the address coming up next.",
+    "You're at zero for now, {name}. Send USDC to the address below to fund up — tap and hold to copy.",
+    "Empty wallet 👛 Add USDC by sending to the address below.",
   ],
 
   balanceError: [

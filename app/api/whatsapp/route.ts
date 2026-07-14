@@ -157,7 +157,7 @@ async function processMessageAsync(
     return;
   }
 
-  const { reply, interactive, confirm, sideEffect } = result;
+  const { reply, interactive, confirm, followUp, sideEffect } = result;
 
   try {
     if (confirm) {
@@ -172,6 +172,13 @@ async function processMessageAsync(
       await sendWhatsAppList({ to: fromNumber, body: reply });
     } else {
       await sendWhatsAppMessage({ to: fromNumber, body: reply });
+    }
+
+    // Sent as its own plain message — nothing else in the bubble — so a
+    // long-press → Copy on WhatsApp grabs exactly this and nothing mixed
+    // in from the reply above (e.g. a wallet address).
+    if (followUp) {
+      await sendWhatsAppMessage({ to: fromNumber, body: followUp });
     }
   } catch (err) {
     // Twilio send failed — we can't reach the user at all, so just log.
