@@ -3,11 +3,16 @@ import { findUserByCircleWalletId } from "@/lib/users/repository";
 import { notifyUser } from "@/lib/whatsapp/notify";
 import { recordTransaction, markOutboundComplete } from "@/lib/transactions/repository";
 import { getUsdToNgnRate, usdToNgn } from "@/lib/fx/naira";
+import { getTokenSymbol } from "@/lib/wallet/circle";
 
 /**
  * Subset of the Circle notification payload we care about. Circle sends
  * many more fields (subscriptionId, timestamps, version), but the inbound
  * payment flow only needs these.
+ *
+ * NOTE: Circle's webhook body carries `tokenId` (a UUID) — there is no
+ * `tokenSymbol` field. Resolve the real symbol via `getTokenSymbol`
+ * (lib/wallet/circle.ts) before showing it to anyone.
  */
 interface CircleNotification {
   notificationType: string;
@@ -18,7 +23,7 @@ interface CircleNotification {
     transactionType: "INBOUND" | "OUTBOUND";
     state: string;
     amounts?: string[];
-    tokenSymbol?: string;
+    tokenId?: string;
     sourceAddress?: string;
     destinationAddress?: string;
     txHash?: string;
@@ -131,10 +136,10 @@ async function handleInboundTransaction(
   }
 
   const amount = notification.amounts?.[0] ?? "0";
-  const token = notification.tokenSymbol ?? "USDC";
+  const token = notification.tokenId
+    ? await getTokenSymbol(notification.tokenId)
+    : "UNKNOWN";
   const sourceLabel = shortenAddress(notification.sourceAddress);
-
-  const rate = await getUsdToNgnRate();
 
   const message = [
     `💰 Received ${amount} ${token}`,
@@ -146,20 +151,27 @@ async function handleInboundTransaction(
 
   await notifyUser({ user, body: message });
 
-  try {
-    await recordTransaction({
-      userId: user.id,
-      direction: "received",
-      amountUsdc: amount,
-      amountNgn: token === "USDC" ? String(usdToNgn(parseFloat(amount), rate)) : "0",
-      token,
-      counterpartyLabel: sourceLabel,
-      counterpartyAddress: notification.sourceAddress ?? null,
-      txHash: notification.txHash ?? null,
-      status: "complete",
-    });
-  } catch (err) {
-    console.error("[circle-webhook] transaction record failed", { userId: user.id, err });
+  // tella's money-tracking (history, Naira conversion) is USDC-only by
+  // design — a EURC/cirBTC receipt still gets the WhatsApp notification
+  // above (accurately labeled), just not a transaction-history row shaped
+  // for a currency it isn't.
+  if (token === "USDC") {
+    try {
+      const rate = await getUsdToNgnRate();
+      await recordTransaction({
+        userId: user.id,
+        direction: "received",
+        amountUsdc: amount,
+        amountNgn: String(usdToNgn(parseFloat(amount), rate)),
+        token,
+        counterpartyLabel: sourceLabel,
+        counterpartyAddress: notification.sourceAddress ?? null,
+        txHash: notification.txHash ?? null,
+        status: "complete",
+      });
+    } catch (err) {
+      console.error("[circle-webhook] transaction record failed", { userId: user.id, err });
+    }
   }
 
   console.log("[circle-webhook] notified user of inbound", {
@@ -210,7 +222,12 @@ async function handleOutboundTransaction(
   }
 
   const amount = notification.amounts?.[0];
-  const token = notification.tokenSymbol ?? "USDC";
+  // tella only ever sends USDC (sendUsdc), so this is always USDC in
+  // practice — resolved properly anyway rather than hardcoded, for the
+  // same reason the inbound side is: consistency beats assumption.
+  const token = notification.tokenId
+    ? await getTokenSymbol(notification.tokenId)
+    : "USDC";
   const destLabel = shortenAddress(notification.destinationAddress);
 
   const message = [

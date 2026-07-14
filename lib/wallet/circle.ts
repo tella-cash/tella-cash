@@ -66,6 +66,13 @@ export interface TokenBalance {
   tokenAddress: string | null;
 }
 
+/**
+ * Fetches wallet token balances, merging any entries that share a symbol
+ * into one line. Circle's testnet occasionally lists what's effectively
+ * the same token as more than one balance entry (e.g. a bridged/native
+ * pair), which otherwise shows up as a confusing duplicate "X USDC" /
+ * "Y USDC" pair in the balance reply instead of one combined total.
+ */
 export async function getWalletBalances(
   walletId: string,
 ): Promise<TokenBalance[]> {
@@ -75,11 +82,50 @@ export async function getWalletBalances(
 
   const balances = response.data?.tokenBalances ?? [];
 
-  return balances.map((b) => ({
-    symbol: b.token?.symbol ?? "UNKNOWN",
-    amount: b.amount ?? "0",
-    tokenAddress: b.token?.tokenAddress ?? null,
-  }));
+  const merged = new Map<string, TokenBalance>();
+  for (const b of balances) {
+    const symbol = b.token?.symbol ?? "UNKNOWN";
+    const amount = parseFloat(b.amount ?? "0");
+    const existing = merged.get(symbol);
+    if (existing) {
+      existing.amount = String(parseFloat(existing.amount) + amount);
+    } else {
+      merged.set(symbol, {
+        symbol,
+        amount: String(amount),
+        tokenAddress: b.token?.tokenAddress ?? null,
+      });
+    }
+  }
+
+  return [...merged.values()];
+}
+
+/**
+ * Resolves a token's ticker symbol from its Circle-internal UUID.
+ *
+ * Circle's transaction webhooks (`transactions.inbound`/`.outbound`) only
+ * carry a `tokenId` (a UUID), not a human-readable symbol — there is no
+ * `tokenSymbol` field on that payload despite how tempting a name that'd
+ * be to assume. Any code that read one straight off the webhook body was
+ * silently always getting `undefined` and falling back to a hardcoded
+ * default, mislabeling every non-default token (e.g. EURC or cirBTC
+ * showing up as "USDC" in a "received" notification). This looks it up
+ * properly via Circle's token API, cached in-memory since a token's
+ * symbol never changes for a given ID.
+ */
+const tokenSymbolCache = new Map<string, string>();
+
+export async function getTokenSymbol(tokenId: string): Promise<string> {
+  const cached = tokenSymbolCache.get(tokenId);
+  if (cached) return cached;
+
+  const client = getCircleClient();
+  const response = await client.getToken({ id: tokenId });
+  const symbol = response.data?.token?.symbol ?? "UNKNOWN";
+
+  tokenSymbolCache.set(tokenId, symbol);
+  return symbol;
 }
 
 export interface SendUsdcArgs {
