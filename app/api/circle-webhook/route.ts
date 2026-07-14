@@ -135,11 +135,13 @@ async function handleInboundTransaction(
   const sourceLabel = shortenAddress(notification.sourceAddress);
 
   const rate = await getUsdToNgnRate();
-  const amountNgn =
-    token === "USDC" ? formatNaira(usdToNgn(parseFloat(amount), rate)) : `${amount} ${token}`;
+  const amountLabel =
+    token === "USDC"
+      ? `${amount} USDC (≈ ${formatNaira(usdToNgn(parseFloat(amount), rate))})`
+      : `${amount} ${token}`;
 
   const message = [
-    `💰 Received ${amountNgn}`,
+    `💰 Received ${amountLabel}`,
     "",
     `From: ${sourceLabel}`,
     "",

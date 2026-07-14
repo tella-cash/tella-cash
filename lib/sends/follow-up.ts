@@ -88,7 +88,7 @@ async function remindOtherPendingSends(user: tellaUser): Promise<void> {
   const lines = others.map((pending) => {
     const p = pending.payload;
     const recipientLabel = p.recipientName ?? p.recipientAddress;
-    return `• ${formatNaira(parseFloat(p.amountNgn))} to ${recipientLabel} — ${buildConfirmUrl(pending.id)}`;
+    return `• ${p.amount} USDC (≈ ${formatNaira(parseFloat(p.amountNgn))}) to ${recipientLabel} — ${buildConfirmUrl(pending.id)}`;
   });
 
   const intro =

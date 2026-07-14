@@ -75,5 +75,5 @@ export function formatSendResultForChat(result: ExecuteSendResult): string {
     }
     return "I couldn't complete that transfer. Your balance is unchanged. Want to try again?";
   }
-  return `✓ Sent ${formatNaira(parseFloat(result.amountNgn))} to ${result.recipientLabel}.`;
+  return `✓ Sent ${result.amount} USDC (≈ ${formatNaira(parseFloat(result.amountNgn))}) to ${result.recipientLabel}.`;
 }

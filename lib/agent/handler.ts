@@ -19,7 +19,7 @@ import {
 } from "@/lib/beneficiaries/repository";
 import { listRecentTransactions } from "@/lib/transactions/repository";
 import { getWalletBalances } from "@/lib/wallet/circle";
-import { getUsdToNgnRate, ngnToUsd, usdToNgn, formatNaira } from "@/lib/fx/naira";
+import { getUsdToNgnRate, usdToNgn, formatNaira } from "@/lib/fx/naira";
 import { parseSendIntent, parseConfirmation } from "@/lib/agent/parse-send";
 import { classifyIntent } from "@/lib/agent/intents";
 import { REPLIES, pickReply } from "@/lib/agent/replies";
@@ -234,7 +234,7 @@ async function handleBeneficiaryNameResponse({
     reply: [
       `✓ Saved as *${label}*.`,
       "",
-      `Next time just say "send 2000 to ${label}".`,
+      `Next time just say "send 5 usdc to ${label}".`,
     ].join("\n"),
   };
 }
@@ -248,8 +248,7 @@ function buildConfirmBody(pending: PendingSend): string {
   const p = pending.payload;
   const recipientLabel = p.recipientName ?? p.recipientAddress;
   return [
-    `Confirm send: *${formatNaira(parseFloat(p.amountNgn))}* to ${recipientLabel}`,
-    `(≈ ${p.amount} USDC)`,
+    `Confirm send: *${p.amount} USDC* (≈ ${formatNaira(parseFloat(p.amountNgn))}) to ${recipientLabel}`,
     "",
     "Tap *Confirm send* below to authorize with Face ID, your fingerprint, or your PIN.",
     "",
@@ -341,7 +340,7 @@ async function cancelMostRecentPendingSend(user: tellaUser): Promise<HandlerResu
       : "";
 
   return {
-    reply: `Cancelled your pending send of ${formatNaira(parseFloat(p.amountNgn))} to ${recipientLabel}.${remainingNote}`,
+    reply: `Cancelled your pending send of ${p.amount} USDC (≈ ${formatNaira(parseFloat(p.amountNgn))}) to ${recipientLabel}.${remainingNote}`,
     interactive: "buttons",
   };
 }
@@ -367,7 +366,7 @@ async function startSendFlow({
   if (!intent)
     return {
       reply:
-        'I couldn\'t understand that send instruction. Try "send 2000 to +234..." or "send 2000 to Chidi".',
+        'I couldn\'t understand that send instruction. Try "send 5 usdc to +234..." or "send 5 usdc to Chidi".',
     };
 
   if (user.wallet_status !== "active" || !user.circle_wallet_id) {
@@ -399,7 +398,7 @@ async function startSendFlow({
           "That number isn't on tella yet 👀",
           "",
           "I can only send to tella users by phone number for now. If you have their wallet address, you can send to that directly:",
-          '• "send 2000 to 0x..."',
+          '• "send 5 usdc to 0x..."',
         ].join("\n"),
       };
     }
@@ -438,13 +437,13 @@ async function startSendFlow({
   }
 
   const rate = await getUsdToNgnRate();
-  const amountUsd = ngnToUsd(parseFloat(intent.amount), rate);
+  const amountNgn = usdToNgn(parseFloat(intent.amount), rate);
 
   const pending = await createPendingSend({
     userId: user.id,
     payload: {
-      amount: amountUsd.toFixed(6),
-      amountNgn: intent.amount,
+      amount: intent.amount,
+      amountNgn: amountNgn.toFixed(2),
       token: intent.token,
       recipientUserId,
       recipientName,
@@ -483,7 +482,7 @@ async function getBalanceReply(user: tellaUser): Promise<string> {
   const lines = nonZero.map((b) => {
     if (b.symbol !== "USDC") return `• ${b.amount} ${b.symbol}`;
     const naira = formatNaira(usdToNgn(parseFloat(b.amount), rate));
-    return `• ${naira} (${b.amount} USDC)`;
+    return `• ${b.amount} USDC (≈ ${naira})`;
   });
   return [pickReply(REPLIES.balanceIntro, { name }), "", ...lines].join("\n");
 }
@@ -511,7 +510,7 @@ async function getHistoryReply(user: tellaUser): Promise<string> {
     const verb = t.direction === "sent" ? "Sent" : "Received";
     const counterparty = t.counterparty_label ?? "an external wallet";
     const preposition = t.direction === "sent" ? "to" : "from";
-    const amount = formatNaira(parseFloat(t.amount_ngn));
+    const amount = `${t.amount_usdc} USDC (≈ ${formatNaira(parseFloat(t.amount_ngn))})`;
     const when = dateFormatter.format(new Date(t.created_at));
     return [
       `${i + 1}️⃣ ${DIRECTION_ICON[t.direction]} ${verb} ${amount} ${preposition} ${counterparty}`,

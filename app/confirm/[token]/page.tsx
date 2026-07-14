@@ -66,8 +66,8 @@ export default async function ConfirmPage({
       <ConfirmClient
         token={token}
         summary={{
-          amount: formatNaira(parseFloat(ctx.pending.payload.amountNgn)),
-          token: `≈ ${ctx.pending.payload.amount} USDC`,
+          amount: ctx.pending.payload.amount,
+          token: `USDC (≈ ${formatNaira(parseFloat(ctx.pending.payload.amountNgn))})`,
           recipientLabel:
             ctx.pending.payload.recipientName ??
             formatAddress(ctx.pending.payload.recipientAddress),
