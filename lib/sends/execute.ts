@@ -1,5 +1,5 @@
-import type { tellaUser, PendingAction, SendPayload } from "@/lib/supabase/types";
-import { deletePending } from "@/lib/pending_actions/repository";
+import type { tellaUser, PendingSend } from "@/lib/supabase/types";
+import { deletePendingSend } from "@/lib/pending_sends/repository";
 import { sendUsdc } from "@/lib/wallet/circle";
 import { formatNaira } from "@/lib/fx/naira";
 
@@ -32,16 +32,16 @@ export async function executePendingSend({
   pending,
 }: {
   user: tellaUser;
-  pending: PendingAction;
+  pending: PendingSend;
 }): Promise<ExecuteSendResult> {
   if (user.wallet_status !== "active" || !user.circle_wallet_id) {
-    await deletePending(pending.id);
+    await deletePendingSend(pending.id);
     return { ok: false, reason: "wallet_inactive" };
   }
 
-  await deletePending(pending.id);
+  await deletePendingSend(pending.id);
 
-  const p = pending.payload as SendPayload;
+  const p = pending.payload;
   try {
     const result = await sendUsdc({
       fromWalletId: user.circle_wallet_id,

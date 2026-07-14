@@ -1,19 +1,15 @@
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import type { PendingAction, SendPayload, tellaUser } from "@/lib/supabase/types";
+import type { PendingSend, tellaUser } from "@/lib/supabase/types";
 
 export interface ConfirmContext {
   user: tellaUser;
-  /** Narrowed to a send pending — the confirm page only ever handles sends. */
-  pending: Omit<PendingAction, "kind" | "payload"> & {
-    kind: "send";
-    payload: SendPayload;
-  };
+  pending: PendingSend;
 }
 
 /**
- * Load the user + pending action from a confirm token.
+ * Load the user + pending send from a confirm token.
  *
- * The token IS the pending_action.id (UUIDv4, ~122 bits of entropy).
+ * The token IS the pending_send.id (UUIDv4, ~122 bits of entropy).
  * Returns null if the pending row is gone (cancelled, already consumed,
  * or expired). The caller should treat null as "this confirm link is no
  * longer valid" and surface that to the user.
@@ -28,11 +24,8 @@ export async function loadConfirmContext(
   const supabase = getSupabaseAdmin();
 
   const { data: pending, error: pendingErr } = await supabase
-    .from("tella_pending_action")
+    .from("tella_pending_send")
     .select("*")
-    // Same table now also holds beneficiary-save conversation state; the
-    // confirm page must only ever resolve a send.
-    .eq("kind", "send")
     .eq("id", token)
     .gt("expires_at", new Date().toISOString())
     .maybeSingle();
@@ -43,12 +36,12 @@ export async function loadConfirmContext(
   const { data: user, error: userErr } = await supabase
     .from("tella_users")
     .select("*")
-    .eq("id", (pending as PendingAction).user_id)
+    .eq("id", (pending as PendingSend).user_id)
     .single();
 
   if (userErr) throw new Error(`loadConfirmContext: ${userErr.message}`);
   return {
     user: user as tellaUser,
-    pending: pending as ConfirmContext["pending"],
+    pending: pending as PendingSend,
   };
 }

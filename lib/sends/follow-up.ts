@@ -4,7 +4,10 @@ import { formatSendResultForChat } from "@/lib/sends/execute";
 import { notifyUser } from "@/lib/whatsapp/notify";
 import { findBeneficiaryByAddress } from "@/lib/beneficiaries/repository";
 import { createPendingBeneficiaryPrompt } from "@/lib/pending_actions/repository";
+import { listActivePendingSends } from "@/lib/pending_sends/repository";
 import { recordTransaction } from "@/lib/transactions/repository";
+import { formatNaira } from "@/lib/fx/naira";
+import { buildConfirmUrl } from "@/lib/confirm/url";
 
 /**
  * Runs after a send has been authorized and executed (from either the
@@ -44,6 +47,12 @@ export async function sendReceiptAndFollowUp({
   }
 
   try {
+    await remindOtherPendingSends(user);
+  } catch (err) {
+    console.error("[send] pending-send reminder failed", { userId: user.id, err });
+  }
+
+  try {
     const existing = await findBeneficiaryByAddress(user.id, result.recipientAddress);
     if (existing) return;
 
@@ -64,4 +73,37 @@ export async function sendReceiptAndFollowUp({
   } catch (err) {
     console.error("[send] beneficiary prompt failed", { userId: user.id, err });
   }
+}
+
+/**
+ * The send that just completed is already deleted at this point, so any
+ * rows left are genuinely other pending sends the user started earlier
+ * and never confirmed or cancelled — surface them now rather than let
+ * them silently expire after 5 minutes with no explanation.
+ */
+async function remindOtherPendingSends(user: tellaUser): Promise<void> {
+  const others = await listActivePendingSends(user.id);
+  if (others.length === 0) return;
+
+  const lines = others.map((pending) => {
+    const p = pending.payload;
+    const recipientLabel = p.recipientName ?? p.recipientAddress;
+    return `• ${formatNaira(parseFloat(p.amountNgn))} to ${recipientLabel} — ${buildConfirmUrl(pending.id)}`;
+  });
+
+  const intro =
+    others.length === 1
+      ? "You also have a pending send waiting:"
+      : `You also have ${others.length} pending sends waiting:`;
+
+  await notifyUser({
+    user,
+    body: [
+      intro,
+      "",
+      ...lines,
+      "",
+      'Tap a link to complete it, or reply "cancel" to drop the most recent one.',
+    ].join("\n"),
+  });
 }

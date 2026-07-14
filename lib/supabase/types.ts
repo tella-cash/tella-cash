@@ -17,13 +17,33 @@ export interface tellaUser {
   updated_at: string;
 }
 
-export type PendingActionKind = "send" | "beneficiary_confirm" | "beneficiary_name";
+export type PendingActionKind = "beneficiary_confirm" | "beneficiary_name";
 
+/**
+ * Beneficiary-save conversation state only — one active conversation per
+ * user, upserted on user_id. Pending sends live in their own table
+ * (`PendingSend` below) so that starting a new send never collides with
+ * this or with another still-pending send.
+ */
 export interface PendingAction {
   id: string;
   user_id: string;
   kind: PendingActionKind;
-  payload: SendPayload | BeneficiaryPromptPayload;
+  payload: BeneficiaryPromptPayload;
+  expires_at: string;
+  created_at: string;
+}
+
+/**
+ * A pending send. No per-user uniqueness — a user can have several of
+ * these at once, each with its own confirm link (the link token IS the
+ * row id). Deleted on execution or cancellation, or left to expire (5 min
+ * TTL) if the user never confirms.
+ */
+export interface PendingSend {
+  id: string;
+  user_id: string;
+  payload: SendPayload;
   expires_at: string;
   created_at: string;
 }

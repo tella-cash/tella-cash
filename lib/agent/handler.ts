@@ -1,19 +1,18 @@
-import type {
-  tellaUser,
-  PendingAction,
-  SendPayload,
-  BeneficiaryPromptPayload,
-} from "@/lib/supabase/types";
+import type { tellaUser, PendingAction, PendingSend } from "@/lib/supabase/types";
 import {
   completeOnboarding,
   findUserByWhatsApp,
 } from "@/lib/users/repository";
 import {
-  createPendingSend,
   createPending,
   getActivePending,
   deletePending,
 } from "@/lib/pending_actions/repository";
+import {
+  createPendingSend,
+  listActivePendingSends,
+  deletePendingSend,
+} from "@/lib/pending_sends/repository";
 import {
   findBeneficiaryByLabel,
   createBeneficiary,
@@ -91,9 +90,16 @@ export async function handleIncomingMessage(
     return handleNameEntry({ user, text });
   }
 
-  const pending = await getActivePending(user.id);
-  if (pending) {
-    return handlePendingResponse({ user, pending, text });
+  // Beneficiary-save is a short, mandatory back-and-forth (yes/no, then a
+  // name) — every message must be captured until it resolves. Pending
+  // *sends* are deliberately NOT intercepted here: a user can have several
+  // at once, and typing a new "send X to Y" while one is outstanding must
+  // start a fresh one rather than being swallowed by an old prompt (see
+  // handleOnboardedUser, which checks parseSendIntent before anything
+  // pending-send-related).
+  const beneficiaryPending = await getActivePending(user.id);
+  if (beneficiaryPending) {
+    return handleBeneficiaryPendingResponse({ user, pending: beneficiaryPending, text });
   }
 
   return handleOnboardedUser({ user, text });
@@ -135,7 +141,7 @@ async function handleNameEntry({
   };
 }
 
-async function handlePendingResponse({
+async function handleBeneficiaryPendingResponse({
   user,
   pending,
   text,
@@ -145,33 +151,11 @@ async function handlePendingResponse({
   text: string;
 }): Promise<HandlerResult> {
   switch (pending.kind) {
-    case "send":
-      return handlePendingSendResponse(pending, text);
     case "beneficiary_confirm":
       return handleBeneficiaryConfirmResponse({ user, pending, text });
     case "beneficiary_name":
       return handleBeneficiaryNameResponse({ user, pending, text });
   }
-}
-
-async function handlePendingSendResponse(
-  pending: PendingAction,
-  text: string,
-): Promise<HandlerResult> {
-  const decision = parseConfirmation(text);
-
-  if (decision === "no") {
-    await deletePending(pending.id);
-    return {
-      reply: "Cancelled. Let me know if you want to try again.",
-      interactive: "buttons",
-    };
-  }
-
-  // "yes" no longer confirms in chat — sends require biometric/PIN in
-  // the browser. Re-send the confirm button for any unrecognized reply
-  // (and for "yes" too) so the user always has a fresh tap-to-confirm.
-  return confirmResult(pending);
 }
 
 async function handleBeneficiaryConfirmResponse({
@@ -200,8 +184,7 @@ async function handleBeneficiaryConfirmResponse({
     return { reply: "Nice — what would you like to save them as?" };
   }
 
-  const payload = pending.payload as BeneficiaryPromptPayload;
-  const label = payload.suggestedLabel ?? "this recipient";
+  const label = pending.payload.suggestedLabel ?? "this recipient";
   return {
     reply: `Want to save ${label} as a beneficiary? Reply *yes* or *no*.`,
   };
@@ -231,13 +214,12 @@ async function handleBeneficiaryNameResponse({
     };
   }
 
-  const payload = pending.payload as BeneficiaryPromptPayload;
   const result = await createBeneficiary({
     userId: user.id,
     label,
-    recipientUserId: payload.recipientUserId,
-    recipientAddress: payload.recipientAddress,
-    recipientWhatsappNumber: payload.recipientWhatsappNumber,
+    recipientUserId: pending.payload.recipientUserId,
+    recipientAddress: pending.payload.recipientAddress,
+    recipientWhatsappNumber: pending.payload.recipientWhatsappNumber,
   });
 
   if (!result.ok) {
@@ -258,12 +240,12 @@ async function handleBeneficiaryNameResponse({
 }
 
 /** A confirm-send prompt + the CTA token that opens the confirm page. */
-function confirmResult(pending: PendingAction): HandlerResult {
+function confirmResult(pending: PendingSend): HandlerResult {
   return { reply: buildConfirmBody(pending), confirm: { token: pending.id } };
 }
 
-function buildConfirmBody(pending: PendingAction): string {
-  const p = pending.payload as SendPayload;
+function buildConfirmBody(pending: PendingSend): string {
+  const p = pending.payload;
   const recipientLabel = p.recipientName ?? p.recipientAddress;
   return [
     `Confirm send: *${formatNaira(parseFloat(p.amountNgn))}* to ${recipientLabel}`,
@@ -332,11 +314,36 @@ async function handleOnboardedUser({
     case "affirm":
       return { reply: pickReply(REPLIES.affirm, { name }), interactive: "buttons" };
     case "cancel":
-      return { reply: pickReply(REPLIES.cancelNothing, { name }), interactive: "buttons" };
+      return cancelMostRecentPendingSend(user);
     default:
       // Help them recover with the quick menu.
       return { reply: pickReply(REPLIES.unknown, { name }), interactive: "buttons" };
   }
+}
+
+async function cancelMostRecentPendingSend(user: tellaUser): Promise<HandlerResult> {
+  const name = firstName(user);
+  const pendingSends = await listActivePendingSends(user.id);
+
+  if (pendingSends.length === 0) {
+    return { reply: pickReply(REPLIES.cancelNothing, { name }), interactive: "buttons" };
+  }
+
+  const latest = pendingSends[0];
+  await deletePendingSend(latest.id);
+
+  const p = latest.payload;
+  const recipientLabel = p.recipientName ?? p.recipientAddress;
+  const remaining = pendingSends.length - 1;
+  const remainingNote =
+    remaining > 0
+      ? ` You still have ${remaining} other pending send${remaining > 1 ? "s" : ""} — say "cancel" again to drop the next one.`
+      : "";
+
+  return {
+    reply: `Cancelled your pending send of ${formatNaira(parseFloat(p.amountNgn))} to ${recipientLabel}.${remainingNote}`,
+    interactive: "buttons",
+  };
 }
 
 function addressReply(user: tellaUser): string {
