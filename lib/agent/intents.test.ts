@@ -100,6 +100,21 @@ const CASES: Array<[string, Intent]> = [
   // unknown
   ["asdkjfh", "unknown"],
   ["the weather is nice today", "unknown"],
+
+  // typo correction inside a multi-word message (not just single-token
+  // messages) — the IDF-weighted scorer's fuzzy fallback
+  ["wat is my blance", "balance"],
+  ["i wanna sned money", "send"],
+
+  // new phrase/synonym coverage
+  ["who r u", "about"],
+  ["gtg", "goodbye"],
+  ["wallet balance", "balance"],
+  ["yh", "affirm"],
+  ["tanks", "thanks"],
+  ["whats the fee", "fees"],
+  ["how do i fund", "address"],
+  ["show my transactions", "history"],
 ];
 
 let passed = 0;
