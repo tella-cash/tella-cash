@@ -1,6 +1,11 @@
 import { NextResponse, after } from "next/server";
 import crypto from "node:crypto";
-import { sendWhatsAppMessage } from "@/lib/meta/client";
+import {
+  sendWhatsAppMessage,
+  sendWhatsAppButtons,
+  sendWhatsAppList,
+  sendWhatsAppConfirm,
+} from "@/lib/meta/client";
 import { handleIncomingMessage } from "@/lib/agent/handler";
 import { findOrCreateUser } from "@/lib/users/repository";
 import { provisionWalletForUser } from "@/lib/wallet/provision";
@@ -116,6 +121,11 @@ interface MetaWebhookPayload {
           from?: string;
           type?: string;
           text?: { body?: string };
+          interactive?: {
+            type?: string;
+            button_reply?: { id?: string; title?: string };
+            list_reply?: { id?: string; title?: string };
+          };
         }>;
       };
     }>;
@@ -129,13 +139,33 @@ function extractTextMessages(payload: MetaWebhookPayload): IncomingMessage[] {
       const value = change.value;
       const profile = value?.contacts?.[0]?.profile?.name;
       for (const m of value?.messages ?? []) {
-        if (m.type !== "text" || !m.text?.body || !m.from || !m.id) continue;
-        out.push({
-          fromE164: m.from,
-          text: m.text.body,
-          messageId: m.id,
-          profileName: profile,
-        });
+        if (!m.from || !m.id) continue;
+
+        if (m.type === "text" && m.text?.body) {
+          out.push({
+            fromE164: m.from,
+            text: m.text.body,
+            messageId: m.id,
+            profileName: profile,
+          });
+          continue;
+        }
+
+        // Tapped quick-reply button or list row — route its title through
+        // the same classifier as typed text (mirrors Twilio's ButtonText).
+        if (m.type === "interactive") {
+          const title =
+            m.interactive?.button_reply?.title ??
+            m.interactive?.list_reply?.title;
+          if (title) {
+            out.push({
+              fromE164: m.from,
+              text: title,
+              messageId: m.id,
+              profileName: profile,
+            });
+          }
+        }
       }
     }
   }
@@ -158,13 +188,21 @@ async function processIncoming(msg: IncomingMessage) {
     whatsappNumber: normalizedNumber,
   });
 
-  const { reply, sideEffect } = await handleIncomingMessage({
+  const { reply, interactive, confirm, sideEffect } = await handleIncomingMessage({
     user,
     text: msg.text,
     isNew,
   });
 
-  await sendWhatsAppMessage({ to: normalizedNumber, body: reply });
+  if (confirm) {
+    await sendWhatsAppConfirm({ to: normalizedNumber, body: reply, token: confirm.token });
+  } else if (interactive === "buttons") {
+    await sendWhatsAppButtons({ to: normalizedNumber, body: reply });
+  } else if (interactive === "list") {
+    await sendWhatsAppList({ to: normalizedNumber, body: reply });
+  } else {
+    await sendWhatsAppMessage({ to: normalizedNumber, body: reply });
+  }
 
   if (sideEffect?.kind === "provision_wallet") {
     const success = await provisionWalletForUser(sideEffect.userId);
@@ -180,14 +218,14 @@ async function processIncoming(msg: IncomingMessage) {
       const address = (data as { wallet_address: string } | null)
         ?.wallet_address;
       if (address) {
-        await sendWhatsAppMessage({
+        await sendWhatsAppButtons({
           to: normalizedNumber,
           body: [
             "✅ Your wallet is ready!",
             "",
             `Address: \`${address}\``,
             "",
-            "Send USDC to this address on Arc to fund your account. Try \"what's my balance?\" once you have funds.",
+            "Send USDC to this address on Arc to fund your account, then tap below to get started.",
           ].join("\n"),
         });
       }
