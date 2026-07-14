@@ -17,6 +17,7 @@ export type Intent =
   | "balance"
   | "address"
   | "send"
+  | "history"
   | "about"
   | "how_it_works"
   | "fees"
@@ -101,6 +102,14 @@ const RULES: IntentRule[] = [
       "send", "transfer", "sending", "paying", "move money", "give",
       "wire", "remit", "send money", "send some", "send usdc", "transfer to",
       "pay someone", "send to",
+    ],
+  },
+  {
+    intent: "history",
+    exact: ["history", "transactions", "my transactions", "transaction history"],
+    keywords: [
+      "history", "transactions", "past transactions", "previous transactions",
+      "recent transactions", "transaction log", "my history", "transaction history",
     ],
   },
   {
@@ -193,6 +202,8 @@ const FUZZY: Array<{ token: string; intent: Intent }> = [
   { token: "transfer", intent: "send" },
   { token: "deposit", intent: "address" },
   { token: "receive", intent: "address" },
+  { token: "history", intent: "history" },
+  { token: "transactions", intent: "history" },
   { token: "help", intent: "help" },
   { token: "menu", intent: "help" },
   { token: "hello", intent: "greeting" },

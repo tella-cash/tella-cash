@@ -1,11 +1,8 @@
 import { NextResponse } from "next/server";
 import { loadConfirmContext } from "@/lib/confirm/context";
 import { verifyPin } from "@/lib/auth/pin";
-import {
-  executePendingSend,
-  formatSendResultForChat,
-} from "@/lib/sends/execute";
-import { notifyUser } from "@/lib/whatsapp/notify";
+import { executePendingSend } from "@/lib/sends/execute";
+import { sendReceiptAndFollowUp } from "@/lib/sends/follow-up";
 
 export const dynamic = "force-dynamic";
 
@@ -58,14 +55,7 @@ export async function POST(request: Request) {
     pending: ctx.pending,
   });
 
-  try {
-    await notifyUser({
-      user: ctx.user,
-      body: formatSendResultForChat(result),
-    });
-  } catch (err) {
-    console.error("[pin] follow-up message failed", { err });
-  }
+  await sendReceiptAndFollowUp({ user: ctx.user, result });
 
   if (!result.ok) {
     return NextResponse.json(

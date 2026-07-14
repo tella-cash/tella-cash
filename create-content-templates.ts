@@ -78,9 +78,10 @@ async function main() {
         body: "{{1}}",
         button: "Menu",
         items: [
-          { item: "Balance", id: "balance", description: "Check your USDC balance" },
+          { item: "Balance", id: "balance", description: "Check your balance in Naira" },
           { item: "My address", id: "address", description: "Get your wallet address" },
-          { item: "Send USDC", id: "send", description: "Send to a number or 0x address" },
+          { item: "Send money", id: "send", description: "Send to a number, address, or saved name" },
+          { item: "History", id: "history", description: "See your recent transactions" },
           { item: "How it works", id: "how", description: "Learn how tella works" },
           { item: "Is it safe?", id: "safe", description: "How your money is protected" },
         ],

@@ -1,9 +1,20 @@
-import type { tellaUser, PendingAction } from "@/lib/supabase/types";
+import type { tellaUser, PendingAction, SendPayload } from "@/lib/supabase/types";
 import { deletePending } from "@/lib/pending_actions/repository";
 import { sendUsdc } from "@/lib/wallet/circle";
+import { formatNaira } from "@/lib/fx/naira";
 
 export type ExecuteSendResult =
-  | { ok: true; transactionId: string; amount: string; token: "USDC"; recipientLabel: string }
+  | {
+      ok: true;
+      transactionId: string;
+      amount: string;
+      amountNgn: string;
+      token: "USDC";
+      recipientLabel: string;
+      recipientAddress: string;
+      recipientUserId: string | null;
+      recipientWhatsappNumber: string | null;
+    }
   | { ok: false; reason: "wallet_inactive" | "transfer_failed" };
 
 /**
@@ -30,7 +41,7 @@ export async function executePendingSend({
 
   await deletePending(pending.id);
 
-  const p = pending.payload;
+  const p = pending.payload as SendPayload;
   try {
     const result = await sendUsdc({
       fromWalletId: user.circle_wallet_id,
@@ -42,10 +53,14 @@ export async function executePendingSend({
       ok: true,
       transactionId: result.transactionId,
       amount: p.amount,
+      amountNgn: p.amountNgn,
       token: p.token,
       recipientLabel:
         p.recipientName ??
         `${p.recipientAddress.slice(0, 6)}…${p.recipientAddress.slice(-4)}`,
+      recipientAddress: p.recipientAddress,
+      recipientUserId: p.recipientUserId,
+      recipientWhatsappNumber: p.recipientWhatsappNumber,
     };
   } catch (err) {
     console.error("[send] transfer failed", { userId: user.id, err });
@@ -60,5 +75,5 @@ export function formatSendResultForChat(result: ExecuteSendResult): string {
     }
     return "I couldn't complete that transfer. Your balance is unchanged. Want to try again?";
   }
-  return `✓ Sent ${result.amount} ${result.token} to ${result.recipientLabel}.`;
+  return `✓ Sent ${formatNaira(parseFloat(result.amountNgn))} to ${result.recipientLabel}.`;
 }

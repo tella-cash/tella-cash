@@ -17,19 +17,61 @@ export interface tellaUser {
   updated_at: string;
 }
 
+export type PendingActionKind = "send" | "beneficiary_confirm" | "beneficiary_name";
+
 export interface PendingAction {
   id: string;
   user_id: string;
-  kind: "send";
-  payload: SendPayload;
+  kind: PendingActionKind;
+  payload: SendPayload | BeneficiaryPromptPayload;
   expires_at: string;
   created_at: string;
 }
 
 export interface SendPayload {
+  /** Actual USDC amount transferred on-chain, locked in at pending-creation time. */
   amount: string;
+  /** What the user typed/requested, in Naira — shown back to them everywhere. */
+  amountNgn: string;
   token: "USDC";
   recipientUserId: string | null;
   recipientName: string | null;
   recipientAddress: string;
+  recipientWhatsappNumber: string | null;
+}
+
+/** Payload for the post-send "save this recipient as a beneficiary?" conversation. */
+export interface BeneficiaryPromptPayload {
+  recipientAddress: string;
+  recipientUserId: string | null;
+  recipientWhatsappNumber: string | null;
+  suggestedLabel: string | null;
+}
+
+export interface Beneficiary {
+  id: string;
+  user_id: string;
+  label: string;
+  recipient_user_id: string | null;
+  recipient_address: string;
+  recipient_whatsapp_number: string | null;
+  created_at: string;
+}
+
+export type TransactionDirection = "sent" | "received";
+export type TransactionStatus = "submitted" | "complete";
+
+export interface tellaTransaction {
+  id: string;
+  user_id: string;
+  direction: TransactionDirection;
+  amount_usdc: string;
+  amount_ngn: string;
+  token: string;
+  counterparty_label: string | null;
+  counterparty_address: string | null;
+  tx_hash: string | null;
+  circle_transaction_id: string | null;
+  status: TransactionStatus;
+  created_at: string;
 }

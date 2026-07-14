@@ -44,10 +44,27 @@ const newsreader = Newsreader({
   display: "swap",
 });
 
+const title = "Tella - Stablecoin payments, by message";
+const description =
+  "A messaging-based payment interface. Send and manage USDC straight from a WhatsApp chat - no app to install, no menus to learn. Just write.";
+
 export const metadata: Metadata = {
-  title: "Tella — Stablecoin payments, by message",
-  description:
-    "A messaging-based payment interface. Send and manage USDC straight from a WhatsApp chat — no app to install, no menus to learn. Just write.",
+  metadataBase: process.env.APP_BASE_URL
+    ? new URL(process.env.APP_BASE_URL)
+    : undefined,
+  title,
+  description,
+  openGraph: {
+    title,
+    description,
+    type: "website",
+    siteName: "tella",
+  },
+  twitter: {
+    card: "summary",
+    title,
+    description,
+  },
 };
 
 export default function RootLayout({

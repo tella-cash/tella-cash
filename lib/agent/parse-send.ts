@@ -6,7 +6,8 @@ export interface ParsedSendIntent {
   token: "USDC";
   recipient:
     | { kind: "phone"; whatsappNumber: string }
-    | { kind: "address"; address: string };
+    | { kind: "address"; address: string }
+    | { kind: "label"; label: string };
 }
 
 export function parseSendIntent(input: string): ParsedSendIntent | null {
@@ -39,6 +40,17 @@ export function parseSendIntent(input: string): ParsedSendIntent | null {
       amount,
       token: "USDC",
       recipient: { kind: "phone", whatsappNumber: `whatsapp:${normalized}` },
+    };
+  }
+
+  // Neither an address nor a phone number — treat it as a saved beneficiary
+  // label (e.g. "send 2000 to Chidi"). Resolution against the DB happens
+  // downstream; this parser stays pure/sync.
+  if (recipientTrimmed) {
+    return {
+      amount,
+      token: "USDC",
+      recipient: { kind: "label", label: recipientTrimmed },
     };
   }
 

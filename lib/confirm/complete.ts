@@ -1,10 +1,7 @@
 import { NextResponse } from "next/server";
 import type { ConfirmContext } from "./context";
-import {
-  executePendingSend,
-  formatSendResultForChat,
-} from "@/lib/sends/execute";
-import { notifyUser } from "@/lib/whatsapp/notify";
+import { executePendingSend } from "@/lib/sends/execute";
+import { sendReceiptAndFollowUp } from "@/lib/sends/follow-up";
 
 /**
  * Run a send that's just been authorized (biometric assertion or fresh
@@ -21,14 +18,7 @@ export async function completeConfirmedSend(
     pending: ctx.pending,
   });
 
-  try {
-    await notifyUser({
-      user: ctx.user,
-      body: formatSendResultForChat(result),
-    });
-  } catch (err) {
-    console.error("[confirm] follow-up message failed", { err });
-  }
+  await sendReceiptAndFollowUp({ user: ctx.user, result });
 
   if (!result.ok) {
     return NextResponse.json(

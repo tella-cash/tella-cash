@@ -1,15 +1,34 @@
 import { loadConfirmContext } from "@/lib/confirm/context";
 import { userHasCredential } from "@/lib/webauthn/repository";
 import type { WhatsAppChannel } from "@/lib/supabase/types";
+import { formatNaira } from "@/lib/fx/naira";
 import { ConfirmClient } from "./confirm-client";
 import { ConfirmShell } from "./confirm-shell";
 
 export const dynamic = "force-dynamic";
 
+// Deliberately generic — no amount/recipient here, since this metadata is
+// static (not derived from the token) and link-preview crawlers shouldn't
+// see anything about the pending send before the user opens it themselves.
+const title = "Confirm send · tella";
+const description = "Authorize your tella transfer with Face ID, your fingerprint, or your PIN.";
+
 export const metadata = {
-  title: "Confirm send · tella",
+  title,
+  description,
   // Don't leak the token to third parties via Referer.
   other: { referrer: "no-referrer" },
+  openGraph: {
+    title,
+    description,
+    type: "website" as const,
+    siteName: "tella",
+  },
+  twitter: {
+    card: "summary" as const,
+    title,
+    description,
+  },
 };
 
 export default async function ConfirmPage({
@@ -47,8 +66,8 @@ export default async function ConfirmPage({
       <ConfirmClient
         token={token}
         summary={{
-          amount: ctx.pending.payload.amount,
-          token: ctx.pending.payload.token,
+          amount: formatNaira(parseFloat(ctx.pending.payload.amountNgn)),
+          token: `≈ ${ctx.pending.payload.amount} USDC`,
           recipientLabel:
             ctx.pending.payload.recipientName ??
             formatAddress(ctx.pending.payload.recipientAddress),

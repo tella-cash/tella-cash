@@ -1,14 +1,26 @@
-import type { tellaUser, PendingAction } from "@/lib/supabase/types";
+import type {
+  tellaUser,
+  PendingAction,
+  SendPayload,
+  BeneficiaryPromptPayload,
+} from "@/lib/supabase/types";
 import {
   completeOnboarding,
   findUserByWhatsApp,
 } from "@/lib/users/repository";
 import {
   createPendingSend,
+  createPending,
   getActivePending,
   deletePending,
 } from "@/lib/pending_actions/repository";
+import {
+  findBeneficiaryByLabel,
+  createBeneficiary,
+} from "@/lib/beneficiaries/repository";
+import { listRecentTransactions } from "@/lib/transactions/repository";
 import { getWalletBalances } from "@/lib/wallet/circle";
+import { getUsdToNgnRate, ngnToUsd, usdToNgn, formatNaira } from "@/lib/fx/naira";
 import { parseSendIntent, parseConfirmation } from "@/lib/agent/parse-send";
 import { classifyIntent } from "@/lib/agent/intents";
 import { REPLIES, pickReply } from "@/lib/agent/replies";
@@ -51,6 +63,13 @@ function extractName(input: string): string {
     .trim();
 }
 
+/** Beneficiary labels are looser than user names — "Mum", "Landlord 2" etc. */
+function isValidBeneficiaryLabel(input: string): boolean {
+  const trimmed = input.trim();
+  if (trimmed.length < 2 || trimmed.length > 30) return false;
+  return /^[\p{L}\p{N}][\p{L}\p{N}\s'-]*[\p{L}\p{N}]$/u.test(trimmed);
+}
+
 export async function handleIncomingMessage(
   message: IncomingMessage,
 ): Promise<HandlerResult> {
@@ -74,7 +93,7 @@ export async function handleIncomingMessage(
 
   const pending = await getActivePending(user.id);
   if (pending) {
-    return handlePendingResponse({ pending, text });
+    return handlePendingResponse({ user, pending, text });
   }
 
   return handleOnboardedUser({ user, text });
@@ -117,12 +136,28 @@ async function handleNameEntry({
 }
 
 async function handlePendingResponse({
+  user,
   pending,
   text,
 }: {
+  user: tellaUser;
   pending: PendingAction;
   text: string;
 }): Promise<HandlerResult> {
+  switch (pending.kind) {
+    case "send":
+      return handlePendingSendResponse(pending, text);
+    case "beneficiary_confirm":
+      return handleBeneficiaryConfirmResponse({ user, pending, text });
+    case "beneficiary_name":
+      return handleBeneficiaryNameResponse({ user, pending, text });
+  }
+}
+
+async function handlePendingSendResponse(
+  pending: PendingAction,
+  text: string,
+): Promise<HandlerResult> {
   const decision = parseConfirmation(text);
 
   if (decision === "no") {
@@ -139,16 +174,100 @@ async function handlePendingResponse({
   return confirmResult(pending);
 }
 
+async function handleBeneficiaryConfirmResponse({
+  user,
+  pending,
+  text,
+}: {
+  user: tellaUser;
+  pending: PendingAction;
+  text: string;
+}): Promise<HandlerResult> {
+  const decision = parseConfirmation(text);
+
+  if (decision === "no") {
+    await deletePending(pending.id);
+    return { reply: "No problem, skipped. Let me know if you change your mind." };
+  }
+
+  if (decision === "yes") {
+    await createPending({
+      userId: user.id,
+      kind: "beneficiary_name",
+      payload: pending.payload,
+      ttlMinutes: 10,
+    });
+    return { reply: "Nice — what would you like to save them as?" };
+  }
+
+  const payload = pending.payload as BeneficiaryPromptPayload;
+  const label = payload.suggestedLabel ?? "this recipient";
+  return {
+    reply: `Want to save ${label} as a beneficiary? Reply *yes* or *no*.`,
+  };
+}
+
+async function handleBeneficiaryNameResponse({
+  user,
+  pending,
+  text,
+}: {
+  user: tellaUser;
+  pending: PendingAction;
+  text: string;
+}): Promise<HandlerResult> {
+  const label = text.trim();
+
+  if (!isValidBeneficiaryLabel(label)) {
+    return {
+      reply: "That doesn't look like a name I can save. Try something like *Chidi* or *Mum*.",
+    };
+  }
+
+  const existing = await findBeneficiaryByLabel(user.id, label);
+  if (existing) {
+    return {
+      reply: `You already have a beneficiary called *${existing.label}*. Try a different name.`,
+    };
+  }
+
+  const payload = pending.payload as BeneficiaryPromptPayload;
+  const result = await createBeneficiary({
+    userId: user.id,
+    label,
+    recipientUserId: payload.recipientUserId,
+    recipientAddress: payload.recipientAddress,
+    recipientWhatsappNumber: payload.recipientWhatsappNumber,
+  });
+
+  if (!result.ok) {
+    return {
+      reply: `You already have a beneficiary called *${label}*. Try a different name.`,
+    };
+  }
+
+  await deletePending(pending.id);
+
+  return {
+    reply: [
+      `✓ Saved as *${label}*.`,
+      "",
+      `Next time just say "send 2000 to ${label}".`,
+    ].join("\n"),
+  };
+}
+
 /** A confirm-send prompt + the CTA token that opens the confirm page. */
 function confirmResult(pending: PendingAction): HandlerResult {
   return { reply: buildConfirmBody(pending), confirm: { token: pending.id } };
 }
 
 function buildConfirmBody(pending: PendingAction): string {
-  const p = pending.payload;
+  const p = pending.payload as SendPayload;
   const recipientLabel = p.recipientName ?? p.recipientAddress;
   return [
-    `Confirm send: *${p.amount} ${p.token}* to ${recipientLabel}`,
+    `Confirm send: *${formatNaira(parseFloat(p.amountNgn))}* to ${recipientLabel}`,
+    `(≈ ${p.amount} USDC)`,
     "",
     "Tap *Confirm send* below to authorize with Face ID, your fingerprint, or your PIN.",
     "",
@@ -186,6 +305,8 @@ async function handleOnboardedUser({
       return { reply: await getBalanceReply(user), interactive: "buttons" };
     case "address":
       return { reply: addressReply(user), interactive: "buttons" };
+    case "history":
+      return { reply: await getHistoryReply(user), interactive: "buttons" };
     case "send":
       // Send-ish but not parseable — show them the format plus quick taps.
       return { reply: pickReply(REPLIES.sendHelp, { name }), interactive: "buttons" };
@@ -239,7 +360,7 @@ async function startSendFlow({
   if (!intent)
     return {
       reply:
-        'I couldn\'t understand that send instruction. Try "send 5 usdc to +234...".',
+        'I couldn\'t understand that send instruction. Try "send 2000 to +234..." or "send 2000 to Chidi".',
     };
 
   if (user.wallet_status !== "active" || !user.circle_wallet_id) {
@@ -252,6 +373,7 @@ async function startSendFlow({
   let recipientAddress: string;
   let recipientName: string | null = null;
   let recipientUserId: string | null = null;
+  let recipientWhatsappNumber: string | null = null;
 
   if (intent.recipient.kind === "address") {
     if (
@@ -261,7 +383,7 @@ async function startSendFlow({
       return { reply: "That's your own address — can't send to yourself." };
     }
     recipientAddress = intent.recipient.address;
-  } else {
+  } else if (intent.recipient.kind === "phone") {
     const recipient = await findUserByWhatsApp(intent.recipient.whatsappNumber);
 
     if (!recipient) {
@@ -270,7 +392,7 @@ async function startSendFlow({
           "That number isn't on tella yet 👀",
           "",
           "I can only send to tella users by phone number for now. If you have their wallet address, you can send to that directly:",
-          '• "send 5 usdc to 0x..."',
+          '• "send 2000 to 0x..."',
         ].join("\n"),
       };
     }
@@ -288,16 +410,39 @@ async function startSendFlow({
     recipientAddress = recipient.wallet_address;
     recipientName = recipient.profile_name;
     recipientUserId = recipient.id;
+    recipientWhatsappNumber = intent.recipient.whatsappNumber;
+  } else {
+    const beneficiary = await findBeneficiaryByLabel(user.id, intent.recipient.label);
+
+    if (!beneficiary) {
+      return {
+        reply: [
+          `I don't have a beneficiary called "${intent.recipient.label}" saved yet.`,
+          "",
+          "Send to their phone number or wallet address first, and I'll offer to save them for next time.",
+        ].join("\n"),
+      };
+    }
+
+    recipientAddress = beneficiary.recipient_address;
+    recipientName = beneficiary.label;
+    recipientUserId = beneficiary.recipient_user_id;
+    recipientWhatsappNumber = beneficiary.recipient_whatsapp_number;
   }
+
+  const rate = await getUsdToNgnRate();
+  const amountUsd = ngnToUsd(parseFloat(intent.amount), rate);
 
   const pending = await createPendingSend({
     userId: user.id,
     payload: {
-      amount: intent.amount,
+      amount: amountUsd.toFixed(6),
+      amountNgn: intent.amount,
       token: intent.token,
       recipientUserId,
       recipientName,
       recipientAddress,
+      recipientWhatsappNumber,
     },
   });
 
@@ -327,6 +472,45 @@ async function getBalanceReply(user: tellaUser): Promise<string> {
     });
   }
 
-  const lines = nonZero.map((b) => `• ${b.amount} ${b.symbol}`);
+  const rate = await getUsdToNgnRate();
+  const lines = nonZero.map((b) => {
+    if (b.symbol !== "USDC") return `• ${b.amount} ${b.symbol}`;
+    const naira = formatNaira(usdToNgn(parseFloat(b.amount), rate));
+    return `• ${naira} (${b.amount} USDC)`;
+  });
   return [pickReply(REPLIES.balanceIntro, { name }), "", ...lines].join("\n");
+}
+
+const DIRECTION_ICON = { sent: "↗", received: "↙" } as const;
+const STATUS_ICON = { submitted: "⏳", complete: "✅" } as const;
+
+async function getHistoryReply(user: tellaUser): Promise<string> {
+  const name = firstName(user);
+  const transactions = await listRecentTransactions(user.id, 10);
+
+  if (transactions.length === 0) {
+    return `You don't have any transactions yet, ${name}. Once you send or receive, they'll show up here.`;
+  }
+
+  const dateFormatter = new Intl.DateTimeFormat("en-NG", {
+    timeZone: "Africa/Lagos",
+    day: "2-digit",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+
+  const lines = transactions.map((t, i) => {
+    const verb = t.direction === "sent" ? "Sent" : "Received";
+    const counterparty = t.counterparty_label ?? "an external wallet";
+    const preposition = t.direction === "sent" ? "to" : "from";
+    const amount = formatNaira(parseFloat(t.amount_ngn));
+    const when = dateFormatter.format(new Date(t.created_at));
+    return [
+      `${i + 1}️⃣ ${DIRECTION_ICON[t.direction]} ${verb} ${amount} ${preposition} ${counterparty}`,
+      `    ${when} · ${STATUS_ICON[t.status]} ${t.status === "complete" ? "Complete" : "Processing"}`,
+    ].join("\n");
+  });
+
+  return [`📜 *Your last ${transactions.length} transactions*`, "", ...lines].join("\n\n");
 }

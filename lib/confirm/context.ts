@@ -1,9 +1,13 @@
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import type { PendingAction, tellaUser } from "@/lib/supabase/types";
+import type { PendingAction, SendPayload, tellaUser } from "@/lib/supabase/types";
 
 export interface ConfirmContext {
   user: tellaUser;
-  pending: PendingAction;
+  /** Narrowed to a send pending — the confirm page only ever handles sends. */
+  pending: Omit<PendingAction, "kind" | "payload"> & {
+    kind: "send";
+    payload: SendPayload;
+  };
 }
 
 /**
@@ -26,6 +30,9 @@ export async function loadConfirmContext(
   const { data: pending, error: pendingErr } = await supabase
     .from("tella_pending_action")
     .select("*")
+    // Same table now also holds beneficiary-save conversation state; the
+    // confirm page must only ever resolve a send.
+    .eq("kind", "send")
     .eq("id", token)
     .gt("expires_at", new Date().toISOString())
     .maybeSingle();
@@ -40,5 +47,8 @@ export async function loadConfirmContext(
     .single();
 
   if (userErr) throw new Error(`loadConfirmContext: ${userErr.message}`);
-  return { user: user as tellaUser, pending: pending as PendingAction };
+  return {
+    user: user as tellaUser,
+    pending: pending as ConfirmContext["pending"],
+  };
 }

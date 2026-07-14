@@ -122,9 +122,10 @@ export async function sendWhatsAppList({
             {
               title: "Options",
               rows: [
-                { id: "balance", title: "Balance", description: "Check your USDC balance" },
+                { id: "balance", title: "Balance", description: "Check your balance in Naira" },
                 { id: "address", title: "My address", description: "Get your wallet address" },
-                { id: "send", title: "Send USDC", description: "Send to a number or 0x address" },
+                { id: "send", title: "Send money", description: "Send to a number, address, or saved name" },
+                { id: "history", title: "History", description: "See your recent transactions" },
                 { id: "how", title: "How it works", description: "Learn how tella works" },
                 { id: "safe", title: "Is it safe?", description: "How your money is protected" },
               ],

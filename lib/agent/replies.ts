@@ -24,18 +24,18 @@ export function pickReply(pool: readonly string[], vars: ReplyVars = {}): string
 export const REPLIES = {
   greeting: [
     "Hey {name}! 👋\n\nWhat can I do for you? You can check your *balance*, grab your *address*, or *send* USDC.",
-    "Hi {name}! 😊 Good to see you.\n\nAsk me for your balance, your wallet address, or say something like *send 5 usdc to +234…*",
+    "Hi {name}! 😊 Good to see you.\n\nAsk me for your balance, your wallet address, or say something like *send 5000 to +234…*",
     "Yo {name}! 👋 I'm right here.\n\nWant your balance, your deposit address, or to send some USDC?",
     "Hello {name}! 🌟\n\nI can show your *balance*, share your *address*, or move *USDC* for you. What's up?",
     "Hey there {name}! Ready when you are.\n\nTry: *balance* · *my address* · *send 5 to +234…*",
   ],
 
   help: [
-    "Here's what I can do, {name} 👇\n\n• *Balance* — \"what's my balance?\"\n• *Address* — \"what's my address?\"\n• *Send* — \"send 5 usdc to +234…\"\n• *Send to a wallet* — \"send 5 usdc to 0x…\"",
-    "Happy to help, {name}! These all work:\n\n• \"balance\"\n• \"my address\"\n• \"send 5 usdc to +234…\"\n• \"send 5 usdc to 0x…\"",
+    "Here's what I can do, {name} 👇\n\n• *Balance* — \"what's my balance?\"\n• *Address* — \"what's my address?\"\n• *Send* — \"send 5000 to +234…\"\n• *Send to a wallet* — \"send 5000 to 0x…\"",
+    "Happy to help, {name}! These all work:\n\n• \"balance\"\n• \"my address\"\n• \"send 5000 to +234…\"\n• \"send 5000 to 0x…\"",
     "No problem {name} — here are your options:\n\n💰 Check balance\n📥 Get your address\n💸 Send USDC to a number or 0x address\n\nJust type what you want to do.",
-    "I've got you, {name}. Things you can ask:\n\n• *What's my balance?*\n• *What's my address?*\n• *Send 5 usdc to +234…*",
-    "Here's the menu, {name} 📋\n\n• Balance → see your funds\n• Address → receive USDC\n• Send → \"send 5 usdc to +234…\"\n\nWhat would you like?",
+    "I've got you, {name}. Things you can ask:\n\n• *What's my balance?*\n• *What's my address?*\n• *Send 5000 to +234…*",
+    "Here's the menu, {name} 📋\n\n• Balance → see your funds\n• Address → receive USDC\n• Send → \"send 5000 to +234…\"\n\nWhat would you like?",
   ],
 
   about: [
@@ -47,7 +47,7 @@ export const REPLIES = {
   ],
 
   howItWorks: [
-    "Here's the gist, {name} ✨\n\n1️⃣ You get a USDC wallet (already set up)\n2️⃣ Fund it by sending USDC to your address\n3️⃣ Send to anyone with \"send 5 usdc to +234…\"\n4️⃣ Approve each send with your PIN — done!",
+    "Here's the gist, {name} ✨\n\n1️⃣ You get a USDC wallet (already set up)\n2️⃣ Fund it by sending USDC to your address\n3️⃣ Send to anyone with \"send 5000 to +234…\"\n4️⃣ Approve each send with your PIN — done!",
     "Simple flow 👇\n\n• Tell me to send → I prepare it\n• You tap the link and confirm with your PIN\n• I move the USDC on Arc and send you the receipt\n\nYou approve every single send. Always.",
     "It works like texting money, {name}:\n\n📥 Receive at your address\n💸 Send by number or 0x address\n🔐 Confirm with your PIN\n\nThat's it — no apps, no seed phrases.",
     "Behind the scenes I run a real USDC wallet for you on Arc. You just chat.\n\nEvery send needs your PIN confirmation, so nothing moves without you.",
@@ -97,27 +97,27 @@ export const REPLIES = {
   ],
 
   sendHelp: [
-    "I can send USDC for you, {name}! Just tell me the amount and who to:\n\n• *send 5 usdc to +234…* (a phone number)\n• *send 5 usdc to 0x…* (a wallet address)",
-    "Happy to send that 💸 I just need it in this shape:\n\n*send 5 usdc to +234…*\nor\n*send 5 usdc to 0x…*",
-    "To send, give me an amount and a destination, {name}:\n\n\"send 10 usdc to +234…\"\n\"send 10 usdc to 0x…\"",
-    "Almost! Try it like this:\n\n*send <amount> usdc to <number or 0x address>*\n\ne.g. \"send 5 usdc to +234801…\"",
-    "Sure thing! Tell me how much and to whom:\n\n• by number → \"send 5 usdc to +234…\"\n• by wallet → \"send 5 usdc to 0x…\"",
+    "I can send USDC for you, {name}! Just tell me the amount and who to:\n\n• *send 5000 to +234…* (a phone number)\n• *send 5000 to 0x…* (a wallet address)",
+    "Happy to send that 💸 I just need it in this shape:\n\n*send 5000 to +234…*\nor\n*send 5000 to 0x…*",
+    "To send, give me an amount and a destination, {name}:\n\n\"send 10000 to +234…\"\n\"send 10000 to 0x…\"",
+    "Almost! Try it like this:\n\n*send <amount> to <number, 0x address, or saved name>*\n\ne.g. \"send 5000 to +234801…\"",
+    "Sure thing! Tell me how much and to whom:\n\n• by number → \"send 5000 to +234…\"\n• by wallet → \"send 5000 to 0x…\"",
   ],
 
   unknown: [
     "I'm not totally sure what you meant there, {name} 🤔\n\nI can help with your *balance*, your *address*, or a *send*. Try one of those?",
-    "Hmm, I didn't quite catch that 😅\n\nYou can say: *balance* · *my address* · *send 5 usdc to +234…*",
+    "Hmm, I didn't quite catch that 😅\n\nYou can say: *balance* · *my address* · *send 5000 to +234…*",
     "Not sure how to help with that one, {name}. Here's what I'm good at:\n\n💰 balance · 📥 address · 💸 send USDC",
     "I might've missed that 🙈 Want to check your *balance*, get your *address*, or *send* some USDC?",
-    "Let me point you the right way, {name} 👇\n\n• \"what's my balance?\"\n• \"what's my address?\"\n• \"send 5 usdc to +234…\"",
+    "Let me point you the right way, {name} 👇\n\n• \"what's my balance?\"\n• \"what's my address?\"\n• \"send 5000 to +234…\"",
     "I didn't understand that, but I'm still here 😊 Try *balance*, *address*, or *send 5 to +234…*.",
   ],
 
   empty: [
-    "Did you mean to send something, {name}? 🙂 Try \"balance\" or \"send 5 usdc to +234…\".",
+    "Did you mean to send something, {name}? 🙂 Try \"balance\" or \"send 5000 to +234…\".",
     "I'm here! Say \"my address\", \"balance\", or \"send 5 to +234…\".",
     "Looks like an empty message 😄 What can I do for you, {name}?",
-    "Ready when you are! Try \"balance\" or \"send 5 usdc to +234…\".",
+    "Ready when you are! Try \"balance\" or \"send 5000 to +234…\".",
   ],
 
   address: [

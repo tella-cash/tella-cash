@@ -1,6 +1,8 @@
 import { NextResponse, after } from "next/server";
 import { findUserByCircleWalletId } from "@/lib/users/repository";
 import { notifyUser } from "@/lib/whatsapp/notify";
+import { recordTransaction, markOutboundComplete } from "@/lib/transactions/repository";
+import { getUsdToNgnRate, usdToNgn, formatNaira } from "@/lib/fx/naira";
 
 /**
  * Subset of the Circle notification payload we care about. Circle sends
@@ -132,8 +134,12 @@ async function handleInboundTransaction(
   const token = notification.tokenSymbol ?? "USDC";
   const sourceLabel = shortenAddress(notification.sourceAddress);
 
+  const rate = await getUsdToNgnRate();
+  const amountNgn =
+    token === "USDC" ? formatNaira(usdToNgn(parseFloat(amount), rate)) : `${amount} ${token}`;
+
   const message = [
-    `💰 Received ${amount} ${token}`,
+    `💰 Received ${amountNgn}`,
     "",
     `From: ${sourceLabel}`,
     "",
@@ -141,6 +147,22 @@ async function handleInboundTransaction(
   ].join("\n");
 
   await notifyUser({ user, body: message });
+
+  try {
+    await recordTransaction({
+      userId: user.id,
+      direction: "received",
+      amountUsdc: amount,
+      amountNgn: token === "USDC" ? String(usdToNgn(parseFloat(amount), rate)) : "0",
+      token,
+      counterpartyLabel: sourceLabel,
+      counterpartyAddress: notification.sourceAddress ?? null,
+      txHash: notification.txHash ?? null,
+      status: "complete",
+    });
+  } catch (err) {
+    console.error("[circle-webhook] transaction record failed", { userId: user.id, err });
+  }
 
   console.log("[circle-webhook] notified user of inbound", {
     userId: user.id,
@@ -204,6 +226,12 @@ async function handleOutboundTransaction(
   ].join("\n");
 
   await notifyUser({ user, body: message });
+
+  try {
+    await markOutboundComplete(user.id, notification.txHash);
+  } catch (err) {
+    console.error("[circle-webhook] transaction complete-mark failed", { userId: user.id, err });
+  }
 
   console.log("[circle-webhook] notified user of outbound", {
     userId: user.id,
