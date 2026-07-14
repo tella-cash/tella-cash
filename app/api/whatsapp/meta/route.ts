@@ -186,6 +186,7 @@ async function processIncoming(msg: IncomingMessage) {
 
   const { user, isNew } = await findOrCreateUser({
     whatsappNumber: normalizedNumber,
+    channel: "meta",
   });
 
   const { reply, interactive, confirm, sideEffect } = await handleIncomingMessage({

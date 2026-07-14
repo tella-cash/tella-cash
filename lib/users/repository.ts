@@ -1,10 +1,23 @@
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import type { tellaUser } from "@/lib/supabase/types";
+import type { tellaUser, WhatsAppChannel } from "@/lib/supabase/types";
 
+/**
+ * Looks up (or creates) the user for an inbound WhatsApp message.
+ *
+ * `channel` records which provider (Twilio vs Meta Cloud API) this message
+ * arrived through. It's kept current on every inbound message — not just
+ * set at creation — so a user who moves between channels (e.g. during the
+ * Twilio→Meta migration) always gets outbound notifications (payment
+ * received, send receipts) routed through whichever API they're actually
+ * reachable on. Same underlying `whatsapp_number` matches either way, since
+ * both webhooks normalize to Twilio-style `whatsapp:+E164`.
+ */
 export async function findOrCreateUser({
   whatsappNumber,
+  channel = "twilio",
 }: {
   whatsappNumber: string;
+  channel?: WhatsAppChannel;
 }): Promise<{ user: tellaUser; isNew: boolean }> {
   const supabase = getSupabaseAdmin();
 
@@ -21,13 +34,31 @@ export async function findOrCreateUser({
   }
 
   if (existing) {
-    return { user: existing as tellaUser, isNew: false };
+    const existingUser = existing as tellaUser;
+    if (existingUser.whatsapp_channel !== channel) {
+      const { data: updated, error: updateError } = await supabase
+        .from("tella_users")
+        .update({ whatsapp_channel: channel })
+        .eq("id", existingUser.id)
+        .select()
+        .single();
+
+      if (updateError) {
+        throw new Error(
+          `findOrCreateUser channel update failed: ${updateError.message}`,
+          { cause: updateError },
+        );
+      }
+      return { user: updated as tellaUser, isNew: false };
+    }
+    return { user: existingUser, isNew: false };
   }
 
   const { data: created, error: createError } = await supabase
     .from("tella_users")
     .insert({
       whatsapp_number: whatsappNumber,
+      whatsapp_channel: channel,
       onboarding_step: "awaiting_name",
     })
     .select()

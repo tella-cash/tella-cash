@@ -5,7 +5,7 @@ import {
   executePendingSend,
   formatSendResultForChat,
 } from "@/lib/sends/execute";
-import { sendWhatsAppMessage } from "@/lib/twilio/client";
+import { notifyUser } from "@/lib/whatsapp/notify";
 
 export const dynamic = "force-dynamic";
 
@@ -59,8 +59,8 @@ export async function POST(request: Request) {
   });
 
   try {
-    await sendWhatsAppMessage({
-      to: ctx.user.whatsapp_number,
+    await notifyUser({
+      user: ctx.user,
       body: formatSendResultForChat(result),
     });
   } catch (err) {

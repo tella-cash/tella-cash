@@ -4,7 +4,7 @@ import {
   executePendingSend,
   formatSendResultForChat,
 } from "@/lib/sends/execute";
-import { sendWhatsAppMessage } from "@/lib/twilio/client";
+import { notifyUser } from "@/lib/whatsapp/notify";
 
 /**
  * Run a send that's just been authorized (biometric assertion or fresh
@@ -22,8 +22,8 @@ export async function completeConfirmedSend(
   });
 
   try {
-    await sendWhatsAppMessage({
-      to: ctx.user.whatsapp_number,
+    await notifyUser({
+      user: ctx.user,
       body: formatSendResultForChat(result),
     });
   } catch (err) {

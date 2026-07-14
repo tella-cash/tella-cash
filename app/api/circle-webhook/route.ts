@@ -1,6 +1,6 @@
 import { NextResponse, after } from "next/server";
 import { findUserByCircleWalletId } from "@/lib/users/repository";
-import { sendWhatsAppMessage } from "@/lib/twilio/client";
+import { notifyUser } from "@/lib/whatsapp/notify";
 
 /**
  * Subset of the Circle notification payload we care about. Circle sends
@@ -140,10 +140,7 @@ async function handleInboundTransaction(
     `Ask me "what's my balance?" to see your updated total.`,
   ].join("\n");
 
-  await sendWhatsAppMessage({
-    to: user.whatsapp_number,
-    body: message,
-  });
+  await notifyUser({ user, body: message });
 
   console.log("[circle-webhook] notified user of inbound", {
     userId: user.id,
@@ -206,10 +203,7 @@ async function handleOutboundTransaction(
     buildExplorerTxUrl(notification.txHash),
   ].join("\n");
 
-  await sendWhatsAppMessage({
-    to: user.whatsapp_number,
-    body: message,
-  });
+  await notifyUser({ user, body: message });
 
   console.log("[circle-webhook] notified user of outbound", {
     userId: user.id,

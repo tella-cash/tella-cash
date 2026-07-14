@@ -1,9 +1,11 @@
 export type OnboardingStep = "awaiting_name" | "completed";
 export type WalletStatus = "none" | "pending" | "active" | "failed";
+export type WhatsAppChannel = "twilio" | "meta";
 
 export interface tellaUser {
   id: string;
   whatsapp_number: string;
+  whatsapp_channel: WhatsAppChannel;
   profile_name: string | null;
   onboarding_step: OnboardingStep;
   circle_wallet_id: string | null;
