@@ -19,7 +19,7 @@ import {
 } from "@/lib/beneficiaries/repository";
 import { listRecentTransactions } from "@/lib/transactions/repository";
 import { getWalletBalances } from "@/lib/wallet/circle";
-import { getUsdToNgnRate, usdToNgn, formatNaira } from "@/lib/fx/naira";
+import { getUsdToNgnRate, usdToNgn } from "@/lib/fx/naira";
 import { parseSendIntent, parseConfirmation } from "@/lib/agent/parse-send";
 import { classifyIntent } from "@/lib/agent/intents";
 import { REPLIES, pickReply } from "@/lib/agent/replies";
@@ -248,7 +248,7 @@ function buildConfirmBody(pending: PendingSend): string {
   const p = pending.payload;
   const recipientLabel = p.recipientName ?? p.recipientAddress;
   return [
-    `Confirm send: *${p.amount} USDC* (≈ ${formatNaira(parseFloat(p.amountNgn))}) to ${recipientLabel}`,
+    `Confirm send: *${p.amount} USDC* to ${recipientLabel}`,
     "",
     "Tap *Confirm send* below to authorize with Face ID, your fingerprint, or your PIN.",
     "",
@@ -340,7 +340,7 @@ async function cancelMostRecentPendingSend(user: tellaUser): Promise<HandlerResu
       : "";
 
   return {
-    reply: `Cancelled your pending send of ${p.amount} USDC (≈ ${formatNaira(parseFloat(p.amountNgn))}) to ${recipientLabel}.${remainingNote}`,
+    reply: `Cancelled your pending send of ${p.amount} USDC to ${recipientLabel}.${remainingNote}`,
     interactive: "buttons",
   };
 }
@@ -478,12 +478,7 @@ async function getBalanceReply(user: tellaUser): Promise<string> {
     });
   }
 
-  const rate = await getUsdToNgnRate();
-  const lines = nonZero.map((b) => {
-    if (b.symbol !== "USDC") return `• ${b.amount} ${b.symbol}`;
-    const naira = formatNaira(usdToNgn(parseFloat(b.amount), rate));
-    return `• ${b.amount} USDC (≈ ${naira})`;
-  });
+  const lines = nonZero.map((b) => `• ${b.amount} ${b.symbol}`);
   return [pickReply(REPLIES.balanceIntro, { name }), "", ...lines].join("\n");
 }
 
@@ -510,7 +505,7 @@ async function getHistoryReply(user: tellaUser): Promise<string> {
     const verb = t.direction === "sent" ? "Sent" : "Received";
     const counterparty = t.counterparty_label ?? "an external wallet";
     const preposition = t.direction === "sent" ? "to" : "from";
-    const amount = `${t.amount_usdc} USDC (≈ ${formatNaira(parseFloat(t.amount_ngn))})`;
+    const amount = `${t.amount_usdc} USDC`;
     const when = dateFormatter.format(new Date(t.created_at));
     return [
       `${i + 1}️⃣ ${DIRECTION_ICON[t.direction]} ${verb} ${amount} ${preposition} ${counterparty}`,

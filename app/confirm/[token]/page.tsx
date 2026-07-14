@@ -1,7 +1,6 @@
 import { loadConfirmContext } from "@/lib/confirm/context";
 import { userHasCredential } from "@/lib/webauthn/repository";
 import type { WhatsAppChannel } from "@/lib/supabase/types";
-import { formatNaira } from "@/lib/fx/naira";
 import { ConfirmClient } from "./confirm-client";
 import { ConfirmShell } from "./confirm-shell";
 
@@ -67,7 +66,7 @@ export default async function ConfirmPage({
         token={token}
         summary={{
           amount: ctx.pending.payload.amount,
-          token: `USDC (≈ ${formatNaira(parseFloat(ctx.pending.payload.amountNgn))})`,
+          token: "USDC",
           recipientLabel:
             ctx.pending.payload.recipientName ??
             formatAddress(ctx.pending.payload.recipientAddress),

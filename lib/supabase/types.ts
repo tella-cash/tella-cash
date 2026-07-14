@@ -49,9 +49,12 @@ export interface PendingSend {
 }
 
 export interface SendPayload {
-  /** Actual USDC amount transferred on-chain, locked in at pending-creation time. */
+  /** The USDC amount the user typed and what's transferred on-chain. */
   amount: string;
-  /** What the user typed/requested, in Naira — shown back to them everywhere. */
+  /**
+   * Naira equivalent at pending-creation time, computed for internal
+   * record-keeping only — not shown in any user-facing message.
+   */
   amountNgn: string;
   token: "USDC";
   recipientUserId: string | null;

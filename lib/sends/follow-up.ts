@@ -6,7 +6,6 @@ import { findBeneficiaryByAddress } from "@/lib/beneficiaries/repository";
 import { createPendingBeneficiaryPrompt } from "@/lib/pending_actions/repository";
 import { listActivePendingSends } from "@/lib/pending_sends/repository";
 import { recordTransaction } from "@/lib/transactions/repository";
-import { formatNaira } from "@/lib/fx/naira";
 import { buildConfirmUrl } from "@/lib/confirm/url";
 
 /**
@@ -88,7 +87,7 @@ async function remindOtherPendingSends(user: tellaUser): Promise<void> {
   const lines = others.map((pending) => {
     const p = pending.payload;
     const recipientLabel = p.recipientName ?? p.recipientAddress;
-    return `• ${p.amount} USDC (≈ ${formatNaira(parseFloat(p.amountNgn))}) to ${recipientLabel} — ${buildConfirmUrl(pending.id)}`;
+    return `• ${p.amount} USDC to ${recipientLabel} — ${buildConfirmUrl(pending.id)}`;
   });
 
   const intro =

@@ -2,7 +2,7 @@ import { NextResponse, after } from "next/server";
 import { findUserByCircleWalletId } from "@/lib/users/repository";
 import { notifyUser } from "@/lib/whatsapp/notify";
 import { recordTransaction, markOutboundComplete } from "@/lib/transactions/repository";
-import { getUsdToNgnRate, usdToNgn, formatNaira } from "@/lib/fx/naira";
+import { getUsdToNgnRate, usdToNgn } from "@/lib/fx/naira";
 
 /**
  * Subset of the Circle notification payload we care about. Circle sends
@@ -135,13 +135,9 @@ async function handleInboundTransaction(
   const sourceLabel = shortenAddress(notification.sourceAddress);
 
   const rate = await getUsdToNgnRate();
-  const amountLabel =
-    token === "USDC"
-      ? `${amount} USDC (≈ ${formatNaira(usdToNgn(parseFloat(amount), rate))})`
-      : `${amount} ${token}`;
 
   const message = [
-    `💰 Received ${amountLabel}`,
+    `💰 Received ${amount} ${token}`,
     "",
     `From: ${sourceLabel}`,
     "",

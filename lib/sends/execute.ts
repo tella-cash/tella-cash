@@ -1,7 +1,6 @@
 import type { tellaUser, PendingSend } from "@/lib/supabase/types";
 import { deletePendingSend } from "@/lib/pending_sends/repository";
 import { sendUsdc } from "@/lib/wallet/circle";
-import { formatNaira } from "@/lib/fx/naira";
 
 export type ExecuteSendResult =
   | {
@@ -75,5 +74,5 @@ export function formatSendResultForChat(result: ExecuteSendResult): string {
     }
     return "I couldn't complete that transfer. Your balance is unchanged. Want to try again?";
   }
-  return `✓ Sent ${result.amount} USDC (≈ ${formatNaira(parseFloat(result.amountNgn))}) to ${result.recipientLabel}.`;
+  return `✓ Sent ${result.amount} USDC to ${result.recipientLabel}.`;
 }

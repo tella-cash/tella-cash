@@ -1,6 +1,7 @@
 /**
- * USD→NGN exchange rate lookup. tella prices everything in Naira for users
- * but moves USDC on-chain, so every balance/send needs this conversion.
+ * USD→NGN exchange rate lookup. USDC is the user-facing unit everywhere —
+ * this is used only to compute a Naira figure for internal record-keeping
+ * (stored on sends/transactions), not for anything shown to users.
  *
  * Primary + mirror are both free, keyless, static-JSON endpoints (no rate
  * limit) from the fawazahmed0/currency-api project. If both are
