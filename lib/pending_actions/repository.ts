@@ -1,26 +1,31 @@
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type {
-  BeneficiaryPromptPayload,
+  FlowPendingPayload,
   PendingAction,
   PendingActionKind,
 } from "@/lib/supabase/types";
 
-const BENEFICIARY_TTL_MINUTES = 10;
+// Mirrors sendam-ai's own FLOW_TOKEN_TTL_MS default (15 min). This row's TTL
+// doesn't need to match the token's real expiry exactly — the token itself
+// is authoritative and sendam-ai rejects it once truly expired (surfaced as
+// a decodeFollowUp() throw, handled in handler.ts); this is just a
+// reasonable local bound for "was a flow started recently."
+const FLOW_TTL_MINUTES = 15;
 
 /**
- * Beneficiary-save conversation state only (see PendingAction's doc
- * comment in supabase/types.ts). One active conversation per user —
- * upsert on user_id is correct here, unlike pending sends.
+ * Multi-turn flow conversation state only (see PendingAction's doc comment
+ * in supabase/types.ts). One active conversation per user — upsert on
+ * user_id is correct here, unlike pending sends.
  */
 export async function createPending({
   userId,
   kind,
   payload,
-  ttlMinutes = BENEFICIARY_TTL_MINUTES,
+  ttlMinutes = FLOW_TTL_MINUTES,
 }: {
   userId: string;
   kind: PendingActionKind;
-  payload: BeneficiaryPromptPayload;
+  payload: FlowPendingPayload;
   ttlMinutes?: number;
 }): Promise<PendingAction> {
   const supabase = getSupabaseAdmin();
@@ -39,14 +44,16 @@ export async function createPending({
   return data as PendingAction;
 }
 
-export function createPendingBeneficiaryPrompt({
+export function createPendingFlow({
   userId,
-  payload,
+  flow,
+  token,
 }: {
   userId: string;
-  payload: BeneficiaryPromptPayload;
+  flow: string;
+  token: string;
 }): Promise<PendingAction> {
-  return createPending({ userId, kind: "beneficiary_confirm", payload });
+  return createPending({ userId, kind: "flow", payload: { flow, token } });
 }
 
 export async function getActivePending(userId: string): Promise<PendingAction | null> {

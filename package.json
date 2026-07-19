@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx lib/agent/intents.test.ts && tsx lib/agent/parse-amount.test.ts"
+    "test": "tsx lib/agent/map-decoded-send.test.ts"
   },
   "dependencies": {
     "@circle-fin/developer-controlled-wallets": "^10.3.1",

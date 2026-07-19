@@ -3,7 +3,9 @@ import type { ExecuteSendResult } from "@/lib/sends/execute";
 import { formatSendResultForChat } from "@/lib/sends/execute";
 import { notifyUser } from "@/lib/whatsapp/notify";
 import { findBeneficiaryByAddress } from "@/lib/beneficiaries/repository";
-import { createPendingBeneficiaryPrompt } from "@/lib/pending_actions/repository";
+import { createPendingFlow } from "@/lib/pending_actions/repository";
+import { flowStart } from "@/lib/sendam-ai/client";
+import { SAVE_BENEFICIARY_FLOW, SAVE_BENEFICIARY_AWAITING } from "@/lib/sendam-ai/flows";
 import { listActivePendingSends } from "@/lib/pending_sends/repository";
 import { recordTransaction } from "@/lib/transactions/repository";
 import { buildConfirmUrl } from "@/lib/confirm/url";
@@ -55,15 +57,22 @@ export async function sendReceiptAndFollowUp({
     const existing = await findBeneficiaryByAddress(user.id, result.recipientAddress);
     if (existing) return;
 
-    await createPendingBeneficiaryPrompt({
-      userId: user.id,
-      payload: {
+    // Backend-initiated flow start: we already know exactly what we want to
+    // ask, there's no ambiguous text to classify, so this mints a token
+    // directly rather than going through /decode. We still author the
+    // question text ourselves — sendam-ai's decoder never does that, only
+    // interprets replies (see docs/INTEGRATION.md in that repo).
+    const { token } = await flowStart(
+      SAVE_BENEFICIARY_FLOW,
+      {
         recipientAddress: result.recipientAddress,
         recipientUserId: result.recipientUserId,
         recipientWhatsappNumber: result.recipientWhatsappNumber,
         suggestedLabel: result.recipientLabel,
       },
-    });
+      SAVE_BENEFICIARY_AWAITING,
+    );
+    await createPendingFlow({ userId: user.id, flow: SAVE_BENEFICIARY_FLOW, token });
 
     await notifyUser({
       user,

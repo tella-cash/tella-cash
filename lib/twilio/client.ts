@@ -45,7 +45,7 @@ export async function sendWhatsAppMessage({
  *
  * Both menus carry classifier-friendly button/row titles (e.g. "Balance"),
  * so when a user taps one, the inbound message body routes through the same
- * `classifyIntent` as typed text — no separate payload handling needed.
+ * sendam-ai /decode call as typed text — no separate payload handling needed.
  *
  * If the template SID isn't configured yet, we fall back to a plain-text
  * message so the agent keeps working before the templates are provisioned.

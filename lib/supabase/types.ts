@@ -17,19 +17,23 @@ export interface tellaUser {
   updated_at: string;
 }
 
-export type PendingActionKind = "beneficiary_confirm" | "beneficiary_name";
+export type PendingActionKind = "flow";
 
 /**
- * Beneficiary-save conversation state only — one active conversation per
- * user, upserted on user_id. Pending sends live in their own table
- * (`PendingSend` below) so that starting a new send never collides with
- * this or with another still-pending send.
+ * Backend-initiated multi-turn conversation state — one active conversation
+ * per user, upserted on user_id. Runs entirely through sendam-ai's stateless
+ * POST /flow/start + POST /decode {token} mechanism (see
+ * lib/sendam-ai/client.ts): this row just stores the opaque token between
+ * messages and forwards it back, it never parses the token's contents.
+ * Pending sends live in their own table (`PendingSend` below) so that
+ * starting a new send never collides with this or with another still-
+ * pending send.
  */
 export interface PendingAction {
   id: string;
   user_id: string;
   kind: PendingActionKind;
-  payload: BeneficiaryPromptPayload;
+  payload: FlowPendingPayload;
   expires_at: string;
   created_at: string;
 }
@@ -63,12 +67,12 @@ export interface SendPayload {
   recipientWhatsappNumber: string | null;
 }
 
-/** Payload for the post-send "save this recipient as a beneficiary?" conversation. */
-export interface BeneficiaryPromptPayload {
-  recipientAddress: string;
-  recipientUserId: string | null;
-  recipientWhatsappNumber: string | null;
-  suggestedLabel: string | null;
+/** Payload for a pending flow conversation: the flow name (backend-defined,
+ *  opaque to sendam-ai) and the signed continuation token to forward on the
+ *  user's next reply. */
+export interface FlowPendingPayload {
+  flow: string;
+  token: string;
 }
 
 export interface Beneficiary {

@@ -4,9 +4,9 @@ import {
   findUserByWhatsApp,
 } from "@/lib/users/repository";
 import {
-  createPending,
   getActivePending,
   deletePending,
+  createPendingFlow,
 } from "@/lib/pending_actions/repository";
 import {
   createPendingSend,
@@ -20,8 +20,10 @@ import {
 import { listRecentTransactions } from "@/lib/transactions/repository";
 import { getWalletBalances } from "@/lib/wallet/circle";
 import { getUsdToNgnRate, usdToNgn } from "@/lib/fx/naira";
-import { parseSendIntent, parseConfirmation } from "@/lib/agent/parse-send";
-import { classifyIntent } from "@/lib/agent/intents";
+import type { ParsedSendIntent } from "@/lib/agent/parse-send";
+import { mapDecodedSend } from "@/lib/agent/map-decoded-send";
+import { decode, decodeFollowUp, flowStart, type FollowUpSlots } from "@/lib/sendam-ai/client";
+import { SAVE_BENEFICIARY_FLOW, nextQuestionFor } from "@/lib/sendam-ai/flows";
 import { REPLIES, pickReply } from "@/lib/agent/replies";
 
 interface IncomingMessage {
@@ -97,16 +99,16 @@ export async function handleIncomingMessage(
     return handleNameEntry({ user, text });
   }
 
-  // Beneficiary-save is a short, mandatory back-and-forth (yes/no, then a
-  // name) — every message must be captured until it resolves. Pending
-  // *sends* are deliberately NOT intercepted here: a user can have several
-  // at once, and typing a new "send X to Y" while one is outstanding must
-  // start a fresh one rather than being swallowed by an old prompt (see
-  // handleOnboardedUser, which checks parseSendIntent before anything
-  // pending-send-related).
-  const beneficiaryPending = await getActivePending(user.id);
-  if (beneficiaryPending) {
-    return handleBeneficiaryPendingResponse({ user, pending: beneficiaryPending, text });
+  // A backend-initiated multi-turn flow (e.g. beneficiary-save) is a short,
+  // mandatory back-and-forth — every message must be captured until it
+  // resolves. Pending *sends* are deliberately NOT intercepted here: a user
+  // can have several at once, and typing a new "send X to Y" while one is
+  // outstanding must start a fresh one rather than being swallowed by an
+  // old prompt (see handleOnboardedUser, which checks for a structured send
+  // before anything pending-send-related).
+  const flowPending = await getActivePending(user.id);
+  if (flowPending) {
+    return handleFlowPendingResponse({ user, pending: flowPending, text });
   }
 
   return handleOnboardedUser({ user, text });
@@ -136,11 +138,11 @@ async function handleNameEntry({
     name: candidate,
   });
 
-  const firstName = updated.profile_name?.split(" ")[0] ?? candidate;
+  const firstNameValue = updated.profile_name?.split(" ")[0] ?? candidate;
 
   return {
     reply: [
-      `Nice to meet you, ${firstName}! 🎉`,
+      `Nice to meet you, ${firstNameValue}! 🎉`,
       "",
       "I'm setting up your tella wallet now — give me a few seconds. I'll send your address as soon as it's ready.",
     ].join("\n"),
@@ -148,7 +150,12 @@ async function handleNameEntry({
   };
 }
 
-async function handleBeneficiaryPendingResponse({
+/**
+ * Interprets one reply within a pending multi-turn flow via sendam-ai's
+ * stateless token mechanism. `pending.payload` only ever holds an opaque
+ * `{ flow, token }` — this function forwards the token, never parses it.
+ */
+async function handleFlowPendingResponse({
   user,
   pending,
   text,
@@ -157,85 +164,95 @@ async function handleBeneficiaryPendingResponse({
   pending: PendingAction;
   text: string;
 }): Promise<HandlerResult> {
-  switch (pending.kind) {
-    case "beneficiary_confirm":
-      return handleBeneficiaryConfirmResponse({ user, pending, text });
-    case "beneficiary_name":
-      return handleBeneficiaryNameResponse({ user, pending, text });
+  const { flow, token } = pending.payload;
+  const name = firstName(user);
+
+  let result: Awaited<ReturnType<typeof decodeFollowUp>>;
+  try {
+    result = await decodeFollowUp(text, token);
+  } catch (err) {
+    // Leave the pending row untouched so the user's next reply retries
+    // against the same token — never fabricate progress on our own outage,
+    // same principle sendam-ai itself follows.
+    console.error("[agent] decodeFollowUp failed", { userId: user.id, flow, err });
+    return { reply: "Sorry, having a little trouble right now — could you say that again?" };
   }
-}
 
-async function handleBeneficiaryConfirmResponse({
-  user,
-  pending,
-  text,
-}: {
-  user: tellaUser;
-  pending: PendingAction;
-  text: string;
-}): Promise<HandlerResult> {
-  const decision = parseConfirmation(text);
-
-  if (decision === "no") {
+  // Early termination on decline: our own business rule layered on top of
+  // the generic token mechanism — sendam-ai doesn't know "declining ends
+  // the flow," it just resolves whatever slots it can. Checked before
+  // `status`, since a lone "no" reply can leave the flow IN_PROGRESS
+  // (beneficiaryName still unresolved) with confirmed already false.
+  if (result.slots["confirmed"] === false) {
     await deletePending(pending.id);
     return { reply: "No problem, skipped. Let me know if you change your mind." };
   }
 
-  if (decision === "yes") {
-    await createPending({
-      userId: user.id,
-      kind: "beneficiary_name",
-      payload: pending.payload,
-      ttlMinutes: 10,
-    });
-    return { reply: "Nice — what would you like to save them as?" };
+  if (result.status === "IN_PROGRESS") {
+    await createPendingFlow({ userId: user.id, flow: result.flow, token: result.token });
+    return { reply: nextQuestionFor(result.flow, result.slots) ?? "Sorry, could you say that again?" };
   }
 
-  const label = pending.payload.suggestedLabel ?? "this recipient";
-  return {
-    reply: `Want to save ${label} as a beneficiary? Reply *yes* or *no*.`,
-  };
+  if (flow === SAVE_BENEFICIARY_FLOW) {
+    return completeSaveBeneficiaryFlow({ user, pending, slots: result.slots });
+  }
+
+  await deletePending(pending.id);
+  return { reply: pickReply(REPLIES.unknown, { name }), interactive: "buttons" };
 }
 
-async function handleBeneficiaryNameResponse({
+async function completeSaveBeneficiaryFlow({
   user,
   pending,
-  text,
+  slots,
 }: {
   user: tellaUser;
   pending: PendingAction;
-  text: string;
+  slots: FollowUpSlots;
 }): Promise<HandlerResult> {
-  const label = text.trim();
+  await deletePending(pending.id);
 
+  const label = (typeof slots["beneficiaryName"] === "string" ? slots["beneficiaryName"] : "").trim();
+
+  // The model proposes a name — we still validate it ourselves before
+  // persisting, same as any other proposal from sendam-ai.
   if (!isValidBeneficiaryLabel(label)) {
-    return {
-      reply: "That doesn't look like a name I can save. Try something like *Chidi* or *Mum*.",
-    };
+    return reissueNamePrompt({
+      user,
+      slots,
+      replyPrefix: "That doesn't look like a name I can save. Try something like *Chidi* or *Mum*.",
+    });
   }
+
+  const recipientAddress = String(slots["recipientAddress"] ?? "");
+  const recipientUserId = typeof slots["recipientUserId"] === "string" ? slots["recipientUserId"] : null;
+  const recipientWhatsappNumber =
+    typeof slots["recipientWhatsappNumber"] === "string" ? slots["recipientWhatsappNumber"] : null;
 
   const existing = await findBeneficiaryByLabel(user.id, label);
   if (existing) {
-    return {
-      reply: `You already have a beneficiary called *${existing.label}*. Try a different name.`,
-    };
+    return reissueNamePrompt({
+      user,
+      slots,
+      replyPrefix: `You already have a beneficiary called *${existing.label}*. Try a different name.`,
+    });
   }
 
   const result = await createBeneficiary({
     userId: user.id,
     label,
-    recipientUserId: pending.payload.recipientUserId,
-    recipientAddress: pending.payload.recipientAddress,
-    recipientWhatsappNumber: pending.payload.recipientWhatsappNumber,
+    recipientUserId,
+    recipientAddress,
+    recipientWhatsappNumber,
   });
 
   if (!result.ok) {
-    return {
-      reply: `You already have a beneficiary called *${label}*. Try a different name.`,
-    };
+    return reissueNamePrompt({
+      user,
+      slots,
+      replyPrefix: `You already have a beneficiary called *${label}*. Try a different name.`,
+    });
   }
-
-  await deletePending(pending.id);
 
   return {
     reply: [
@@ -244,6 +261,27 @@ async function handleBeneficiaryNameResponse({
       `Next time just say "send 5 usdc to ${label}".`,
     ].join("\n"),
   };
+}
+
+/**
+ * The original token is already COMPLETE/consumed at this point — mints a
+ * fresh single-slot token for just the name rather than trying to continue
+ * a finished flow.
+ */
+async function reissueNamePrompt({
+  user,
+  slots,
+  replyPrefix,
+}: {
+  user: tellaUser;
+  slots: FollowUpSlots;
+  replyPrefix: string;
+}): Promise<HandlerResult> {
+  const { token } = await flowStart(SAVE_BENEFICIARY_FLOW, slots, [
+    { slot: "beneficiaryName", type: "FREE_TEXT", description: "what should we call them?" },
+  ]);
+  await createPendingFlow({ userId: user.id, flow: SAVE_BENEFICIARY_FLOW, token });
+  return { reply: replyPrefix };
 }
 
 /** A confirm-send prompt + the CTA token that opens the confirm page. */
@@ -283,44 +321,59 @@ async function handleOnboardedUser({
   // Debug health-check stays deterministic.
   if (trimmed.toLowerCase() === "ping") return { reply: "pong ✓" };
 
-  // A structured send carries real parameters (amount + recipient), so it
-  // always wins over keyword classification.
-  const intent = parseSendIntent(text);
-  if (intent) return startSendFlow({ user, intent });
+  let decoded: Awaited<ReturnType<typeof decode>>;
+  try {
+    decoded = await decode(text, { userId: user.id });
+  } catch (err) {
+    // A sendam-ai outage/misconfiguration must not cost the user their
+    // message — fall through to the generic help reply.
+    console.error("[agent] decode failed", { userId: user.id, err });
+    return { reply: pickReply(REPLIES.unknown, { name }), interactive: "buttons" };
+  }
 
-  switch (classifyIntent(text)) {
-    case "balance":
+  // A structured send carries real parameters (amount + recipient), so it
+  // always wins over the general intent switch below.
+  const sendIntent: ParsedSendIntent | null = mapDecodedSend(decoded);
+  if (sendIntent) return startSendFlow({ user, intent: sendIntent });
+
+  switch (decoded.intent) {
+    case "BALANCE":
       return { ...(await getBalanceReply(user)), interactive: "buttons" };
-    case "address":
+    case "ADDRESS":
       return { ...addressReply(user), interactive: "buttons" };
-    case "history":
+    case "HISTORY":
       return { reply: await getHistoryReply(user), interactive: "buttons" };
-    case "send":
+    case "SEND":
       // Send-ish but not parseable — show them the format plus quick taps.
       return { reply: pickReply(REPLIES.sendHelp, { name }), interactive: "buttons" };
-    case "greeting":
+    case "GREETING":
       // Quick triage with tappable buttons.
       return { reply: pickReply(REPLIES.greeting, { name }), interactive: "buttons" };
-    case "help":
+    case "HELP":
       // Fuller menu with descriptions.
       return { reply: pickReply(REPLIES.help, { name }), interactive: "list" };
-    case "about":
+    case "ABOUT":
       return { reply: pickReply(REPLIES.about, { name }), interactive: "buttons" };
-    case "how_it_works":
+    case "HOW_IT_WORKS":
       return { reply: pickReply(REPLIES.howItWorks, { name }), interactive: "buttons" };
-    case "fees":
+    case "FEES":
       return { reply: pickReply(REPLIES.fees, { name }), interactive: "buttons" };
-    case "security":
+    case "SECURITY":
       return { reply: pickReply(REPLIES.security, { name }), interactive: "buttons" };
-    case "thanks":
+    case "THANKS":
       return { reply: pickReply(REPLIES.thanks, { name }), interactive: "buttons" };
-    case "goodbye":
+    case "GOODBYE":
       // No menu on a sign-off — let the conversation rest.
       return { reply: pickReply(REPLIES.goodbye, { name }) };
-    case "affirm":
+    case "AFFIRM":
       return { reply: pickReply(REPLIES.affirm, { name }), interactive: "buttons" };
-    case "cancel":
+    case "CANCEL":
       return cancelMostRecentPendingSend(user);
+    // No tella equivalent — wallets auto-provision on onboarding, and
+    // there's no "list beneficiaries" feature yet.
+    case "CREATE_WALLET":
+    case "LIST_CONTACTS":
+    case "UNKNOWN":
     default:
       // Help them recover with the quick menu.
       return { reply: pickReply(REPLIES.unknown, { name }), interactive: "buttons" };
@@ -371,7 +424,7 @@ async function startSendFlow({
   intent,
 }: {
   user: tellaUser;
-  intent: ReturnType<typeof parseSendIntent>;
+  intent: ParsedSendIntent | null;
 }): Promise<HandlerResult> {
   if (!intent)
     return {
