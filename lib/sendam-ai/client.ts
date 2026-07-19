@@ -59,6 +59,8 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   if (!SIGNING_SECRET) throw new Error("Missing SENDAM_AI_SIGNING_SECRET");
 
   const rawBody = JSON.stringify(body);
+  console.log(`[sendam-ai] -> ${path}`, rawBody);
+
   const res = await fetch(`${BASE_URL}${path}`, {
     method: "POST",
     headers: {
@@ -68,11 +70,15 @@ async function post<T>(path: string, body: unknown): Promise<T> {
     body: rawBody,
   });
 
+  const resText = await res.text();
+
   if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`sendam-ai ${path} failed (${res.status}): ${errText}`);
+    console.error(`[sendam-ai] <- ${path} (${res.status})`, resText);
+    throw new Error(`sendam-ai ${path} failed (${res.status}): ${resText}`);
   }
-  return (await res.json()) as T;
+
+  console.log(`[sendam-ai] <- ${path} (${res.status})`, resText);
+  return JSON.parse(resText) as T;
 }
 
 /** Classifies one message. Throws on any failure — the caller decides the
