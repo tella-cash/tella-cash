@@ -33,6 +33,10 @@ export interface DecodedIntent {
   asset: string | null;
   recipient: string | null;
   confidence: number;
+  // Ready-to-send, tone-matched reply. Only ever populated for GREETING —
+  // every other intent leaves it null and still needs a template on our
+  // side. Optional because older decoder deploys don't return this field.
+  reply?: string | null;
 }
 
 export interface AwaitingSlot {

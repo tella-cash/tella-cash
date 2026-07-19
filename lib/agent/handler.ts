@@ -347,8 +347,13 @@ async function handleOnboardedUser({
       // Send-ish but not parseable — show them the format plus quick taps.
       return { reply: pickReply(REPLIES.sendHelp, { name }), interactive: "buttons" };
     case "GREETING":
-      // Quick triage with tappable buttons.
-      return { reply: pickReply(REPLIES.greeting, { name }), interactive: "buttons" };
+      // sendam-ai reads the tone of the user's own greeting and composes a
+      // matching reply; fall back to our fixed template on older deploys
+      // that don't send one yet.
+      return {
+        reply: decoded.reply || pickReply(REPLIES.greeting, { name }),
+        interactive: "buttons",
+      };
     case "HELP":
       // Fuller menu with descriptions.
       return { reply: pickReply(REPLIES.help, { name }), interactive: "list" };
