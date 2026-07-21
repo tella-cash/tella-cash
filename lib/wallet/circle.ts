@@ -102,6 +102,21 @@ export async function getWalletBalances(
 }
 
 /**
+ * Fetches wallet balances and formats them as "{amount} {symbol}" lines,
+ * dropping zero-balance tokens. Shared by the "what's my balance?" agent
+ * reply and the money-received notification, so both surfaces show the
+ * same numbers in the same shape.
+ */
+export async function getFormattedBalanceLines(
+  walletId: string,
+): Promise<string[]> {
+  const balances = await getWalletBalances(walletId);
+  return balances
+    .filter((b) => parseFloat(b.amount) > 0)
+    .map((b) => `${b.amount} ${b.symbol}`);
+}
+
+/**
  * Resolves a token's ticker symbol from its Circle-internal UUID.
  *
  * Circle's transaction webhooks (`transactions.inbound`/`.outbound`) only

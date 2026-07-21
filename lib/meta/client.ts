@@ -70,6 +70,32 @@ export async function sendWhatsAppMessage({
   );
 }
 
+interface SendWhatsAppImageArgs {
+  to: string;
+  imageUrl: string;
+  caption?: string;
+}
+
+/**
+ * Sends an image message via Meta's Graph API, referencing the image by a
+ * publicly reachable HTTPS URL rather than uploading raw bytes — Meta fetches
+ * it directly, same approach as Twilio's `mediaUrl`.
+ */
+export async function sendWhatsAppImage({
+  to,
+  imageUrl,
+  caption,
+}: SendWhatsAppImageArgs): Promise<string> {
+  return postToGraph(
+    normalizeRecipient(to),
+    {
+      type: "image",
+      image: { link: imageUrl, ...(caption ? { caption } : {}) },
+    },
+    "image",
+  );
+}
+
 /**
  * Quick-reply buttons (max 3): the fast triage menu.
  *

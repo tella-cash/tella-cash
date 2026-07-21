@@ -165,3 +165,26 @@ export async function findUserByCircleWalletId(
   }
   return (data as tellaUser | null) ?? null;
 }
+
+/**
+ * Resolves an on-chain wallet address back to the tella user who owns it,
+ * so an inbound transfer from another tella user can be labeled with their
+ * name instead of a shortened address. Case-insensitive because Circle's
+ * `sourceAddress` and the checksum casing stored in `wallet_address` aren't
+ * guaranteed to match byte-for-byte.
+ */
+export async function findUserByWalletAddress(
+  address: string,
+): Promise<tellaUser | null> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("tella_users")
+    .select("*")
+    .ilike("wallet_address", address)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`findUserByWalletAddress failed: ${error.message}`);
+  }
+  return (data as tellaUser | null) ?? null;
+}

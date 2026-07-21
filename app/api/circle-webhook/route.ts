@@ -1,9 +1,9 @@
 import { NextResponse, after } from "next/server";
-import { findUserByCircleWalletId } from "@/lib/users/repository";
-import { notifyUser } from "@/lib/whatsapp/notify";
+import { findUserByCircleWalletId, findUserByWalletAddress } from "@/lib/users/repository";
+import { notifyUser, notifyUserWithImage } from "@/lib/whatsapp/notify";
 import { recordTransaction, markOutboundComplete } from "@/lib/transactions/repository";
 import { getUsdToNgnRate, usdToNgn } from "@/lib/fx/naira";
-import { getTokenSymbol } from "@/lib/wallet/circle";
+import { getTokenSymbol, getFormattedBalanceLines } from "@/lib/wallet/circle";
 
 /**
  * Subset of the Circle notification payload we care about. Circle sends
@@ -139,9 +139,25 @@ async function handleInboundTransaction(
   const token = notification.tokenId
     ? await getTokenSymbol(notification.tokenId)
     : "UNKNOWN";
-  const sourceLabel = shortenAddress(notification.sourceAddress);
 
-  const message = [
+  const senderUser = notification.sourceAddress
+    ? await findUserByWalletAddress(notification.sourceAddress)
+    : null;
+  const sourceLabel = senderUser?.profile_name ?? shortenAddress(notification.sourceAddress);
+
+  let balanceLines: string[] = [];
+  try {
+    if (user.circle_wallet_id) {
+      balanceLines = await getFormattedBalanceLines(user.circle_wallet_id);
+    }
+  } catch (err) {
+    console.error("[circle-webhook] balance fetch for notification image failed", {
+      userId: user.id,
+      err,
+    });
+  }
+
+  const fallbackText = [
     `💰 Received ${amount} ${token}`,
     "",
     `From: ${sourceLabel}`,
@@ -149,7 +165,25 @@ async function handleInboundTransaction(
     `Ask me "what's my balance?" to see your updated total.`,
   ].join("\n");
 
-  await notifyUser({ user, body: message });
+  try {
+    const imageUrl = buildReceivedImageUrl({
+      amount,
+      token,
+      sender: sourceLabel,
+      balanceLines,
+    });
+    await notifyUserWithImage({
+      user,
+      imageUrl,
+      caption: `💰 Received ${amount} ${token} from ${sourceLabel}`,
+    });
+  } catch (err) {
+    console.error("[circle-webhook] image notify failed, falling back to text", {
+      userId: user.id,
+      err,
+    });
+    await notifyUser({ user, body: fallbackText });
+  }
 
   // tella's money-tracking (history, Naira conversion) is USDC-only by
   // design — a EURC/cirBTC receipt still gets the WhatsApp notification
@@ -269,11 +303,35 @@ function buildExplorerTxUrl(txHash: string): string {
  * Format a 0x address into something readable in chat.
  * "0x1234567890abcdef..." → "0x1234…cdef"
  *
- * Used for both inbound senders and outbound recipients — eventually we
- * could resolve an address back to a tella user name if they're on tella.
+ * Used as the sender/recipient label whenever the address doesn't resolve
+ * to a known tella user's name.
  */
 function shortenAddress(address: string | undefined): string {
   if (!address) return "an external wallet";
   if (address.length < 12) return address;
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
+}
+
+/**
+ * Builds the absolute URL for the "money received" notification image
+ * (app/api/notifications/received-image), which Twilio/Meta fetch directly
+ * over HTTPS to deliver as WhatsApp media.
+ */
+function buildReceivedImageUrl(params: {
+  amount: string;
+  token: string;
+  sender: string;
+  balanceLines: string[];
+}): string {
+  const base = process.env.APP_BASE_URL;
+  if (!base) {
+    throw new Error("Missing APP_BASE_URL environment variable");
+  }
+  const qs = new URLSearchParams({
+    amount: params.amount,
+    token: params.token,
+    sender: params.sender,
+    balances: params.balanceLines.join(","),
+  });
+  return `${base.replace(/\/$/, "")}/api/notifications/received-image?${qs}`;
 }

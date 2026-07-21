@@ -35,6 +35,32 @@ export async function sendWhatsAppMessage({
   return message.sid;
 }
 
+interface SendWhatsAppImageArgs {
+  to: string;
+  imageUrl: string;
+  caption?: string;
+}
+
+export async function sendWhatsAppImage({
+  to,
+  imageUrl,
+  caption,
+}: SendWhatsAppImageArgs): Promise<string> {
+  const from = process.env.TWILIO_WHATSAPP_FROM;
+  if (!from) {
+    throw new Error("Missing TWILIO_WHATSAPP_FROM environment variable");
+  }
+
+  const message = await getClient().messages.create({
+    from,
+    to,
+    mediaUrl: [imageUrl],
+    ...(caption ? { body: caption } : {}),
+  });
+  console.log("[twilio] sent image", { sid: message.sid, to });
+  return message.sid;
+}
+
 /**
  * Send an interactive message backed by a pre-created Content Template.
  *
