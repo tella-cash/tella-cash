@@ -135,12 +135,20 @@ export async function getTokenSymbol(tokenId: string): Promise<string> {
   const cached = tokenSymbolCache.get(tokenId);
   if (cached) return cached;
 
-  const client = getCircleClient();
-  const response = await client.getToken({ id: tokenId });
-  const symbol = response.data?.token?.symbol ?? "UNKNOWN";
+  try {
+    const client = getCircleClient();
+    const response = await client.getToken({ id: tokenId });
+    const symbol = response.data?.token?.symbol ?? "UNKNOWN";
 
-  tokenSymbolCache.set(tokenId, symbol);
-  return symbol;
+    tokenSymbolCache.set(tokenId, symbol);
+    return symbol;
+  } catch (err) {
+    // Don't cache a failure, and don't let a Circle API hiccup take down
+    // the whole "you received money" notification — worst case the user
+    // sees "UNKNOWN" instead of the real symbol, not silence.
+    console.error("[circle] getTokenSymbol lookup failed", { tokenId, err });
+    return "UNKNOWN";
+  }
 }
 
 export interface SendUsdcArgs {
