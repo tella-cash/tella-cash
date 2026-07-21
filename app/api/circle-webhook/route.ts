@@ -139,6 +139,10 @@ async function handleInboundTransaction(
   const token = notification.tokenId
     ? await getTokenSymbol(notification.tokenId)
     : "UNKNOWN";
+  console.log("[circle-webhook] resolved inbound token", {
+    tokenId: notification.tokenId,
+    resolvedSymbol: token,
+  });
 
   const senderUser = notification.sourceAddress
     ? await findUserByWalletAddress(notification.sourceAddress)
@@ -157,10 +161,15 @@ async function handleInboundTransaction(
     });
   }
 
+  const explorerLink = notification.txHash
+    ? buildExplorerTxUrl(notification.txHash)
+    : null;
+
   const fallbackText = [
     `💰 Received ${amount} ${token}`,
     "",
     `From: ${sourceLabel}`,
+    ...(explorerLink ? ["", explorerLink] : []),
     "",
     `Ask me "what's my balance?" to see your updated total.`,
   ].join("\n");
@@ -172,10 +181,14 @@ async function handleInboundTransaction(
       sender: sourceLabel,
       balanceLines,
     });
+    const caption = [
+      `💰 Received ${amount} ${token} from ${sourceLabel}`,
+      ...(explorerLink ? [explorerLink] : []),
+    ].join("\n");
     await notifyUserWithImage({
       user,
       imageUrl,
-      caption: `💰 Received ${amount} ${token} from ${sourceLabel}`,
+      caption,
     });
   } catch (err) {
     console.error("[circle-webhook] image notify failed, falling back to text", {
