@@ -30,7 +30,15 @@ export async function loadConfirmContext(
     .gt("expires_at", new Date().toISOString())
     .maybeSingle();
 
-  if (pendingErr) throw new Error(`loadConfirmContext: ${pendingErr.message}`);
+  if (pendingErr) {
+    // A malformed token (not a valid UUID — mistyped, truncated, or someone
+    // poking at the URL) makes Postgres reject the `id` comparison itself
+    // (22P02, invalid_text_representation) rather than just finding no row.
+    // Treat that exactly like "no row found" instead of crashing the page —
+    // the visitor can't tell the difference and shouldn't have to.
+    if (pendingErr.code === "22P02") return null;
+    throw new Error(`loadConfirmContext: ${pendingErr.message}`);
+  }
   if (!pending) return null;
 
   const { data: user, error: userErr } = await supabase
