@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { motion, useInView, type Variants } from "framer-motion";
+import { motion, useInView, useScroll, useTransform, type Variants } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { EASE } from "@/lib/animation/variants";
 import { cn } from "@/lib/utils/cn";
@@ -26,7 +26,11 @@ export function FeatureSection({
   toneClassName,
 }: FeatureSectionProps) {
   const cardRef = useRef<HTMLDivElement | null>(null);
-  const isInView = useInView(cardRef, { once: true, amount: 0.4 });
+  const isInView = useInView(cardRef, {
+    once: true,
+    amount: 0.4,
+    margin: "-15% 0px -15% 0px",
+  });
   const [isDesktop, setIsDesktop] = useState(false);
 
   useEffect(() => {
@@ -37,6 +41,21 @@ export function FeatureSection({
     query.addEventListener("change", update);
     return () => query.removeEventListener("change", update);
   }, []);
+
+  // Continuous exit cue for the pinned card, measured across the whole
+  // sticky range (not the binary Reveal/MaskReveal toggle — this section's
+  // "exit" is progress-based since the card gets physically covered by the
+  // next section sliding over it, not scrolled out of view). Desktop-only,
+  // matching the sticky-pin trick itself (`md:sticky`).
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const { scrollYProgress } = useScroll({
+    target: wrapperRef,
+    offset: ["end end", "end start"],
+  });
+  const exitOpacityRaw = useTransform(scrollYProgress, [0, 1], [1, 0.4]);
+  const exitScaleRaw = useTransform(scrollYProgress, [0, 1], [1, 0.97]);
+  const exitOpacity = isDesktop ? exitOpacityRaw : 1;
+  const exitScale = isDesktop ? exitScaleRaw : 1;
 
   // A single observer on the card drives all three children via Framer's
   // variant propagation — nesting a separate useInView per child proved
@@ -66,8 +85,10 @@ export function FeatureSection({
 
   return (
     // Extra height gives the pinned card room to breathe before the next
-    // card's opaque background scrolls up to cover it.
-    <div className="relative md:h-[160vh]">
+    // card's opaque background scrolls up to cover it. Kept as tight as
+    // possible (115vh, not the original 160vh) so four stacked steps don't
+    // cost more scroll than their ~120 words of copy earns.
+    <div ref={wrapperRef} className="relative md:h-[115vh]">
       <section
         id={id}
         className={cn(
@@ -80,6 +101,7 @@ export function FeatureSection({
           initial="hidden"
           animate={animateState}
           variants={cardVariants}
+          style={{ opacity: exitOpacity, scale: exitScale }}
           className="mx-auto w-full max-w-[1296px] origin-top rounded-[19px] bg-white p-3 md:p-4"
         >
           <div className="grid gap-6 lg:grid-cols-2">

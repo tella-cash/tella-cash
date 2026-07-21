@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, Instrument_Serif, JetBrains_Mono, Newsreader } from "next/font/google";
+import { MotionConfig } from "framer-motion";
 import "@/app/globals.css";
 import { SmoothScroll } from "@/components/interactive/smooth-scroll";
 
@@ -85,9 +86,11 @@ export default function RootLayout({
         <meta name="facebook-domain-verification" content="nam5vl9755j1i63x1s6ziul42qp2p9" />
       </head>
       <body className="relative min-h-screen overflow-x-hidden">
-        <SmoothScroll>
-          {children}
-        </SmoothScroll>
+        <MotionConfig reducedMotion="user">
+          <SmoothScroll>
+            {children}
+          </SmoothScroll>
+        </MotionConfig>
       </body>
     </html>
   );

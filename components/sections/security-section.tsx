@@ -1,3 +1,7 @@
+"use client";
+
+import { useRef } from "react";
+import { motion, useScroll, useTransform } from "framer-motion";
 import { Reveal } from "@/components/interactive/reveal";
 import { MaskReveal } from "@/components/interactive/mask-reveal";
 
@@ -26,10 +30,28 @@ const PILLARS = [
 ];
 
 export function SecuritySection() {
+  const ref = useRef<HTMLElement | null>(null);
+  // Single continuous scroll range covering the section's full time in the
+  // viewport: eases from the "how it works" light blue into ink-900, holds
+  // dark through the middle, then eases back out to white before
+  // UseCasesSection takes over — one interpolation instead of two
+  // separately-measured boundary transitions.
+  const { scrollYProgress } = useScroll({
+    target: ref,
+    offset: ["start end", "end start"],
+  });
+  const backgroundColor = useTransform(
+    scrollYProgress,
+    [0, 0.15, 0.85, 1],
+    ["#E6EEFF", "#0a0a0a", "#0a0a0a", "#ffffff"],
+  );
+
   return (
-    <section
+    <motion.section
+      ref={ref}
       id="security"
-      className="relative overflow-hidden bg-ink-900 py-16 md:py-28 text-surface-50"
+      style={{ backgroundColor }}
+      className="relative overflow-hidden py-16 md:py-28 text-surface-50"
     >
       <div className="relative mx-auto max-w-7xl px-[10px] sm:px[72px]">
         <div className="mx-auto max-w-[820px] text-center">
@@ -72,7 +94,7 @@ export function SecuritySection() {
           ))}
         </div>
       </div>
-    </section>
+    </motion.section>
   );
 }
 

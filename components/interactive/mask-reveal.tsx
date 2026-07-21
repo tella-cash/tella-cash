@@ -21,6 +21,15 @@ interface MaskRevealProps {
   trigger?: "inView" | "mount";
   /** How much of the element must be visible before triggering. */
   amount?: number;
+  /**
+   * Replay the word-mask reveal every time the element crosses the viewport
+   * boundary (either direction), rather than firing once. Only meaningful
+   * when `trigger="inView"` — a `trigger="mount"` heading (the hero's H1)
+   * always stays single-fire: re-triggering it every time the user scrolls
+   * back to the top would read as a glitchy reload, not polish, so mount
+   * headings intentionally never repeat regardless of this prop.
+   */
+  repeat?: boolean;
 }
 
 /**
@@ -39,9 +48,14 @@ export function MaskReveal({
   stagger = 0.07,
   trigger = "inView",
   amount = 0.4,
+  repeat = true,
 }: MaskRevealProps) {
   const ref = useRef<HTMLElement | null>(null);
-  const inView = useInView(ref, { once: true, amount });
+  const inView = useInView(ref, {
+    once: trigger === "mount" ? true : !repeat,
+    amount,
+    margin: "-10% 0px -10% 0px",
+  });
   const animate = trigger === "mount" || inView ? "visible" : "hidden";
 
   const container: Variants = {

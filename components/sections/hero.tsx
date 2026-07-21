@@ -38,13 +38,13 @@ export function Hero() {
         style={{ y: auroraY }}
         className="pointer-events-none absolute inset-0 -z-10"
       >
-        <div className="animate-drift-slow absolute -left-24 top-24 h-[420px] w-[420px] rounded-full bg-accent-300/25 blur-[120px]" />
+        <div className="animate-drift-slow absolute -left-24 top-24 h-[420px] w-[420px] rounded-full bg-accent-300/45 blur-[90px]" />
         <div
-          className="animate-drift-slow absolute right-[-6rem] top-1/3 h-[360px] w-[360px] rounded-full bg-accent-500/15 blur-[130px]"
+          className="animate-drift-slow absolute right-[-6rem] top-1/3 h-[360px] w-[360px] rounded-full bg-accent-500/30 blur-[100px]"
           style={{ animationDelay: "-5s" }}
         />
         <div
-          className="animate-drift-slow absolute left-1/3 bottom-0 h-[280px] w-[280px] rounded-full bg-accent-300/10 blur-[110px]"
+          className="animate-drift-slow absolute left-1/3 bottom-0 h-[280px] w-[280px] rounded-full bg-accent-400/25 blur-[85px]"
           style={{ animationDelay: "-8s" }}
         />
       </motion.div>
@@ -222,7 +222,7 @@ function HeroPhone() {
         </div>
         <div className="flex-1 leading-tight">
           <p className="text-[10px] uppercase tracking-wider text-ink-400">Cashed out</p>
-          <p className="font-display text-base leading-none text-ink-900">₦50,000</p>
+          <p className="font-sans text-base font-semibold leading-none tabular-nums text-ink-900">₦ 50,000</p>
           <p className="text-[10px] text-ink-500">to GTBank</p>
         </div>
       </motion.div>

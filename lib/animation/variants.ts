@@ -28,6 +28,6 @@ export const stagger = (staggerChildren = 0.08, delayChildren = 0): Variants => 
 
 /** A single word/line rising from behind a clip mask. */
 export const maskWord: Variants = {
-  hidden: { y: "115%" },
+  hidden: { y: "115%", transition: { duration: 0.5, ease: EASE } },
   visible: { y: 0, transition: { duration: 0.8, ease: EASE } },
 };

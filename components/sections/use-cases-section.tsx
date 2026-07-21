@@ -6,9 +6,9 @@ import Image from "next/image";
 import { Reveal } from "@/components/interactive/reveal";
 import { MaskReveal } from "@/components/interactive/mask-reveal";
 import { PhoneFrame } from "@/components/ui/phone-frame";
+import { ChatScreen, StaticBubble } from "@/components/ui/chat-mockup";
 import { EASE } from "@/lib/animation/variants";
 import { cn } from "@/lib/utils/cn";
-import logo from "@/public/logo.svg";
 
 interface UseCase {
   id: string;
@@ -42,7 +42,7 @@ const USE_CASES: UseCase[] = [
   {
     id: "freelance",
     label: "Freelancers",
-    amount: "₦1,200,000",
+    amount: "₦ 1,200,000",
     sentLabel: "invoice paid",
     photos: [
       {
@@ -61,7 +61,7 @@ const USE_CASES: UseCase[] = [
       },
     ],
     messages: [
-      { side: "out", text: "Invoice Nova Studio for ₦1,200,000", time: "10:14" },
+      { side: "out", text: "Invoice Nova Studio for ₦ 1,200,000", time: "10:14" },
       { side: "in", text: "Invoice ready. Send payment link to Nova Studio?", time: "10:14" },
       { side: "out", text: "yes", time: "10:15" },
       {
@@ -70,7 +70,7 @@ const USE_CASES: UseCase[] = [
         time: "10:42",
         receipt: {
           status: "Paid",
-          amount: "₦1,200,000",
+          amount: "₦ 1,200,000",
           detail: "from Nova Studio",
         },
       },
@@ -79,7 +79,7 @@ const USE_CASES: UseCase[] = [
   {
     id: "night-out",
     label: "Night Out",
-    amount: "₦32,000",
+    amount: "₦ 32,000",
     sentLabel: "split settled",
     photos: [
       {
@@ -99,7 +99,7 @@ const USE_CASES: UseCase[] = [
     ],
     messages: [
       { side: "out", text: "Split dinner with Tobi, Ada, and Kunle", time: "21:08" },
-      { side: "in", text: "Total bill is ₦128,000. Everyone pays ₦32,000.", time: "21:08" },
+      { side: "in", text: "Total bill is ₦ 128,000. Everyone pays ₦ 32,000.", time: "21:08" },
       { side: "out", text: "send my share now", time: "21:09" },
       {
         side: "in",
@@ -107,7 +107,7 @@ const USE_CASES: UseCase[] = [
         time: "21:09",
         receipt: {
           status: "Sent",
-          amount: "₦32,000",
+          amount: "₦ 32,000",
           detail: "to dinner split",
         },
       },
@@ -116,7 +116,7 @@ const USE_CASES: UseCase[] = [
   {
     id: "families",
     label: "Families",
-    amount: "₦300,000",
+    amount: "₦ 300,000",
     sentLabel: "family support",
     photos: [
       {
@@ -135,8 +135,8 @@ const USE_CASES: UseCase[] = [
       },
     ],
     messages: [
-      { side: "out", text: "Send ₦300,000 to Amara for school fees", time: "08:31" },
-      { side: "in", text: "Sending ₦300,000 to Amara Okeke. Confirm?", time: "08:31" },
+      { side: "out", text: "Send ₦ 300,000 to Amara for school fees", time: "08:31" },
+      { side: "in", text: "Sending ₦ 300,000 to Amara Okeke. Confirm?", time: "08:31" },
       { side: "out", text: "confirm", time: "08:32" },
       {
         side: "in",
@@ -144,7 +144,7 @@ const USE_CASES: UseCase[] = [
         time: "08:32",
         receipt: {
           status: "Sent",
-          amount: "₦300,000",
+          amount: "₦ 300,000",
           detail: "to Amara Okeke",
         },
       },
@@ -153,7 +153,7 @@ const USE_CASES: UseCase[] = [
   {
     id: "small-business",
     label: "Small business Owners",
-    amount: "₦450,000",
+    amount: "₦ 450,000",
     sentLabel: "vendor paid",
     photos: [
       {
@@ -172,8 +172,8 @@ const USE_CASES: UseCase[] = [
       },
     ],
     messages: [
-      { side: "out", text: "Pay ₦450,000 to Ayo Supplies", time: "15:26" },
-      { side: "in", text: "Ayo Supplies is in your saved vendors. Send ₦450,000?", time: "15:26" },
+      { side: "out", text: "Pay ₦ 450,000 to Ayo Supplies", time: "15:26" },
+      { side: "in", text: "Ayo Supplies is in your saved vendors. Send ₦ 450,000?", time: "15:26" },
       { side: "out", text: "yes and save receipt", time: "15:27" },
       {
         side: "in",
@@ -181,7 +181,7 @@ const USE_CASES: UseCase[] = [
         time: "15:27",
         receipt: {
           status: "Paid",
-          amount: "₦450,000",
+          amount: "₦ 450,000",
           detail: "to Ayo Supplies",
         },
       },
@@ -332,66 +332,36 @@ function PersonaPhoto({ photo, index }: { photo: PhotoCard; index: number }) {
 
 function ChatSurface({ useCase }: { useCase: UseCase }) {
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center gap-2 bg-[#1F2C34] px-2.5 pb-2.5 pt-12 text-white">
-        <div className="grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-full bg-white">
-          <Image src={logo} alt="Tella" width={20} height={20} />
-        </div>
-        <div className="min-w-0 flex-1 leading-tight">
-          <div className="flex items-center gap-1">
-            <p className="text-[14px] font-semibold">Tella</p>
-            <span className="h-3 w-3 rounded-full bg-emerald-500" />
-          </div>
-          <p className="text-[10px] text-white/60">{useCase.label}</p>
-        </div>
-      </div>
-
-      <div className="flex flex-1 flex-col justify-end gap-2 overflow-hidden bg-[url('/whatsapp-bg.png')] bg-cover bg-center p-3">
-        {useCase.messages.map((message) => (
-          <ChatMessage key={`${useCase.id}-${message.time}-${message.text}`} message={message} />
-        ))}
-      </div>
-    </div>
+    <ChatScreen variant="compact" subtitle={useCase.label} align="end">
+      {useCase.messages.map((message) => (
+        <ChatMessage key={`${useCase.id}-${message.time}-${message.text}`} message={message} />
+      ))}
+    </ChatScreen>
   );
 }
 
 function ChatMessage({ message }: { message: Message }) {
-  const isOutgoing = message.side === "out";
-
   return (
-    <div className={cn("flex", isOutgoing ? "justify-end" : "justify-start")}>
-      <div
-        className={cn(
-          "max-w-[84%] rounded-2xl px-3 py-2 text-[11px] leading-snug shadow-sm",
-          isOutgoing
-            ? "rounded-br-md bg-[#0057FF] text-white"
-            : "rounded-bl-md bg-white text-ink-900",
-        )}
-      >
-        <p>{message.text}</p>
-        {message.receipt && (
-          <div className="mt-2 rounded-xl bg-[#F5F5F5] p-2 text-ink-900">
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-[9px] font-medium uppercase tracking-wider text-ink-500">
-                {message.receipt.status}
-              </span>
-              <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[8px] font-medium text-emerald-700">
-                Confirmed
-              </span>
-            </div>
-            <p className="mt-1 text-xl leading-none text-black">
-              {message.receipt.amount}
-            </p>
-            <p className="mt-1 text-[10px] text-ink-500">
-              {message.receipt.detail}
-            </p>
+    <StaticBubble side={message.side === "out" ? "out" : "in"} time={message.time}>
+      <p>{message.text}</p>
+      {message.receipt && (
+        <div className="mt-2 rounded-xl bg-[#F5F5F5] p-2 text-ink-900">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-[9px] font-medium uppercase tracking-wider text-ink-500">
+              {message.receipt.status}
+            </span>
+            <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[8px] font-medium text-emerald-700">
+              Confirmed
+            </span>
           </div>
-        )}
-        <p className={cn("mt-1 text-right text-[9px]", isOutgoing ? "text-white/70" : "text-ink-400")}>
-          {message.time}
-          {isOutgoing && <span className="ml-1">✓✓</span>}
-        </p>
-      </div>
-    </div>
+          <p className="mt-1 font-sans text-xl font-semibold leading-none tabular-nums text-black">
+            {message.receipt.amount}
+          </p>
+          <p className="mt-1 text-[10px] text-ink-500">
+            {message.receipt.detail}
+          </p>
+        </div>
+      )}
+    </StaticBubble>
   );
 }

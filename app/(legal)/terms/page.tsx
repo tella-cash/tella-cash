@@ -246,7 +246,7 @@ export default function TermsPage() {
           claim arising under or related to these Terms is capped at the
           greater of (a) the fees you paid us in the three months immediately
           before the event giving rise to the claim, or (b){" "}
-          <Placeholder>[NGN amount, e.g. ₦50,000]</Placeholder>.
+          <Placeholder>[NGN amount, e.g. ₦ 50,000]</Placeholder>.
         </p>
       </Section>
 

@@ -8,6 +8,7 @@ import { SecuritySection } from "@/components/sections/security-section";
 import { UseCasesSection } from "@/components/sections/use-cases-section";
 import { FaqSection } from "@/components/sections/faq-section";
 import { ClosingCta } from "@/components/sections/closing-cta";
+import { HowItWorksWrapper } from "@/components/sections/how-it-works-wrapper";
 import {
   SendIllustration,
   BalanceIllustration,
@@ -22,7 +23,7 @@ export default function HomePage() {
       <main>
         <Hero />
 
-        <div className="relative bg-[#E6EEFF] md:min-h-screen">
+        <HowItWorksWrapper>
           {/* Sticky header — pins below the navbar while the feature cards stack underneath */}
           <div className="relative z-10 bg-[#E6EEFF] md:sticky md:top-[72px]">
             <div className="mx-auto max-w-[1440px] px-3 pb-6 pt-5 md:px-[72px] md:pt-10">
@@ -71,7 +72,7 @@ export default function HomePage() {
             visual={<ContextIllustration />}
             reverse
           />
-        </div>
+        </HowItWorksWrapper>
 
         <SecuritySection />
         <UseCasesSection />

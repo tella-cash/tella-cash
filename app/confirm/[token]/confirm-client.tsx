@@ -19,7 +19,7 @@ interface SendSummary {
 type Stage =
   | { kind: "choose" }
   | { kind: "pin"; mode: "setup" | "verify" }
-  | { kind: "working"; label: string }
+  | { kind: "working"; label: string; phase: "auth" | "sending" }
   | { kind: "success"; reference: string }
   | { kind: "error"; message: string };
 
@@ -87,13 +87,13 @@ export function ConfirmClient({
     busyRef.current = true;
     try {
       if (hasPasskey) {
-        setStage({ kind: "working", label: "Waiting for confirmation…" });
+        setStage({ kind: "working", label: "Waiting for confirmation…", phase: "auth" });
         const options = await postJson<PublicKeyCredentialRequestOptionsJSON>(
           "/api/confirm/webauthn/authenticate/options",
           { token },
         );
         const assertion = await startAuthentication({ optionsJSON: options });
-        setStage({ kind: "working", label: "Sending…" });
+        setStage({ kind: "working", label: "Sending…", phase: "sending" });
         const data = await postJson(
           "/api/confirm/webauthn/authenticate/verify",
           { token, response: assertion },
@@ -103,13 +103,14 @@ export function ConfirmClient({
         setStage({
           kind: "working",
           label: "Setting up Face ID / fingerprint…",
+          phase: "auth",
         });
         const options = await postJson<PublicKeyCredentialCreationOptionsJSON>(
           "/api/confirm/webauthn/register/options",
           { token },
         );
         const attestation = await startRegistration({ optionsJSON: options });
-        setStage({ kind: "working", label: "Sending…" });
+        setStage({ kind: "working", label: "Sending…", phase: "sending" });
         const data = await postJson("/api/confirm/webauthn/register/verify", {
           token,
           response: attestation,
@@ -136,16 +137,26 @@ export function ConfirmClient({
           Confirm send
         </div>
 
-        <div className="mt-5 flex items-end gap-2">
-          <span className="font-display text-[64px] leading-[0.85] text-ink-900">
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.15, ease: EASE }}
+          className="mt-5 flex items-end gap-2"
+        >
+          <span className="font-sans text-[64px] font-semibold leading-[0.85] tabular-nums text-ink-900">
             {summary.amount}
           </span>
           <span className="mb-1.5 font-works text-xl text-ink-400">
             {summary.token}
           </span>
-        </div>
+        </motion.div>
 
-        <div className="mt-6 flex items-center gap-3 rounded-2xl bg-surface-100/70 px-4 py-3">
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.25, ease: EASE }}
+          className="mt-6 flex items-center gap-3 rounded-2xl bg-surface-100/70 px-4 py-3"
+        >
           <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-accent-500 text-sm font-semibold text-white">
             <Avatar label={summary.recipientLabel} />
           </div>
@@ -157,7 +168,7 @@ export function ConfirmClient({
               {summary.recipientLabel}
             </p>
           </div>
-        </div>
+        </motion.div>
       </div>
 
       {/* Action area */}
@@ -171,7 +182,7 @@ export function ConfirmClient({
             transition={{ duration: 0.22, ease: EASE }}
           >
             {effectiveStage.kind === "working" && (
-              <WorkingView label={effectiveStage.label} />
+              <WorkingView label={effectiveStage.label} phase={effectiveStage.phase} />
             )}
 
             {effectiveStage.kind === "success" && (
@@ -272,25 +283,39 @@ function PinForm({
   const [pin, setPin] = useState("");
   const [pin2, setPin2] = useState("");
   const [busy, setBusy] = useState(false);
+  const [shake, setShake] = useState(false);
+  const [validationMessage, setValidationMessage] = useState<string | null>(null);
   const busyRef = useRef(false);
   const isSetup = mode === "setup";
+
+  // Client-side-only validation (regex shape, setup mismatch) never needs a
+  // server round trip — shaking the input in place keeps the user right
+  // where they are instead of bouncing them out to a full error stage.
+  // Server-rejected PINs (wrong PIN on verify) still go through the real
+  // `error` stage below, since those genuinely need a fresh attempt.
+  function rejectInPlace(message: string) {
+    setValidationMessage(message);
+    setShake(true);
+    window.setTimeout(() => setShake(false), 400);
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (busyRef.current) return;
     if (!/^\d{4,8}$/.test(pin)) {
-      onStageChange({ kind: "error", message: "PIN must be 4–8 digits." });
+      rejectInPlace("PIN must be 4–8 digits.");
       return;
     }
     if (isSetup && pin !== pin2) {
-      onStageChange({ kind: "error", message: "PINs don't match." });
+      rejectInPlace("PINs don't match.");
       return;
     }
+    setValidationMessage(null);
     busyRef.current = true;
     setBusy(true);
     try {
       if (isSetup) {
-        onStageChange({ kind: "working", label: "Saving PIN…" });
+        onStageChange({ kind: "working", label: "Saving PIN…", phase: "auth" });
         const setupRes = await fetch("/api/confirm/pin/setup", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -298,7 +323,7 @@ function PinForm({
         });
         if (!setupRes.ok) throw new Error(await readError(setupRes));
       }
-      onStageChange({ kind: "working", label: "Sending…" });
+      onStageChange({ kind: "working", label: "Sending…", phase: "sending" });
       const verifyRes = await fetch("/api/confirm/pin/verify", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -327,32 +352,41 @@ function PinForm({
           ? "Set a 4–8 digit PIN. You'll use it to confirm sends going forward."
           : "Enter your PIN to authorize this send."}
       </p>
-      <input
-        type="password"
-        inputMode="numeric"
-        pattern="[0-9]*"
-        autoComplete="one-time-code"
-        value={pin}
-        onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-        maxLength={8}
-        disabled={busy}
-        className="w-full rounded-2xl border border-ink-200 bg-surface-0 px-4 py-3.5 text-center text-2xl tracking-[0.3em] text-ink-900 outline-none transition focus:border-accent-500 focus:ring-4 focus:ring-accent-100 disabled:opacity-60"
-        placeholder="••••"
-        autoFocus
-      />
-      {isSetup && (
+      <motion.div
+        animate={shake ? { x: [0, -8, 8, -8, 8, 0] } : { x: 0 }}
+        transition={{ duration: 0.4 }}
+        className="space-y-2"
+      >
         <input
           type="password"
           inputMode="numeric"
           pattern="[0-9]*"
-          value={pin2}
-          onChange={(e) => setPin2(e.target.value.replace(/\D/g, ""))}
+          autoComplete="one-time-code"
+          value={pin}
+          onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
           maxLength={8}
           disabled={busy}
           className="w-full rounded-2xl border border-ink-200 bg-surface-0 px-4 py-3.5 text-center text-2xl tracking-[0.3em] text-ink-900 outline-none transition focus:border-accent-500 focus:ring-4 focus:ring-accent-100 disabled:opacity-60"
-          placeholder="Re-enter"
+          placeholder="••••"
+          autoFocus
         />
-      )}
+        {isSetup && (
+          <input
+            type="password"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            value={pin2}
+            onChange={(e) => setPin2(e.target.value.replace(/\D/g, ""))}
+            maxLength={8}
+            disabled={busy}
+            className="w-full rounded-2xl border border-ink-200 bg-surface-0 px-4 py-3.5 text-center text-2xl tracking-[0.3em] text-ink-900 outline-none transition focus:border-accent-500 focus:ring-4 focus:ring-accent-100 disabled:opacity-60"
+            placeholder="Re-enter"
+          />
+        )}
+        {validationMessage && (
+          <p className="text-center text-sm text-red-500">{validationMessage}</p>
+        )}
+      </motion.div>
       <button
         type="submit"
         disabled={busy}
@@ -375,11 +409,35 @@ function PinForm({
   );
 }
 
-function WorkingView({ label }: { label: string }) {
+function WorkingView({
+  label,
+  phase,
+}: {
+  label: string;
+  phase: "auth" | "sending";
+}) {
   return (
     <div className="flex flex-col items-center gap-4 py-4 text-center">
-      <Spinner />
-      <p className="text-sm text-ink-500">{label}</p>
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={phase}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }}
+          transition={{ duration: 0.25 }}
+          className="flex flex-col items-center gap-4"
+        >
+          <div className="relative grid h-8 w-8 place-items-center">
+            <Spinner />
+            {phase === "auth" ? (
+              <FingerprintIcon className="absolute h-3.5 w-3.5 text-accent-500" />
+            ) : (
+              <ArrowIcon className="absolute h-3 w-3 text-accent-500" />
+            )}
+          </div>
+          <p className="text-sm text-ink-500">{label}</p>
+        </motion.div>
+      </AnimatePresence>
     </div>
   );
 }
@@ -443,9 +501,14 @@ function ErrorView({
 }) {
   return (
     <div className="py-2 text-center">
-      <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-red-50 text-xl text-red-500">
+      <motion.div
+        initial={{ scale: 0, rotate: 15 }}
+        animate={{ scale: 1, rotate: 0 }}
+        transition={{ type: "spring", stiffness: 260, damping: 18 }}
+        className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-red-50 text-xl text-red-500"
+      >
         !
-      </div>
+      </motion.div>
       <p className="mx-auto mt-4 max-w-xs text-sm leading-relaxed text-ink-700">
         {message}
       </p>
