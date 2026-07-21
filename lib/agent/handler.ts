@@ -88,7 +88,9 @@ export async function handleIncomingMessage(
       reply: [
         "👋 Welcome to tella!",
         "",
-        "I'm your AI money companion. Before we get started, what should I call you?",
+        "Send and receive USDC right here in WhatsApp — no exchange, no app, no seed phrase to lose. I'll set your wallet up in about 30 seconds.",
+        "",
+        "What should I call you?",
         "",
         "(Just reply with your name)",
       ].join("\n"),
