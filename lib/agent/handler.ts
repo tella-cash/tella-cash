@@ -18,12 +18,23 @@ import {
   createBeneficiary,
 } from "@/lib/beneficiaries/repository";
 import { listRecentTransactions } from "@/lib/transactions/repository";
-import { getWalletBalances } from "@/lib/wallet/circle";
+import {
+  getWalletBalances,
+  requestFaucetTokens,
+  FaucetRateLimitedError,
+  type FaucetAsset,
+} from "@/lib/wallet/circle";
 import { getUsdToNgnRate, usdToNgn } from "@/lib/fx/naira";
 import type { ParsedSendIntent } from "@/lib/agent/parse-send";
 import { mapDecodedSend } from "@/lib/agent/map-decoded-send";
+import { normalizeFaucetAsset } from "@/lib/agent/normalize-faucet-asset";
 import { decode, decodeFollowUp, flowStart, type FollowUpSlots } from "@/lib/sendam-ai/client";
-import { SAVE_BENEFICIARY_FLOW, nextQuestionFor } from "@/lib/sendam-ai/flows";
+import {
+  SAVE_BENEFICIARY_FLOW,
+  FAUCET_ASSET_FLOW,
+  FAUCET_ASSET_AWAITING,
+  nextQuestionFor,
+} from "@/lib/sendam-ai/flows";
 import { REPLIES, pickReply } from "@/lib/agent/replies";
 
 interface IncomingMessage {
@@ -199,6 +210,10 @@ async function handleFlowPendingResponse({
     return completeSaveBeneficiaryFlow({ user, pending, slots: result.slots });
   }
 
+  if (flow === FAUCET_ASSET_FLOW) {
+    return completeFaucetAssetFlow({ user, pending, slots: result.slots });
+  }
+
   await deletePending(pending.id);
   return { reply: pickReply(REPLIES.unknown, { name }), interactive: "buttons" };
 }
@@ -286,6 +301,93 @@ async function reissueNamePrompt({
   return { reply: replyPrefix };
 }
 
+async function completeFaucetAssetFlow({
+  user,
+  pending,
+  slots,
+}: {
+  user: tellaUser;
+  pending: PendingAction;
+  slots: FollowUpSlots;
+}): Promise<HandlerResult> {
+  await deletePending(pending.id);
+
+  const asset = normalizeFaucetAsset(typeof slots["asset"] === "string" ? slots["asset"] : null);
+  if (!asset) {
+    return reissueFaucetAssetPrompt({
+      user,
+      replyPrefix: pickReply(REPLIES.faucetInvalidAsset, { name: firstName(user) }),
+    });
+  }
+
+  return sendFaucetTokens({ user, asset });
+}
+
+/**
+ * The original token is already COMPLETE/consumed at this point — mints a
+ * fresh single-slot token for just the asset rather than trying to continue
+ * a finished flow. Deliberately doesn't carry the old (unrecognized) "asset"
+ * value forward into the new token's slots, or sendam-ai would treat it as
+ * already resolved and never ask again.
+ */
+async function reissueFaucetAssetPrompt({
+  user,
+  replyPrefix,
+}: {
+  user: tellaUser;
+  replyPrefix: string;
+}): Promise<HandlerResult> {
+  const { token } = await flowStart(FAUCET_ASSET_FLOW, {}, FAUCET_ASSET_AWAITING);
+  await createPendingFlow({ userId: user.id, flow: FAUCET_ASSET_FLOW, token });
+  return { reply: replyPrefix };
+}
+
+async function handleFaucetIntent({
+  user,
+  asset,
+}: {
+  user: tellaUser;
+  asset: string | null;
+}): Promise<HandlerResult> {
+  const name = firstName(user);
+
+  if (user.wallet_status !== "active" || !user.circle_wallet_id || !user.wallet_address) {
+    return { reply: pickReply(REPLIES.walletNotReady, { name }) };
+  }
+
+  const normalized = normalizeFaucetAsset(asset);
+  if (!normalized) {
+    const { token } = await flowStart(FAUCET_ASSET_FLOW, {}, FAUCET_ASSET_AWAITING);
+    await createPendingFlow({ userId: user.id, flow: FAUCET_ASSET_FLOW, token });
+    return {
+      reply: nextQuestionFor(FAUCET_ASSET_FLOW, {}) ?? "Which testnet asset would you like — native, USDC, or EURC?",
+    };
+  }
+
+  return sendFaucetTokens({ user, asset: normalized });
+}
+
+async function sendFaucetTokens({
+  user,
+  asset,
+}: {
+  user: tellaUser;
+  asset: FaucetAsset;
+}): Promise<HandlerResult> {
+  const name = firstName(user);
+
+  try {
+    await requestFaucetTokens({ address: user.wallet_address as string, asset });
+    return { reply: pickReply(REPLIES.faucetSuccess, { name }) };
+  } catch (err) {
+    if (err instanceof FaucetRateLimitedError) {
+      return { reply: pickReply(REPLIES.faucetRateLimited, { name }) };
+    }
+    console.error("[faucet] request failed", { userId: user.id, asset, err });
+    return { reply: pickReply(REPLIES.faucetError, { name }) };
+  }
+}
+
 /** A confirm-send prompt + the CTA token that opens the confirm page. */
 function confirmResult(pending: PendingSend): HandlerResult {
   return { reply: buildConfirmBody(pending), confirm: { token: pending.id } };
@@ -367,6 +469,8 @@ async function handleOnboardedUser({
       return { reply: pickReply(REPLIES.fees, { name }), interactive: "buttons" };
     case "SECURITY":
       return { reply: pickReply(REPLIES.security, { name }), interactive: "buttons" };
+    case "FAUCET":
+      return handleFaucetIntent({ user, asset: decoded.asset });
     case "THANKS":
       return { reply: pickReply(REPLIES.thanks, { name }), interactive: "buttons" };
     case "GOODBYE":

@@ -25,6 +25,7 @@ export type SendamIntent =
   | "GOODBYE"
   | "AFFIRM"
   | "CANCEL"
+  | "FAUCET"
   | "UNKNOWN";
 
 export interface DecodedIntent {

@@ -1,4 +1,8 @@
-import { initiateDeveloperControlledWalletsClient } from "@circle-fin/developer-controlled-wallets";
+import {
+  initiateDeveloperControlledWalletsClient,
+  RatelimitError,
+  type TestnetBlockchain,
+} from "@circle-fin/developer-controlled-wallets";
 
 let _client: ReturnType<typeof initiateDeveloperControlledWalletsClient> | null =
   null;
@@ -196,4 +200,50 @@ export async function sendUsdc({
     transactionId: tx.id,
     txHash: (tx as any).txHash ?? null,
   };
+}
+
+export type FaucetAsset = "NATIVE" | "USDC" | "EURC";
+
+/** Thrown when Circle's testnet faucet has already been tapped too recently
+ *  for this address — distinct from a generic failure so the caller can
+ *  give the user a "try again later" reply instead of a bare error. */
+export class FaucetRateLimitedError extends Error {
+  constructor() {
+    super("Circle faucet rate limit reached for this address");
+    this.name = "FaucetRateLimitedError";
+  }
+}
+
+export interface RequestFaucetTokensArgs {
+  address: string;
+  asset: FaucetAsset;
+}
+
+/** Requests one of Circle's three testnet-faucet-supported tokens — native
+ *  gas, USDC, or EURC (the complete set `requestTestnetTokens` accepts) —
+ *  for a wallet address. Throws `FaucetRateLimitedError` on a 429 so the
+ *  caller can distinguish "try again later" from a real failure. */
+export async function requestFaucetTokens({
+  address,
+  asset,
+}: RequestFaucetTokensArgs): Promise<void> {
+  const network = process.env.ARC_NETWORK ?? "ARC-TESTNET";
+  const client = getCircleClient();
+
+  try {
+    await client.requestTestnetTokens({
+      address,
+      blockchain: network as TestnetBlockchain,
+      native: asset === "NATIVE",
+      usdc: asset === "USDC",
+      eurc: asset === "EURC",
+    });
+  } catch (err) {
+    if (err instanceof RatelimitError) {
+      throw new FaucetRateLimitedError();
+    }
+    throw err;
+  }
+
+  console.log("[circle] faucet request submitted", { address, asset });
 }

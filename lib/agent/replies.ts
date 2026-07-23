@@ -31,11 +31,11 @@ export const REPLIES = {
   ],
 
   help: [
-    "Here's what I can do, {name} 👇\n\n• *Balance* — \"what's my balance?\"\n• *Address* — \"what's my address?\"\n• *Send* — \"send 5 usdc to +234…\"\n• *Send to a wallet* — \"send 5 usdc to 0x…\"",
-    "Happy to help, {name}! These all work:\n\n• \"balance\"\n• \"my address\"\n• \"send 5 usdc to +234…\"\n• \"send 5 usdc to 0x…\"",
-    "No problem {name} — here are your options:\n\n💰 Check balance\n📥 Get your address\n💸 Send USDC to a number or 0x address\n\nJust type what you want to do.",
-    "I've got you, {name}. Things you can ask:\n\n• *What's my balance?*\n• *What's my address?*\n• *Send 5000 to +234…*",
-    "Here's the menu, {name} 📋\n\n• Balance → see your funds\n• Address → receive USDC\n• Send → \"send 5 usdc to +234…\"\n\nWhat would you like?",
+    "Here's what I can do, {name} 👇\n\n• *Balance* — \"what's my balance?\"\n• *Address* — \"what's my address?\"\n• *Send* — \"send 5 usdc to +234…\"\n• *Send to a wallet* — \"send 5 usdc to 0x…\"\n• *Faucet* — \"faucet usdc\" (testnet tokens)",
+    "Happy to help, {name}! These all work:\n\n• \"balance\"\n• \"my address\"\n• \"send 5 usdc to +234…\"\n• \"send 5 usdc to 0x…\"\n• \"faucet\" (grab testnet tokens)",
+    "No problem {name} — here are your options:\n\n💰 Check balance\n📥 Get your address\n💸 Send USDC to a number or 0x address\n🚿 Faucet — grab testnet tokens\n\nJust type what you want to do.",
+    "I've got you, {name}. Things you can ask:\n\n• *What's my balance?*\n• *What's my address?*\n• *Send 5000 to +234…*\n• *Faucet usdc* — get testnet tokens",
+    "Here's the menu, {name} 📋\n\n• Balance → see your funds\n• Address → receive USDC\n• Send → \"send 5 usdc to +234…\"\n• Faucet → \"faucet usdc\" for testnet tokens\n\nWhat would you like?",
   ],
 
   about: [
@@ -163,5 +163,29 @@ export const REPLIES = {
     "I couldn't fetch your balance just now, {name}. Try again in a moment?",
     "Hmm, balance check failed — give it another try shortly.",
     "Something went wrong getting your balance, {name}. One more try in a sec?",
+  ],
+
+  faucetSuccess: [
+    "✓ Sent, {name}! Testnet tokens are on the way to your wallet — check your *balance* in a moment.",
+    "Done! 🚿 That should land in your wallet shortly, {name}. Try *balance* in a bit to see it.",
+    "Requested! Give the network a moment, then check your *balance*, {name}.",
+  ],
+
+  faucetInvalidAsset: [
+    "I can only send *native gas*, *USDC*, or *EURC* from the testnet faucet, {name}. Which one would you like?",
+    "That's not one the faucet offers, {name} — pick *native*, *USDC*, or *EURC*.",
+    "Not a faucet option, {name}. Try *native* (gas), *USDC*, or *EURC*.",
+  ],
+
+  faucetRateLimited: [
+    "Looks like you've already tapped the faucet recently, {name} — try again later.",
+    "The faucet's on cooldown for your wallet right now. Give it a while and try again.",
+    "Already claimed recently, {name}! The faucet resets after a bit — try again later.",
+  ],
+
+  faucetError: [
+    "The faucet didn't come through just now, {name}. Try again in a moment?",
+    "Hmm, that faucet request failed — give it another try shortly.",
+    "Something went wrong requesting testnet tokens, {name}. One more try in a sec?",
   ],
 } as const;
