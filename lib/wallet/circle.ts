@@ -1,5 +1,6 @@
 import {
   initiateDeveloperControlledWalletsClient,
+  ForbiddenError,
   RatelimitError,
   type TestnetBlockchain,
 } from "@circle-fin/developer-controlled-wallets";
@@ -214,6 +215,18 @@ export class FaucetRateLimitedError extends Error {
   }
 }
 
+/** Thrown when Circle returns 403 Forbidden for a faucet drip. Per Circle's
+ *  docs, `POST /v1/faucet/drips` requires the account to be upgraded to
+ *  mainnet — until then every drip is rejected regardless of chain or key
+ *  scope. Distinct from a generic failure so the caller can point the user
+ *  at the web faucet (faucet.circle.com), which has no such gate. */
+export class FaucetForbiddenError extends Error {
+  constructor() {
+    super("Circle faucet API is not enabled for this account (requires mainnet upgrade)");
+    this.name = "FaucetForbiddenError";
+  }
+}
+
 export interface RequestFaucetTokensArgs {
   address: string;
   asset: FaucetAsset;
@@ -239,7 +252,16 @@ export async function requestFaucetTokens({
       eurc: asset === "EURC",
     });
   } catch (err) {
-    if (err instanceof RatelimitError) {
+    // NOTE: don't rely on the SDK's typed error classes alone here. The SDK
+    // picks the class from the *body's* `code` field when present (falling
+    // back to HTTP status only when it's absent), and the faucet endpoint
+    // returns generic body codes (429 → {code: 5}, 403 → {code: 3}) that
+    // match no class — so `instanceof RatelimitError/ForbiddenError` is
+    // false for exactly the responses this endpoint actually sends, and the
+    // error arrives as the base HttpResponseError. Check the HTTP status
+    // directly, keeping instanceof as a backstop for bodies without a code.
+    const status = (err as { status?: number }).status;
+    if (status === 429 || err instanceof RatelimitError) {
       throw new FaucetRateLimitedError();
     }
     // Circle's HttpError hides the response body from its own serialization
@@ -253,9 +275,12 @@ export async function requestFaucetTokens({
       address,
       asset,
       blockchain: network,
-      status: (err as { status?: number }).status,
+      status,
       circleResponse: axiosError?.response?.data ?? "(no response body)",
     });
+    if (status === 403 || err instanceof ForbiddenError) {
+      throw new FaucetForbiddenError();
+    }
     throw err;
   }
 

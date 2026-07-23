@@ -21,6 +21,7 @@ import { listRecentTransactions } from "@/lib/transactions/repository";
 import {
   getWalletBalances,
   requestFaucetTokens,
+  FaucetForbiddenError,
   FaucetRateLimitedError,
   type FaucetAsset,
 } from "@/lib/wallet/circle";
@@ -411,6 +412,15 @@ async function sendFaucetTokens({
   } catch (err) {
     if (err instanceof FaucetRateLimitedError) {
       return { reply: pickReply(REPLIES.faucetRateLimited, { name }) };
+    }
+    if (err instanceof FaucetForbiddenError) {
+      // Circle's drip API is gated behind a mainnet-upgraded account — the
+      // web faucet isn't. Point the user there, with their address in its
+      // own bubble so a long-press → Copy grabs exactly the address.
+      return {
+        reply: pickReply(REPLIES.faucetWebFallback, { name }),
+        followUp: user.wallet_address as string,
+      };
     }
     console.error("[faucet] request failed", { userId: user.id, asset, err });
     return { reply: pickReply(REPLIES.faucetError, { name }) };

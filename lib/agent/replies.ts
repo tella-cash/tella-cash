@@ -188,4 +188,10 @@ export const REPLIES = {
     "Hmm, that faucet request failed — give it another try shortly.",
     "Something went wrong requesting testnet tokens, {name}. One more try in a sec?",
   ],
+
+  faucetWebFallback: [
+    "I can't tap the faucet for you directly, {name} — but you can grab testnet tokens yourself 🚿\n\n1. Open https://faucet.circle.com\n2. Pick *Arc Testnet*\n3. Paste your address (next message — tap and hold to copy)",
+    "The faucet isn't answering me, {name}, but it'll answer *you*: head to https://faucet.circle.com, choose *Arc Testnet*, and paste in your address — I'll send it right after this so you can copy it.",
+    "No luck from here, {name} — use Circle's faucet page instead: https://faucet.circle.com\n\nSelect *Arc Testnet* and drop in your wallet address (coming up next, tap and hold to copy).",
+  ],
 } as const;
