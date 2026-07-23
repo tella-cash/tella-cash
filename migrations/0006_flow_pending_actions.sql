@@ -35,11 +35,18 @@ end $$;
 alter table public.tella_pending_action
   drop constraint if exists tella_pending_action_kind_check;
 
+-- Delete any leftover 'beneficiary_confirm'/'beneficiary_name' rows before
+-- re-adding the constraint. Postgres validates a new CHECK against EVERY
+-- existing row regardless of expires_at (which is only an app-level read
+-- filter — nothing actually deletes expired rows), so a stale row with an
+-- old kind value makes the ADD CONSTRAINT below fail with
+-- "check constraint ... is violated by some row". These rows are ephemeral
+-- multi-turn conversation state (short TTL, nothing reads these kinds
+-- anymore), so dropping them is safe: any user mid-flow timed out long ago
+-- and the next message just re-decodes from scratch.
+delete from public.tella_pending_action
+where kind not in ('send', 'flow');
+
 alter table public.tella_pending_action
   add constraint tella_pending_action_kind_check
     check (kind in ('send', 'flow'));
-
--- Any leftover 'beneficiary_confirm'/'beneficiary_name' rows from before
--- this migration are short-TTL (10 min, formerly) and safe to leave to
--- expire — same approach 0005 took for stale 'send' rows. No data backfill
--- needed; nothing reads those kind values anymore after this deploy.

@@ -242,6 +242,20 @@ export async function requestFaucetTokens({
     if (err instanceof RatelimitError) {
       throw new FaucetRateLimitedError();
     }
+    // Circle's HttpError hides the response body from its own serialization
+    // ("prevents sensitive data leakage"), so a bare log shows only
+    // status/url and a generic "Forbidden" — the real reason (e.g. faucet
+    // not enabled for this chain, API key lacks scope) lives in the raw
+    // Axios response body. Surface it here so faucet failures are
+    // diagnosable from logs instead of opaque.
+    const axiosError = (err as { error?: { response?: { data?: unknown } } }).error;
+    console.error("[circle] faucet request rejected", {
+      address,
+      asset,
+      blockchain: network,
+      status: (err as { status?: number }).status,
+      circleResponse: axiosError?.response?.data ?? "(no response body)",
+    });
     throw err;
   }
 

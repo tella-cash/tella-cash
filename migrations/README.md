@@ -33,6 +33,8 @@ Widens `tella_pending_action.kind`'s check constraint from `('send', 'beneficiar
 
 Apply before deploying any code that writes a `kind: 'flow'` row (a pre-migration deploy would hit the old check constraint and fail every insert).
 
+The migration deletes any leftover `beneficiary_confirm`/`beneficiary_name` rows before re-adding the constraint — Postgres validates a new CHECK against every existing row, and nothing actually purges expired rows (`expires_at` is only an app-level read filter), so a stale row would otherwise make the migration fail with `check constraint ... is violated by some row`. Those rows are ephemeral, past-TTL conversation state and safe to drop.
+
 After applying, set these env vars in `.env` (and on Vercel):
 
 ```
