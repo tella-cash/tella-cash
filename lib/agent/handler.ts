@@ -294,11 +294,19 @@ async function reissueNamePrompt({
   slots: FollowUpSlots;
   replyPrefix: string;
 }): Promise<HandlerResult> {
-  const { token } = await flowStart(SAVE_BENEFICIARY_FLOW, slots, [
-    { slot: "beneficiaryName", type: "FREE_TEXT", description: "what should we call them?" },
-  ]);
-  await createPendingFlow({ userId: user.id, flow: SAVE_BENEFICIARY_FLOW, token });
-  return { reply: replyPrefix };
+  // A sendam-ai outage here must not throw all the way up to the webhook
+  // route — the Meta channel has no fallback-message safety net of its own
+  // (unlike Twilio's), so an uncaught throw here means total silence.
+  try {
+    const { token } = await flowStart(SAVE_BENEFICIARY_FLOW, slots, [
+      { slot: "beneficiaryName", type: "FREE_TEXT", description: "what should we call them?" },
+    ]);
+    await createPendingFlow({ userId: user.id, flow: SAVE_BENEFICIARY_FLOW, token });
+    return { reply: replyPrefix };
+  } catch (err) {
+    console.error("[agent] flowStart failed", { userId: user.id, flow: SAVE_BENEFICIARY_FLOW, err });
+    return { reply: replyPrefix };
+  }
 }
 
 async function completeFaucetAssetFlow({
@@ -324,11 +332,35 @@ async function completeFaucetAssetFlow({
 }
 
 /**
+ * Starts (or restarts) the "which testnet asset?" flow. A sendam-ai
+ * outage/misconfiguration here must not cost the user their message —
+ * same principle as decode()'s try/catch in handleOnboardedUser — so a
+ * failed flowStart() falls back to a plain reply instead of throwing all
+ * the way up to the webhook route, which for the Meta channel has no
+ * fallback-message safety net of its own (unlike the Twilio route).
+ *
+ * `priorSlots` is deliberately NOT forwarded on a re-ask (see call sites):
+ * an old, unrecognized "asset" value would otherwise look already-resolved
+ * to sendam-ai and never get asked again.
+ */
+async function startFaucetAssetFlow(user: tellaUser): Promise<{ ok: boolean; reply: string }> {
+  try {
+    const { token } = await flowStart(FAUCET_ASSET_FLOW, {}, FAUCET_ASSET_AWAITING);
+    await createPendingFlow({ userId: user.id, flow: FAUCET_ASSET_FLOW, token });
+    return {
+      ok: true,
+      reply: nextQuestionFor(FAUCET_ASSET_FLOW, {}) ?? "Which testnet asset would you like — native, USDC, or EURC?",
+    };
+  } catch (err) {
+    console.error("[faucet] flowStart failed", { userId: user.id, err });
+    return { ok: false, reply: pickReply(REPLIES.faucetError, { name: firstName(user) }) };
+  }
+}
+
+/**
  * The original token is already COMPLETE/consumed at this point — mints a
  * fresh single-slot token for just the asset rather than trying to continue
- * a finished flow. Deliberately doesn't carry the old (unrecognized) "asset"
- * value forward into the new token's slots, or sendam-ai would treat it as
- * already resolved and never ask again.
+ * a finished flow.
  */
 async function reissueFaucetAssetPrompt({
   user,
@@ -337,9 +369,9 @@ async function reissueFaucetAssetPrompt({
   user: tellaUser;
   replyPrefix: string;
 }): Promise<HandlerResult> {
-  const { token } = await flowStart(FAUCET_ASSET_FLOW, {}, FAUCET_ASSET_AWAITING);
-  await createPendingFlow({ userId: user.id, flow: FAUCET_ASSET_FLOW, token });
-  return { reply: replyPrefix };
+  const result = await startFaucetAssetFlow(user);
+  if (!result.ok) return { reply: result.reply };
+  return { reply: `${replyPrefix}\n\n${result.reply}` };
 }
 
 async function handleFaucetIntent({
@@ -357,11 +389,8 @@ async function handleFaucetIntent({
 
   const normalized = normalizeFaucetAsset(asset);
   if (!normalized) {
-    const { token } = await flowStart(FAUCET_ASSET_FLOW, {}, FAUCET_ASSET_AWAITING);
-    await createPendingFlow({ userId: user.id, flow: FAUCET_ASSET_FLOW, token });
-    return {
-      reply: nextQuestionFor(FAUCET_ASSET_FLOW, {}) ?? "Which testnet asset would you like — native, USDC, or EURC?",
-    };
+    const result = await startFaucetAssetFlow(user);
+    return { reply: result.reply };
   }
 
   return sendFaucetTokens({ user, asset: normalized });
