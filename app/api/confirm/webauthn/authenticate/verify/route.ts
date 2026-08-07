@@ -8,6 +8,11 @@ import {
   listCredentials,
   updateCredentialCounter,
 } from "@/lib/webauthn/repository";
+import {
+  recordAuthAttempt,
+  resetAuthAttempts,
+  formatRetryAfter,
+} from "@/lib/auth/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -49,6 +54,23 @@ export async function POST(request: Request) {
     );
   }
 
+  // Forged assertions are far more expensive to grind than a 4-digit PIN,
+  // but the same counter keeps the confirm link from being a free harness
+  // for hammering credential IDs.
+  const attempt = await recordAuthAttempt(ctx.user.id, "webauthn_authenticate");
+  if (!attempt.allowed) {
+    return NextResponse.json(
+      {
+        error: `Too many attempts. Try again in ${formatRetryAfter(attempt.retryAfterSeconds)}.`,
+        retryAfter: attempt.retryAfterSeconds,
+      },
+      {
+        status: 429,
+        headers: { "Retry-After": String(attempt.retryAfterSeconds) },
+      },
+    );
+  }
+
   const credentials = await listCredentials(ctx.user.id);
   const credential = credentials.find(
     (c) => c.credential_id === body.response!.id,
@@ -81,6 +103,8 @@ export async function POST(request: Request) {
       { status: 401 },
     );
   }
+
+  await resetAuthAttempts(ctx.user.id, "webauthn_authenticate");
 
   await updateCredentialCounter(
     credential.credential_id,

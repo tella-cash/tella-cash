@@ -10,6 +10,7 @@ import { handleIncomingMessage } from "@/lib/agent/handler";
 import { findOrCreateUser } from "@/lib/users/repository";
 import { provisionWalletForUser } from "@/lib/wallet/provision";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { allowUnsignedWebhooks } from "@/lib/whatsapp/signature-policy";
 
 /**
  * Meta WhatsApp Cloud API webhook.
@@ -51,11 +52,16 @@ export async function POST(request: Request) {
   const rawBody = await request.text();
   const signature = request.headers.get("x-hub-signature-256") ?? "";
 
+  // Enforced everywhere — see lib/whatsapp/signature-policy for why this is
+  // no longer conditional on NODE_ENV.
   if (!verifyMetaSignature(rawBody, signature)) {
-    if (process.env.NODE_ENV === "production") {
+    if (!allowUnsignedWebhooks()) {
+      console.warn("[meta] signature validation failed", {
+        hasSignature: Boolean(signature),
+      });
       return NextResponse.json({ error: "Invalid signature" }, { status: 403 });
     }
-    console.warn("[meta] invalid signature (allowed in non-production)");
+    console.warn("[meta] invalid signature (allowed by WHATSAPP_ALLOW_UNSIGNED)");
   }
 
   let payload: MetaWebhookPayload;

@@ -10,6 +10,7 @@ import { handleIncomingMessage } from "@/lib/agent/handler";
 import { findOrCreateUser } from "@/lib/users/repository";
 import { provisionWalletForUser } from "@/lib/wallet/provision";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { allowUnsignedWebhooks } from "@/lib/whatsapp/signature-policy";
 
 interface TwilioWebhookPayload {
   From: string;
@@ -40,7 +41,10 @@ export async function POST(request: Request) {
     twilio.validateRequest(authToken, signature, candidate, params),
   );
 
-  if (!isValid && process.env.NODE_ENV === "production") {
+  // Enforced everywhere, not just when NODE_ENV happens to be "production".
+  // A misconfigured environment shouldn't be the only thing holding this
+  // door shut. The bypass is an explicit opt-in for local dev only.
+  if (!isValid && !allowUnsignedWebhooks()) {
     console.warn("[whatsapp] signature validation failed", {
       candidateUrls,
       hasSignature: Boolean(signature),

@@ -66,17 +66,26 @@ export function ConfirmClient({
   // ceremonies (and two send attempts) before the UI swaps to "working".
   const busyRef = useRef(false);
 
-  // If the browser can't do WebAuthn, the chooser collapses straight to the
-  // PIN form rather than offering a biometric button that would only fail.
+  // Biometric is offered when the user already has a passkey (authenticate),
+  // or when they have no factor at all (first enrollment). It is NOT offered
+  // to a PIN-only account: the register routes now refuse enrollment once a
+  // factor exists, because a fresh passkey ceremony proves possession of the
+  // link, not of the account. Adding a device goes through recovery instead.
+  const canUseBiometric = hasPasskey || !hasPin;
+  const biometricAvailable = webauthnReady && canUseBiometric;
+
+  // If the browser can't do WebAuthn (or biometric isn't on offer), the
+  // chooser collapses straight to the PIN form rather than showing a button
+  // that would only fail.
   const effectiveStage: Stage =
-    stage.kind === "choose" && !webauthnReady
+    stage.kind === "choose" && !biometricAvailable
       ? { kind: "pin", mode: hasPin ? "verify" : "setup" }
       : stage;
 
   function goHome() {
     busyRef.current = false;
     setStage(
-      webauthnReady
+      biometricAvailable
         ? { kind: "choose" }
         : { kind: "pin", mode: hasPin ? "verify" : "setup" },
     );
@@ -212,7 +221,9 @@ export function ConfirmClient({
                 mode={effectiveStage.mode}
                 onStageChange={setStage}
                 onUseBiometric={
-                  webauthnReady ? () => setStage({ kind: "choose" }) : undefined
+                  biometricAvailable
+                    ? () => setStage({ kind: "choose" })
+                    : undefined
                 }
               />
             )}
@@ -329,6 +340,16 @@ function PinForm({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ token, pin }),
       });
+      // A lockout isn't a failure the user can retry their way out of, so
+      // it doesn't belong on the error stage with its "try again" affordance.
+      // Put them back on the PIN form with the wait time stated.
+      if (verifyRes.status === 429) {
+        onStageChange({ kind: "pin", mode: isSetup ? "setup" : "verify" });
+        rejectInPlace(await readError(verifyRes));
+        busyRef.current = false;
+        setBusy(false);
+        return;
+      }
       if (!verifyRes.ok) throw new Error(await readError(verifyRes));
       const data = (await verifyRes.json()) as { transactionId: string };
       onStageChange({

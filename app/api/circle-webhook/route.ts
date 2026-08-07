@@ -4,6 +4,7 @@ import { notifyUser, notifyUserWithImage } from "@/lib/whatsapp/notify";
 import { recordTransaction, markOutboundComplete } from "@/lib/transactions/repository";
 import { getUsdToNgnRate, usdToNgn } from "@/lib/fx/naira";
 import { getTokenSymbol, getFormattedBalanceLines } from "@/lib/wallet/circle";
+import { verifyCircleWebhook } from "@/lib/circle/verify-webhook";
 
 /**
  * Subset of the Circle notification payload we care about. Circle sends
@@ -35,20 +36,22 @@ interface CircleNotification {
  * POST /api/circle-webhook
  *
  * Receives webhook events from Circle. Pattern mirrors the Twilio webhook:
- * parse, ack 200 fast, process async via after().
+ * verify, ack 200 fast, process async via after().
  *
- * NOTE: Signature verification is currently bypassed because we don't have
- * CIRCLE_NOTIFICATION_PUBLIC_KEY yet. This MUST be re-enabled before any
- * real users — anyone who finds this URL can otherwise POST fake "you
- * received $X" events. See verify-webhook.ts for the verification helper
- * that's ready to plug back in once we have the key.
+ * Verification happens before anything else and fails closed — an
+ * unauthenticated POST here would otherwise let anyone tell a real user
+ * that money they never received has arrived.
  */
 export async function POST(request: Request) {
   const rawBody = await request.text();
 
-  // TODO(security): re-enable signature verification once we have the
-  // public key from Circle's /v2/notifications/publicKey endpoint.
-  console.warn("[circle-webhook] signature verification SKIPPED");
+  const verification = await verifyCircleWebhook(rawBody, request.headers);
+  if (!verification.ok) {
+    console.warn("[circle-webhook] rejected unverified notification", {
+      reason: verification.reason,
+    });
+    return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+  }
 
   let payload: CircleNotification;
   try {
@@ -74,15 +77,9 @@ export async function POST(request: Request) {
   return NextResponse.json({ received: true }, { status: 200 });
 }
 
-/**
- * GET /api/circle-webhook
- *
- * Health-check endpoint. Hitting this in a browser confirms the route is
- * deployed without going through the signed POST path.
- */
-export async function GET() {
-  return NextResponse.json({ status: "ok" });
-}
+// The unauthenticated GET health check was removed. It confirmed nothing the
+// POST path doesn't: an unsigned POST now returns 401, which is itself proof
+// the route is deployed and verifying. One less endpoint to enumerate.
 
 /**
  * Dispatch a verified Circle notification to the right handler.
