@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { SITE } from "@/lib/data/site";
 
 export const metadata: Metadata = {
   title: "Privacy Policy · Tella",
@@ -265,7 +266,7 @@ export default function PrivacyPage() {
         </ul>
         <p>
           To exercise these rights, message us in chat or email{" "}
-          <a href="mailto:privacy@example.com" className="legal-link">
+          <a href={`mailto:${SITE.privacyEmail}`} className="legal-link">
             <Placeholder>[privacy@yourdomain.com]</Placeholder>
           </a>
           . For a deletion request specifically, see our{" "}
@@ -298,7 +299,7 @@ export default function PrivacyPage() {
         <p>
           For privacy questions or to exercise your rights, contact our Data
           Protection Officer at{" "}
-          <a href="mailto:privacy@example.com" className="legal-link">
+          <a href={`mailto:${SITE.privacyEmail}`} className="legal-link">
             <Placeholder>[privacy@yourdomain.com]</Placeholder>
           </a>
           , or by post at{" "}

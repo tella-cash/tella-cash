@@ -93,28 +93,68 @@ export async function sumSentUsdcSince(
 }
 
 /**
- * The Circle outbound webhook event carries walletId/txHash/state but not
- * the original transaction ID, so we can't correlate directly — instead we
- * mark the most recent still-`submitted` send for this user as complete.
+ * Mark an outbound send complete and attach its on-chain hash.
+ *
+ * `circleTransactionId` is the notification's own `id`, which IS the
+ * transaction id returned by createTransaction — we store that on the row at
+ * submit time, so the two can be matched directly.
+ *
+ * This used to guess: it took the most recent still-`submitted` send for the
+ * user. With one send in flight that's right; with two, the hash from the
+ * second confirmation lands on whichever row was newer, so both rows end up
+ * describing the wrong transaction. Two sends in five minutes is not an
+ * exotic scenario — the app explicitly supports multiple concurrent pending
+ * sends (migrations/0005), and the follow-up handler reminds users about
+ * them.
+ *
+ * The "most recent submitted" behaviour is kept only as a fallback for rows
+ * written before circle_transaction_id was populated, and logs when it fires
+ * so it can be removed once no such rows remain.
  */
 export async function markOutboundComplete(
   userId: string,
   txHash: string,
+  circleTransactionId?: string | null,
 ): Promise<void> {
   const supabase = getSupabaseAdmin();
 
+  if (circleTransactionId) {
+    const { data, error } = await supabase
+      .from("tella_transactions")
+      .update({ status: "complete", tx_hash: txHash })
+      .eq("user_id", userId)
+      .eq("circle_transaction_id", circleTransactionId)
+      .select("id");
+
+    if (error) {
+      throw new Error(`markOutboundComplete update failed: ${error.message}`);
+    }
+    if ((data ?? []).length > 0) return;
+
+    console.warn("[transactions] no row matched circle transaction id", {
+      userId,
+      circleTransactionId,
+    });
+  }
+
+  // Legacy path. Correct only when a single send is in flight.
   const { data: latest, error: findError } = await supabase
     .from("tella_transactions")
     .select("id")
     .eq("user_id", userId)
     .eq("direction", "sent")
     .eq("status", "submitted")
+    .is("circle_transaction_id", null)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
 
   if (findError) throw new Error(`markOutboundComplete lookup failed: ${findError.message}`);
   if (!latest) return;
+
+  console.warn("[transactions] falling back to most-recent-submitted match", {
+    userId,
+  });
 
   const { error: updateError } = await supabase
     .from("tella_transactions")

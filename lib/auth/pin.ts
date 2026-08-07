@@ -104,3 +104,19 @@ export async function setPinForUser({
 
   if (error) throw new Error(`setPinForUser failed: ${error.message}`);
 }
+
+/**
+ * Replace an existing PIN. Separate from setPinForUser so the caller has to
+ * be explicit: setPinForUser is reachable from the confirm flow, which is
+ * guarded by a 409 precisely so a link-holder can't overwrite someone's PIN.
+ * This one is only reachable from the recovery flow, which has its own gate.
+ */
+export async function replacePinForUser({
+  userId,
+  pin,
+}: {
+  userId: string;
+  pin: string;
+}): Promise<void> {
+  await setPinForUser({ userId, pin });
+}

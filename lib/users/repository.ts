@@ -136,6 +136,36 @@ export async function markWalletFailed(userId: string): Promise<void> {
   if (error) throw new Error(`markWalletFailed failed: ${error.message}`);
 }
 
+/**
+ * Users whose wallet provisioning never completed.
+ *
+ * Both 'failed' and long-stuck 'pending' are returned. A 'pending' row older
+ * than the grace period means the process died between markWalletPending and
+ * setWalletActive — provision.ts's own comment says such users are
+ * recoverable by re-running, and Circle's idempotencyKey (the user id) makes
+ * the retry safe: it returns the existing wallet rather than creating a
+ * second one.
+ */
+export async function listUsersNeedingWallet(
+  stalePendingMinutes = 10,
+  limit = 50,
+): Promise<tellaUser[]> {
+  const supabase = getSupabaseAdmin();
+  const staleBefore = new Date(
+    Date.now() - stalePendingMinutes * 60 * 1000,
+  ).toISOString();
+
+  const { data, error } = await supabase
+    .from("tella_users")
+    .select("*")
+    .or(`wallet_status.eq.failed,and(wallet_status.eq.pending,updated_at.lt.${staleBefore})`)
+    .order("updated_at", { ascending: true })
+    .limit(limit);
+
+  if (error) throw new Error(`listUsersNeedingWallet failed: ${error.message}`);
+  return (data as tellaUser[]) ?? [];
+}
+
 export async function findUserByWhatsApp(
   whatsappNumber: string,
 ): Promise<tellaUser | null> {

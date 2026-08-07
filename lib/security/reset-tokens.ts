@@ -1,0 +1,140 @@
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import type { tellaUser } from "@/lib/supabase/types";
+
+/**
+ * Single-use recovery tokens (migrations/0010_security_tokens.sql).
+ *
+ * Deliberately shorter-lived than a confirm link. A confirm link authorizes
+ * one transfer of a known amount to a known recipient; a reset link
+ * authorizes replacing the factor that guards every future transfer. The
+ * blast radius is larger, so the window is smaller.
+ */
+
+export type SecurityTokenKind = "pin_reset";
+
+const TTL_MINUTES = 10;
+
+export interface SecurityToken {
+  id: string;
+  user_id: string;
+  kind: SecurityTokenKind;
+  expires_at: string;
+  used_at: string | null;
+  created_at: string;
+}
+
+export interface ResetContext {
+  user: tellaUser;
+  token: SecurityToken;
+}
+
+export async function createResetToken(
+  userId: string,
+  kind: SecurityTokenKind = "pin_reset",
+): Promise<SecurityToken> {
+  const supabase = getSupabaseAdmin();
+  const expiresAt = new Date(Date.now() + TTL_MINUTES * 60 * 1000).toISOString();
+
+  const { data, error } = await supabase
+    .from("tella_security_token")
+    .insert({ user_id: userId, kind, expires_at: expiresAt })
+    .select()
+    .single();
+
+  if (error) throw new Error(`createResetToken failed: ${error.message}`);
+  return data as SecurityToken;
+}
+
+/**
+ * Resolve a reset token to its user, or null if it's expired, already used,
+ * or not a token at all.
+ *
+ * Mirrors loadConfirmContext's handling of Postgres 22P02: a malformed UUID
+ * makes the comparison itself fail rather than returning no row, and from
+ * the visitor's side that is indistinguishable from a bad link.
+ */
+export async function loadResetContext(
+  token: string,
+  kind: SecurityTokenKind = "pin_reset",
+): Promise<ResetContext | null> {
+  const supabase = getSupabaseAdmin();
+
+  const { data: row, error } = await supabase
+    .from("tella_security_token")
+    .select("*")
+    .eq("id", token)
+    .eq("kind", kind)
+    .is("used_at", null)
+    .gt("expires_at", new Date().toISOString())
+    .maybeSingle();
+
+  if (error) {
+    if (error.code === "22P02") return null;
+    throw new Error(`loadResetContext: ${error.message}`);
+  }
+  if (!row) return null;
+
+  const { data: user, error: userErr } = await supabase
+    .from("tella_users")
+    .select("*")
+    .eq("id", (row as SecurityToken).user_id)
+    .single();
+
+  if (userErr) throw new Error(`loadResetContext: ${userErr.message}`);
+  return { user: user as tellaUser, token: row as SecurityToken };
+}
+
+/**
+ * Atomically consume the token. Like claimPendingSend, the `is used_at null`
+ * filter is what enforces single use — two tabs both submitting a new PIN
+ * race here and only one wins.
+ *
+ * Returns false if it was already consumed.
+ */
+export async function consumeResetToken(id: string): Promise<boolean> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("tella_security_token")
+    .update({ used_at: new Date().toISOString() })
+    .eq("id", id)
+    .is("used_at", null)
+    .select("id")
+    .maybeSingle();
+
+  if (error) throw new Error(`consumeResetToken failed: ${error.message}`);
+  return data !== null;
+}
+
+/**
+ * Invalidate any outstanding reset tokens for a user.
+ *
+ * Called after a successful reset so a second link, requested minutes
+ * earlier and still inside its window, can't be used to reset again by
+ * someone who saw it in a notification preview.
+ */
+export async function revokeResetTokens(userId: string): Promise<void> {
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase
+    .from("tella_security_token")
+    .update({ used_at: new Date().toISOString() })
+    .eq("user_id", userId)
+    .is("used_at", null);
+
+  if (error) {
+    console.error("[security] revoking outstanding reset tokens failed", {
+      userId,
+      error: error.message,
+    });
+  }
+}
+
+/** The user-facing URL for a reset token. */
+export function buildResetUrl(token: string): string {
+  const base = process.env.APP_BASE_URL;
+  if (!base) {
+    throw new Error("Missing APP_BASE_URL environment variable");
+  }
+  return `${base.replace(/\/$/, "")}/security/${token}`;
+}
+
+export const RESET_TTL_MINUTES = TTL_MINUTES;

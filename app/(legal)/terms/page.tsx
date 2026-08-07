@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { SITE } from "@/lib/data/site";
 
 export const metadata: Metadata = {
   title: "Terms of Service · Tella",
@@ -296,7 +297,7 @@ export default function TermsPage() {
         <p>
           Questions about these Terms? Reach us at{" "}
           <a
-            href="mailto:legal@example.com"
+            href={`mailto:${SITE.legalEmail}`}
             className="legal-link"
           >
             <Placeholder>[legal@yourdomain.com]</Placeholder>

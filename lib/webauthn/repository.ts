@@ -44,6 +44,29 @@ export async function userHasCredential(userId: string): Promise<boolean> {
   return (count ?? 0) > 0;
 }
 
+/**
+ * Remove every passkey for a user. Used by the recovery flow when someone
+ * has lost the device holding their only passkey — without this, that
+ * account can never authorize a send again, because register/verify refuses
+ * to enroll a second credential.
+ *
+ * Returns how many were removed, so the caller can tell the user something
+ * true about what just happened.
+ */
+export async function deleteCredentialsForUser(
+  userId: string,
+): Promise<number> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("tella_webauthn_credentials")
+    .delete()
+    .eq("user_id", userId)
+    .select("id");
+
+  if (error) throw new Error(`deleteCredentialsForUser: ${error.message}`);
+  return (data ?? []).length;
+}
+
 export async function saveCredential(args: {
   userId: string;
   credentialId: string;

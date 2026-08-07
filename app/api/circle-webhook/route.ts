@@ -5,6 +5,7 @@ import { recordTransaction, markOutboundComplete } from "@/lib/transactions/repo
 import { getUsdToNgnRate, usdToNgn } from "@/lib/fx/naira";
 import { getTokenSymbol, getFormattedBalanceLines } from "@/lib/wallet/circle";
 import { verifyCircleWebhook } from "@/lib/circle/verify-webhook";
+import { raiseAlert } from "@/lib/observability/alerts";
 
 /**
  * Subset of the Circle notification payload we care about. Circle sends
@@ -47,8 +48,12 @@ export async function POST(request: Request) {
 
   const verification = await verifyCircleWebhook(rawBody, request.headers);
   if (!verification.ok) {
-    console.warn("[circle-webhook] rejected unverified notification", {
-      reason: verification.reason,
+    // Worth waking someone for: a forged notification is an attempt to make
+    // the bot tell a user that money arrived when it didn't.
+    raiseAlert({
+      kind: "webhook_signature_failed",
+      message: `Rejected an unverified Circle notification (${verification.reason}).`,
+      context: { source: "circle" },
     });
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
@@ -287,7 +292,10 @@ async function handleOutboundTransaction(
   await notifyUser({ user, body: message });
 
   try {
-    await markOutboundComplete(user.id, notification.txHash);
+    // notification.id is Circle's transaction id — the same value
+    // createTransaction returned and follow-up.ts stored on the row, so this
+    // resolves to exactly one send instead of guessing at the newest.
+    await markOutboundComplete(user.id, notification.txHash, notification.id);
   } catch (err) {
     console.error("[circle-webhook] transaction complete-mark failed", { userId: user.id, err });
   }

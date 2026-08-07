@@ -27,6 +27,13 @@ import {
 } from "@/lib/wallet/circle";
 import { getUsdToNgnRate, usdToNgn } from "@/lib/fx/naira";
 import { checkSendLimits, formatLimitFailure } from "@/lib/sends/limits";
+import { isResetRequest } from "@/lib/agent/detect-reset-request";
+import {
+  createResetToken,
+  buildResetUrl,
+  RESET_TTL_MINUTES,
+} from "@/lib/security/reset-tokens";
+import { recordAuthAttempt, formatRetryAfter } from "@/lib/auth/rate-limit";
 import type { ParsedSendIntent } from "@/lib/agent/parse-send";
 import { mapDecodedSend } from "@/lib/agent/map-decoded-send";
 import { normalizeFaucetAsset } from "@/lib/agent/normalize-faucet-asset";
@@ -465,6 +472,10 @@ async function handleOnboardedUser({
   // Debug health-check stays deterministic.
   if (trimmed.toLowerCase() === "ping") return { reply: "pong ✓" };
 
+  // Matched before decode() on purpose — see detect-reset-request.ts. A
+  // locked-out user must get the recovery link even when sendam-ai is down.
+  if (isResetRequest(trimmed)) return startPinReset(user);
+
   let decoded: Awaited<ReturnType<typeof decode>>;
   try {
     decoded = await decode(text, { userId: user.id });
@@ -529,6 +540,62 @@ async function handleOnboardedUser({
       // Help them recover with the quick menu.
       return { reply: pickReply(REPLIES.unknown, { name }), interactive: "buttons" };
   }
+}
+
+/**
+ * Issue a recovery link over WhatsApp.
+ *
+ * Possession of this WhatsApp account is the authenticating factor — the
+ * same basis the confirm links already run on. What keeps that acceptable
+ * is that the link is single-use, expires in ten minutes, and issuing one
+ * is rate-limited: without the limit, anyone who could reach the bot could
+ * flood the user's chat with reset links until one got tapped by mistake.
+ *
+ * Deliberately does NOT say whether the account currently has a PIN or a
+ * passkey. That is a fact about someone's security setup and the reply goes
+ * to whoever holds the phone.
+ */
+async function startPinReset(user: tellaUser): Promise<HandlerResult> {
+  const name = firstName(user);
+
+  const attempt = await recordAuthAttempt(user.id, "pin_reset");
+  if (!attempt.allowed) {
+    return {
+      reply: [
+        `You've asked for a few of these already, ${name}.`,
+        "",
+        `Try again in ${formatRetryAfter(attempt.retryAfterSeconds)} — the last link I sent may still be valid.`,
+      ].join("\n"),
+    };
+  }
+
+  let url: string;
+  try {
+    const token = await createResetToken(user.id);
+    url = buildResetUrl(token.id);
+  } catch (err) {
+    console.error("[security] reset token creation failed", {
+      userId: user.id,
+      err,
+    });
+    return {
+      reply: "I couldn't start that just now. Try again in a moment.",
+    };
+  }
+
+  console.log("[security] reset link issued", { userId: user.id });
+
+  return {
+    reply: [
+      `No problem, ${name} — here's a link to set a new PIN 🔐`,
+      "",
+      url,
+      "",
+      `It works once and expires in ${RESET_TTL_MINUTES} minutes.`,
+      "",
+      "If you didn't ask for this, ignore it — nothing changes until someone opens that link and sets a new PIN.",
+    ].join("\n"),
+  };
 }
 
 async function cancelMostRecentPendingSend(user: tellaUser): Promise<HandlerResult> {

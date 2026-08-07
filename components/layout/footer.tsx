@@ -42,16 +42,21 @@ export function Footer() {
                 Data Deletion
               </Link>
             </li>
-            <li>
-              <a
-                href={SITE.twitterUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-surface-50/60 transition-colors hover:text-surface-50"
-              >
-                Twitter
-              </a>
-            </li>
+            {/* Rendered only when there's a real profile to point at. This
+                used to link to "https://x.com/" — the bare site, labelled
+                Twitter — which reads worse than having no link at all. */}
+            {SITE.twitterUrl && (
+              <li>
+                <a
+                  href={SITE.twitterUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-surface-50/60 transition-colors hover:text-surface-50"
+                >
+                  Twitter
+                </a>
+              </li>
+            )}
           </ul>
         </nav>
       </div>

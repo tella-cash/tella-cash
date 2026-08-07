@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { raiseAlert } from "@/lib/observability/alerts";
 
 /**
  * Per-user attempt limiting for the confirm-link auth paths.
@@ -69,6 +70,18 @@ export async function recordAuthAttempt(
   if (!row) {
     console.error("[rate-limit] attempt check returned no row, refusing", { scope });
     return { allowed: false, attempts: max, retryAfterSeconds: lockoutSeconds };
+  }
+
+  if (!row.allowed) {
+    // A lockout means someone burned through the whole attempt budget. On a
+    // 4-digit PIN that is a person guessing, not a person mistyping.
+    raiseAlert({
+      kind: "auth_locked_out",
+      message: `A ${scope} lockout was hit after ${row.attempts} attempts.`,
+      // No user id: this goes to a chat channel, and which account is being
+      // attacked isn't needed to know that one is.
+      context: { scope },
+    });
   }
 
   return {

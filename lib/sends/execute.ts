@@ -6,6 +6,7 @@ import {
 } from "@/lib/pending_sends/repository";
 import { sendUsdc } from "@/lib/wallet/circle";
 import { checkSendLimits, formatLimitFailure, type LimitFailure } from "./limits";
+import { raiseAlert } from "@/lib/observability/alerts";
 
 export type ExecuteSendResult =
   | {
@@ -111,6 +112,12 @@ export async function executePendingSend({
       // whose fate we don't know, and the index in migration 0008 exists
       // to find exactly these.
       await markPendingSendOutcome(claimed.id, "unknown");
+      // Needs a person: only Circle's dashboard can say whether this moved.
+      raiseAlert({
+        kind: "transfer_unknown",
+        message: `A transfer's outcome is unknown and needs reconciling against Circle. Pending send ${claimed.id}.`,
+        context: { pendingSendId: claimed.id, amount: p.amount },
+      });
       return { ok: false, reason: "transfer_unknown" };
     }
 
