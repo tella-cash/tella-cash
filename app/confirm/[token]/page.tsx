@@ -18,6 +18,10 @@ export const metadata = {
   description,
   // Don't leak the token to third parties via Referer.
   other: { referrer: "no-referrer" },
+  // A confirm URL is a bearer token. Indexed, it becomes a searchable list
+  // of live authorizations — and crawlers reach these links because they
+  // travel through chat clients that prefetch them.
+  robots: { index: false, follow: false, nocache: true },
   openGraph: {
     title,
     description,

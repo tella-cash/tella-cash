@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { RegistrationResponseJSON } from "@simplewebauthn/server";
 import { loadConfirmContext } from "@/lib/confirm/context";
+import { readJson } from "@/lib/http/json";
 import { completeConfirmedSend } from "@/lib/confirm/complete";
 import {
   verifyRegistration,
@@ -31,10 +32,12 @@ export const dynamic = "force-dynamic";
  * flow instead. Mirrors the 409 guard in /api/confirm/pin/setup.
  */
 export async function POST(request: Request) {
-  const body = (await request.json()) as {
+  const parsed = await readJson<{
     token?: string;
     response?: RegistrationResponseJSON;
-  };
+  }>(request);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.body;
   if (!body.token || !body.response) {
     return NextResponse.json(
       { error: "Missing token or response" },

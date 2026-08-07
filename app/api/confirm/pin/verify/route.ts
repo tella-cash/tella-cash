@@ -1,12 +1,17 @@
 import { NextResponse } from "next/server";
 import { loadConfirmContext } from "@/lib/confirm/context";
+import { readJson } from "@/lib/http/json";
 import { verifyPin } from "@/lib/auth/pin";
 import {
   recordAuthAttempt,
   resetAuthAttempts,
   formatRetryAfter,
 } from "@/lib/auth/rate-limit";
-import { executePendingSend } from "@/lib/sends/execute";
+import {
+  executePendingSend,
+  formatSendResultForChat,
+  sendFailureStatus,
+} from "@/lib/sends/execute";
 import { sendReceiptAndFollowUp } from "@/lib/sends/follow-up";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +29,9 @@ export const dynamic = "force-dynamic";
  * moving someone's money.
  */
 export async function POST(request: Request) {
-  const body = (await request.json()) as { token?: string; pin?: string };
+  const parsed = await readJson<{ token?: string; pin?: string }>(request);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.body;
   if (!body.token || !body.pin) {
     return NextResponse.json(
       { error: "Missing token or pin" },
@@ -82,8 +89,8 @@ export async function POST(request: Request) {
 
   if (!result.ok) {
     return NextResponse.json(
-      { ok: false, reason: result.reason },
-      { status: 502 },
+      { ok: false, reason: result.reason, error: formatSendResultForChat(result) },
+      { status: sendFailureStatus(result.reason) },
     );
   }
 

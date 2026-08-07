@@ -10,7 +10,7 @@ import { handleIncomingMessage } from "@/lib/agent/handler";
 import { findOrCreateUser } from "@/lib/users/repository";
 import { provisionWalletForUser } from "@/lib/wallet/provision";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { allowUnsignedWebhooks } from "@/lib/whatsapp/signature-policy";
+import { allowUnsignedWebhooks, redactNumber } from "@/lib/whatsapp/signature-policy";
 
 interface TwilioWebhookPayload {
   From: string;
@@ -58,11 +58,14 @@ export async function POST(request: Request) {
   // is empty so menu taps route through the same classifier as typed text.
   const userMessage = payload.Body || payload.ButtonText || "";
 
+  // No full phone number, no profile name, no message text. MessageSid is
+  // enough to correlate a log line with a specific message in Twilio's
+  // console when something actually needs investigating; the rest was
+  // personal data sitting in stdout for every message ever sent.
   console.log("[whatsapp] incoming", {
     sid: payload.MessageSid,
-    from: fromNumber,
-    profile: payload.ProfileName,
-    preview: userMessage.slice(0, 80),
+    from: redactNumber(fromNumber),
+    chars: userMessage.length,
   });
 
   // Defer processing until after the response is sent. On Vercel, `after()`
@@ -70,7 +73,7 @@ export async function POST(request: Request) {
   // frozen mid-flight.
   after(async () => {
     try {
-      await processMessageAsync(fromNumber, userMessage, payload);
+      await processMessageAsync(fromNumber, userMessage);
     } catch (err) {
       // Last-resort net: processMessageAsync handles its own errors, so
       // reaching here means something unexpected slipped through.
@@ -134,11 +137,7 @@ const FALLBACK_MESSAGE =
  * primary reply is sent and follow up with a separate message containing
  * the address (or a failure note) once it resolves.
  */
-async function processMessageAsync(
-  fromNumber: string,
-  userMessage: string,
-  payload: TwilioWebhookPayload,
-) {
+async function processMessageAsync(fromNumber: string, userMessage: string) {
   let lookup: Awaited<ReturnType<typeof findOrCreateUser>>;
   try {
     lookup = await findOrCreateUser({ whatsappNumber: fromNumber });

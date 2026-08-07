@@ -16,7 +16,6 @@ export function ClosingCta() {
   });
 
   const scale = useTransform(scrollYProgress, [0, 0.5, 1], [0.96, 1, 1.02]);
-  const bubbleY = useTransform(scrollYProgress, [0, 1], [60, -60]);
 
   return (
     <section ref={ref} className="relative px-3 py-[60px] md:px-[72px]" style={{ backgroundImage: "url('/closing-cta-bg.png')", backgroundSize: "cover", backgroundPosition: "center" }}>

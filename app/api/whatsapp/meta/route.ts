@@ -10,7 +10,7 @@ import { handleIncomingMessage } from "@/lib/agent/handler";
 import { findOrCreateUser } from "@/lib/users/repository";
 import { provisionWalletForUser } from "@/lib/wallet/provision";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { allowUnsignedWebhooks } from "@/lib/whatsapp/signature-policy";
+import { allowUnsignedWebhooks, redactNumber } from "@/lib/whatsapp/signature-policy";
 
 /**
  * Meta WhatsApp Cloud API webhook.
@@ -186,11 +186,13 @@ async function processIncoming(msg: IncomingMessage) {
   // here so the same user row matches whether they came in via Twilio or Meta.
   const normalizedNumber = `whatsapp:+${msg.fromE164}`;
 
+  // Same redaction as the Twilio route: the message ID is enough to find
+  // this message in Meta's console, and the phone number, profile name and
+  // message text are not things that belong in stdout.
   console.log("[meta] incoming", {
     id: msg.messageId,
-    from: normalizedNumber,
-    profile: msg.profileName,
-    preview: msg.text.slice(0, 80),
+    from: redactNumber(normalizedNumber),
+    chars: msg.text.length,
   });
 
   // Unlike the Twilio webhook (app/api/whatsapp/route.ts), this handler had

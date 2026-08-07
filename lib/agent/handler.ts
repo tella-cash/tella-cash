@@ -26,6 +26,7 @@ import {
   type FaucetAsset,
 } from "@/lib/wallet/circle";
 import { getUsdToNgnRate, usdToNgn } from "@/lib/fx/naira";
+import { checkSendLimits, formatLimitFailure } from "@/lib/sends/limits";
 import type { ParsedSendIntent } from "@/lib/agent/parse-send";
 import { mapDecodedSend } from "@/lib/agent/map-decoded-send";
 import { normalizeFaucetAsset } from "@/lib/agent/normalize-faucet-asset";
@@ -647,6 +648,15 @@ async function startSendFlow({
     recipientName = beneficiary.label;
     recipientUserId = beneficiary.recipient_user_id;
     recipientWhatsappNumber = beneficiary.recipient_whatsapp_number;
+  }
+
+  // Checked here so an unaffordable or over-cap send is refused with a
+  // useful message BEFORE a confirm link is minted — being told "insufficient
+  // balance" after tapping through a biometric prompt is a worse experience
+  // than being told now. executePendingSend re-checks authoritatively.
+  const limits = await checkSendLimits({ user, amount: intent.amount });
+  if (!limits.ok) {
+    return { reply: formatLimitFailure(limits.failure), interactive: "buttons" };
   }
 
   const rate = await getUsdToNgnRate();

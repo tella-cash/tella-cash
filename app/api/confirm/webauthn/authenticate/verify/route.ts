@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { AuthenticationResponseJSON } from "@simplewebauthn/server";
 import { loadConfirmContext } from "@/lib/confirm/context";
+import { readJson } from "@/lib/http/json";
 import { completeConfirmedSend } from "@/lib/confirm/complete";
 import { verifyAuthentication } from "@/lib/webauthn/server";
 import {
@@ -24,10 +25,12 @@ export const dynamic = "force-dynamic";
  * verify route.
  */
 export async function POST(request: Request) {
-  const body = (await request.json()) as {
+  const parsed = await readJson<{
     token?: string;
     response?: AuthenticationResponseJSON;
-  };
+  }>(request);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.body;
   if (!body.token || !body.response) {
     return NextResponse.json(
       { error: "Missing token or response" },

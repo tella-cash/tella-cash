@@ -63,6 +63,36 @@ export async function listRecentTransactions(
 }
 
 /**
+ * Total USDC this user has sent in the trailing `hours` window.
+ *
+ * Counts both `submitted` and `complete` rows: a send that's been handed to
+ * Circle but hasn't confirmed yet has still left the wallet as far as a
+ * spending limit is concerned. Excluding it would let someone burst past
+ * the daily cap in the confirmation gap.
+ */
+export async function sumSentUsdcSince(
+  userId: string,
+  hours: number,
+): Promise<number> {
+  const supabase = getSupabaseAdmin();
+  const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+
+  const { data, error } = await supabase
+    .from("tella_transactions")
+    .select("amount_usdc")
+    .eq("user_id", userId)
+    .eq("direction", "sent")
+    .gte("created_at", since);
+
+  if (error) throw new Error(`sumSentUsdcSince failed: ${error.message}`);
+
+  return ((data as { amount_usdc: string }[]) ?? []).reduce((sum, row) => {
+    const n = parseFloat(row.amount_usdc);
+    return sum + (Number.isFinite(n) ? n : 0);
+  }, 0);
+}
+
+/**
  * The Circle outbound webhook event carries walletId/txHash/state but not
  * the original transaction ID, so we can't correlate directly — instead we
  * mark the most recent still-`submitted` send for this user as complete.

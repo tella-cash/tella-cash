@@ -14,9 +14,12 @@ export interface ConfirmContext {
  * or expired). The caller should treat null as "this confirm link is no
  * longer valid" and surface that to the user.
  *
- * Note: this does NOT consume or lock the pending row. The actual atomic
- * delete happens inside `executePendingSend` so a race between two tabs
- * resolves to one winner.
+ * Already-claimed rows are excluded, so a link whose send is in flight (or
+ * already finished) reads as invalid rather than offering a second confirm.
+ *
+ * Note: this does NOT consume or lock the pending row. The atomic claim
+ * happens inside `executePendingSend` so a race between two tabs resolves
+ * to one winner; this filter is the cheap early-out, not the guarantee.
  */
 export async function loadConfirmContext(
   token: string,
@@ -28,6 +31,7 @@ export async function loadConfirmContext(
     .select("*")
     .eq("id", token)
     .gt("expires_at", new Date().toISOString())
+    .is("claimed_at", null)
     .maybeSingle();
 
   if (pendingErr) {

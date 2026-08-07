@@ -50,7 +50,7 @@ export function BalanceIllustration() {
       <PhoneFrame>
         <ChatScreen>
           <StaticBubble side="out" time="14:40">
-            what's my balance?
+            what&apos;s my balance?
           </StaticBubble>
           <div className="flex justify-start">
             <div className="w-[88%] rounded-2xl rounded-bl-md bg-white p-3 shadow-sm ring-1 ring-ink-200/40">

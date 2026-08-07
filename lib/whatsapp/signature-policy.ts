@@ -17,3 +17,17 @@ export function allowUnsignedWebhooks(): boolean {
   if (process.env.NODE_ENV === "production") return false;
   return process.env.WHATSAPP_ALLOW_UNSIGNED === "true";
 }
+
+/**
+ * Reduce a phone number to something that can correlate log lines without
+ * identifying anyone: "+2349043580863" → "+234…0863".
+ *
+ * Both webhooks used to log the full number, the WhatsApp profile name, and
+ * the first 80 characters of the message on every single inbound message.
+ */
+export function redactNumber(raw: string | null | undefined): string {
+  if (!raw) return "(none)";
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length < 7) return "(short)";
+  return `+${digits.slice(0, 3)}…${digits.slice(-4)}`;
+}

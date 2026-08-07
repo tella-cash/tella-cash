@@ -8,6 +8,11 @@ import { createHmac } from "node:crypto";
 const BASE_URL = process.env.SENDAM_AI_BASE_URL;
 const SIGNING_SECRET = process.env.SENDAM_AI_SIGNING_SECRET;
 
+// Opt-in body logging for local debugging. Never enable in a deployed
+// environment — see the note in post() for what these bodies contain.
+const DEBUG_BODIES =
+  process.env.SENDAM_DEBUG === "true" && process.env.NODE_ENV !== "production";
+
 export type SendamIntent =
   | "SEND"
   | "BALANCE"
@@ -64,7 +69,15 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   if (!SIGNING_SECRET) throw new Error("Missing SENDAM_AI_SIGNING_SECRET");
 
   const rawBody = JSON.stringify(body);
-  console.log(`[sendam-ai] -> ${path}`, rawBody);
+  const startedAt = Date.now();
+
+  // Bodies are NOT logged by default. Every request here carries the literal
+  // text a user typed into WhatsApp — "send 40 usdc to my landlord", their
+  // phone number, their contacts — and responses echo the parsed slots back.
+  // That is the most sensitive data in the system, and it was going to
+  // stdout in full on every message, from where it ships to whatever
+  // aggregator reads the platform logs.
+  if (DEBUG_BODIES) console.log(`[sendam-ai] -> ${path}`, rawBody);
 
   const res = await fetch(`${BASE_URL}${path}`, {
     method: "POST",
@@ -76,13 +89,19 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   });
 
   const resText = await res.text();
+  const ms = Date.now() - startedAt;
 
   if (!res.ok) {
-    console.error(`[sendam-ai] <- ${path} (${res.status})`, resText);
+    // The body goes into the thrown Error either way, so a failure is still
+    // diagnosable from the caller's own error log without broadcasting it
+    // on the happy path.
+    console.error(`[sendam-ai] <- ${path} ${res.status} (${ms}ms)`);
+    if (DEBUG_BODIES) console.error(`[sendam-ai] <- ${path} body`, resText);
     throw new Error(`sendam-ai ${path} failed (${res.status}): ${resText}`);
   }
 
-  console.log(`[sendam-ai] <- ${path} (${res.status})`, resText);
+  console.log(`[sendam-ai] <- ${path} ${res.status} (${ms}ms)`);
+  if (DEBUG_BODIES) console.log(`[sendam-ai] <- ${path} body`, resText);
   return JSON.parse(resText) as T;
 }
 

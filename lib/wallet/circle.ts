@@ -56,7 +56,7 @@ export async function createWalletForUser(userId: string): Promise<CreatedWallet
   console.log("[circle] wallet created", {
     userId,
     walletId: wallet.id,
-    address: wallet.address,
+    address: shortenForLog(wallet.address),
   });
 
   return {
@@ -71,39 +71,98 @@ export interface TokenBalance {
   tokenAddress: string | null;
 }
 
+/** One raw balance entry, before same-symbol entries are merged for display. */
+interface RawBalance {
+  symbol: string;
+  amount: number;
+  tokenId: string;
+  tokenAddress: string | null;
+}
+
+async function fetchRawBalances(walletId: string): Promise<RawBalance[]> {
+  const client = getCircleClient();
+  const response = await client.getWalletTokenBalance({ id: walletId });
+
+  return (response.data?.tokenBalances ?? []).map((b) => ({
+    symbol: b.token?.symbol ?? "UNKNOWN",
+    amount: parseFloat(b.amount ?? "0"),
+    tokenId: b.token?.id ?? "",
+    tokenAddress: b.token?.tokenAddress ?? null,
+  }));
+}
+
 /**
  * Fetches wallet token balances, merging any entries that share a symbol
  * into one line. Circle's testnet occasionally lists what's effectively
  * the same token as more than one balance entry (e.g. a bridged/native
  * pair), which otherwise shows up as a confusing duplicate "X USDC" /
  * "Y USDC" pair in the balance reply instead of one combined total.
+ *
+ * Merging is right for DISPLAY and wrong for SENDING — a single transfer
+ * draws on one token, not the sum of two. Use resolveSpendableUsdc for
+ * anything that decides whether a transfer can go through.
  */
 export async function getWalletBalances(
   walletId: string,
 ): Promise<TokenBalance[]> {
-  const client = getCircleClient();
-
-  const response = await client.getWalletTokenBalance({ id: walletId });
-
-  const balances = response.data?.tokenBalances ?? [];
-
   const merged = new Map<string, TokenBalance>();
-  for (const b of balances) {
-    const symbol = b.token?.symbol ?? "UNKNOWN";
-    const amount = parseFloat(b.amount ?? "0");
-    const existing = merged.get(symbol);
+  for (const b of await fetchRawBalances(walletId)) {
+    const existing = merged.get(b.symbol);
     if (existing) {
-      existing.amount = String(parseFloat(existing.amount) + amount);
+      existing.amount = String(parseFloat(existing.amount) + b.amount);
     } else {
-      merged.set(symbol, {
-        symbol,
-        amount: String(amount),
-        tokenAddress: b.token?.tokenAddress ?? null,
+      merged.set(b.symbol, {
+        symbol: b.symbol,
+        amount: String(b.amount),
+        tokenAddress: b.tokenAddress,
       });
     }
   }
 
   return [...merged.values()];
+}
+
+export interface SpendableUsdc {
+  /** Circle's token UUID — passed explicitly to createTransaction. */
+  tokenId: string;
+  /** Balance of that specific token, which is what a transfer can draw on. */
+  available: number;
+}
+
+/**
+ * Finds the USDC holding a transfer would actually spend from.
+ *
+ * Two things depend on this. The transfer needs an explicit `tokenId`:
+ * createTransaction takes a discriminated union of either `{tokenId}` or
+ * `{tokenAddress, blockchain}`, and this code used to pass
+ * `tokenId: undefined as unknown as string` alongside a blockchain, which
+ * is not a valid member of either arm — an empty tokenAddress means NATIVE
+ * token, so the shape only did the right thing by accident. And the balance
+ * precheck needs to compare against one token's balance, not a merged total.
+ *
+ * When the wallet holds more than one USDC-symbol token, the largest is
+ * chosen: it's the one most likely to cover the send, and picking the
+ * smaller one would fail a transfer the user can afford.
+ *
+ * CIRCLE_USDC_TOKEN_ID pins the choice when set, for when the testnet's
+ * duplicate entries need overriding.
+ */
+export async function resolveSpendableUsdc(
+  walletId: string,
+): Promise<SpendableUsdc | null> {
+  const raw = await fetchRawBalances(walletId);
+  const usdc = raw.filter((b) => b.symbol === "USDC" && b.tokenId);
+
+  const pinned = process.env.CIRCLE_USDC_TOKEN_ID;
+  if (pinned) {
+    const match = usdc.find((b) => b.tokenId === pinned);
+    return { tokenId: pinned, available: match?.amount ?? 0 };
+  }
+
+  if (usdc.length === 0) return null;
+
+  const best = usdc.reduce((a, b) => (b.amount > a.amount ? b : a));
+  return { tokenId: best.tokenId, available: best.amount };
 }
 
 /**
@@ -160,27 +219,36 @@ export interface SendUsdcArgs {
   fromWalletId: string;
   toAddress: string;
   amount: string;
+  /** Circle token UUID from resolveSpendableUsdc. */
+  tokenId: string;
+  /**
+   * Stable per-send key. Circle dedupes on it, so a retry of the SAME send
+   * can't become a second transfer. Must NOT be random per call — that is
+   * precisely what makes a retry unsafe.
+   */
+  idempotencyKey: string;
 }
 
 export interface SendUsdcResult {
   transactionId: string;
-  txHash: string | null;
+  /** Circle's submit state (INITIATED, SENT, …) — never COMPLETE yet. */
+  state: string;
 }
 
 export async function sendUsdc({
   fromWalletId,
   toAddress,
   amount,
+  tokenId,
+  idempotencyKey,
 }: SendUsdcArgs): Promise<SendUsdcResult> {
-  const network = process.env.ARC_NETWORK ?? "ARC-TESTNET";
   const client = getCircleClient();
 
   const response = await client.createTransaction({
-    idempotencyKey: crypto.randomUUID(),
+    idempotencyKey,
     walletId: fromWalletId,
     destinationAddress: toAddress,
-    tokenId: undefined as unknown as string,
-    blockchain: network as any,
+    tokenId,
     amount: [amount],
     fee: { type: "level", config: { feeLevel: "MEDIUM" } },
   });
@@ -191,16 +259,32 @@ export async function sendUsdc({
   }
 
   console.log("[circle] send submitted", {
-    fromWalletId,
-    toAddress,
+    fromWallet: shortenForLog(fromWalletId),
+    toAddress: shortenForLog(toAddress),
     amount,
     txId: tx.id,
   });
 
+  // createTransaction's response carries only `id` and `state` — there is no
+  // txHash at submit time, so the old `(tx as any).txHash` was reading a
+  // field that never existed and was always null. The hash arrives later on
+  // the transactions.outbound webhook, which is what posts the explorer link.
   return {
     transactionId: tx.id,
-    txHash: (tx as any).txHash ?? null,
+    state: tx.state,
   };
+}
+
+/**
+ * Wallet addresses and IDs are identifiers for a person's money. Logs get
+ * shipped to third-party aggregators and read by people who don't need to
+ * know whose wallet is whose, so they go in truncated — enough to correlate
+ * two lines, not enough to be a directory.
+ */
+function shortenForLog(value: string | null | undefined): string {
+  if (!value) return "(none)";
+  if (value.length <= 12) return value;
+  return `${value.slice(0, 6)}…${value.slice(-4)}`;
 }
 
 export type FaucetAsset = "NATIVE" | "USDC" | "EURC";
@@ -272,7 +356,7 @@ export async function requestFaucetTokens({
     // diagnosable from logs instead of opaque.
     const axiosError = (err as { error?: { response?: { data?: unknown } } }).error;
     console.error("[circle] faucet request rejected", {
-      address,
+      address: shortenForLog(address),
       asset,
       blockchain: network,
       status,
@@ -284,5 +368,8 @@ export async function requestFaucetTokens({
     throw err;
   }
 
-  console.log("[circle] faucet request submitted", { address, asset });
+  console.log("[circle] faucet request submitted", {
+    address: shortenForLog(address),
+    asset,
+  });
 }
