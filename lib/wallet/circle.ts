@@ -72,7 +72,7 @@ export interface TokenBalance {
 }
 
 /** One raw balance entry, before same-symbol entries are merged for display. */
-interface RawBalance {
+export interface RawBalance {
   symbol: string;
   amount: number;
   tokenId: string;
@@ -83,20 +83,68 @@ async function fetchRawBalances(walletId: string): Promise<RawBalance[]> {
   const client = getCircleClient();
   const response = await client.getWalletTokenBalance({ id: walletId });
 
-  return (response.data?.tokenBalances ?? []).map((b) => ({
+  const balances = (response.data?.tokenBalances ?? []).map((b) => ({
     symbol: b.token?.symbol ?? "UNKNOWN",
     amount: parseFloat(b.amount ?? "0"),
     tokenId: b.token?.id ?? "",
     tokenAddress: b.token?.tokenAddress ?? null,
   }));
+
+  return dedupeSameToken(balances);
 }
 
 /**
- * Fetches wallet token balances, merging any entries that share a symbol
- * into one line. Circle's testnet occasionally lists what's effectively
- * the same token as more than one balance entry (e.g. a bridged/native
- * pair), which otherwise shows up as a confusing duplicate "X USDC" /
- * "Y USDC" pair in the balance reply instead of one combined total.
+ * Collapses repeated entries for the SAME token down to one.
+ *
+ * Circle can list a wallet's holding of a single token as more than one
+ * `tokenBalances` entry. getWalletBalances then adds same-symbol entries
+ * together, which is correct for two genuinely different tokens and wrong
+ * for two views of one — it reported a wallet holding 10 USDC as holding 20,
+ * in the balance reply and on the "money received" card alike.
+ *
+ * Deduping here rather than inside getWalletBalances keeps
+ * resolveSpendableUsdc seeing the same set: it picks the largest USDC entry
+ * to spend from, and a phantom duplicate is a candidate it should never have
+ * been offered.
+ *
+ * Identity is the token id when Circle gives one, falling back to
+ * symbol + contract address — two genuinely distinct tokens never share a
+ * contract address, so a bridged/native pair still merges as it should while
+ * a repeat of one token does not.
+ *
+ * Exported for lib/wallet/balances.test.ts.
+ */
+export function dedupeSameToken(balances: RawBalance[]): RawBalance[] {
+  const seen = new Set<string>();
+  const unique: RawBalance[] = [];
+
+  for (const b of balances) {
+    const identity = b.tokenId || `${b.symbol}@${b.tokenAddress ?? "native"}`;
+    if (seen.has(identity)) {
+      console.warn("[circle] duplicate token balance entry dropped", {
+        identity,
+        symbol: b.symbol,
+        amount: b.amount,
+      });
+      continue;
+    }
+    seen.add(identity);
+    unique.push(b);
+  }
+
+  return unique;
+}
+
+/**
+ * Fetches wallet token balances, merging entries that share a symbol into
+ * one line. Circle's testnet lists what a user thinks of as "USDC" as more
+ * than one balance entry (e.g. a bridged/native pair), which otherwise shows
+ * up as a confusing duplicate "X USDC" / "Y USDC" pair in the balance reply
+ * instead of one combined total.
+ *
+ * This only ever sums DISTINCT tokens: fetchRawBalances has already dropped
+ * repeats of a single token, which this function would otherwise add to
+ * itself and report as double the money in the wallet.
  *
  * Merging is right for DISPLAY and wrong for SENDING — a single transfer
  * draws on one token, not the sum of two. Use resolveSpendableUsdc for
@@ -105,8 +153,17 @@ async function fetchRawBalances(walletId: string): Promise<RawBalance[]> {
 export async function getWalletBalances(
   walletId: string,
 ): Promise<TokenBalance[]> {
+  return mergeBalancesBySymbol(await fetchRawBalances(walletId));
+}
+
+/**
+ * The symbol merge itself, split out from the fetch so it can be tested
+ * against a fixed set of entries rather than a live wallet. Expects input
+ * that has already been through dedupeSameToken.
+ */
+export function mergeBalancesBySymbol(balances: RawBalance[]): TokenBalance[] {
   const merged = new Map<string, TokenBalance>();
-  for (const b of await fetchRawBalances(walletId)) {
+  for (const b of balances) {
     const existing = merged.get(b.symbol);
     if (existing) {
       existing.amount = String(parseFloat(existing.amount) + b.amount);

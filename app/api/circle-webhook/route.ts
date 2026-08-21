@@ -5,6 +5,11 @@ import { recordTransaction, markOutboundComplete } from "@/lib/transactions/repo
 import { getUsdToNgnRate, usdToNgn } from "@/lib/fx/naira";
 import { getTokenSymbol, getFormattedBalanceLines } from "@/lib/wallet/circle";
 import { verifyCircleWebhook } from "@/lib/circle/verify-webhook";
+import {
+  claimNotification,
+  notificationKey,
+  releaseNotification,
+} from "@/lib/circle/processed-notifications";
 import { raiseAlert } from "@/lib/observability/alerts";
 
 /**
@@ -87,48 +92,87 @@ export async function POST(request: Request) {
 // the route is deployed and verifying. One less endpoint to enumerate.
 
 /**
- * Dispatch a verified Circle notification to the right handler.
+ * Dispatch a verified Circle notification to the right handler, once.
  *
  * Inbound notifies the recipient of received funds; outbound follows up a
  * completed send with its on-chain explorer link (the txHash isn't known
  * at submit time, so the immediate "✓ Sent" receipt can't include it).
- * Switching on notificationType keeps room to add failed handlers later
- * without restructuring the route.
+ *
+ * Two gates sit in front of the handlers, and their order is the whole
+ * point.
+ *
+ * The state gate is first. Circle's `state` walks a sequence (INITIATED,
+ * PENDING_RISK_SCREENING, SENT, COMPLETE, …) and every step arrives as its
+ * own delivery carrying the SAME notification id. We only act on COMPLETE —
+ * users should see funds as actually spendable, not "almost there", and an
+ * outbound has no txHash before then.
+ *
+ * The claim is second, for that same reason: claiming on INITIATED would
+ * burn the key on an event we ignore and silently swallow the COMPLETE one.
+ *
+ * The claim is what makes redelivery harmless. Circle's webhooks are
+ * at-least-once, and this route used to run the full handler on every one of
+ * them — a second "💰 Received" message and a second history row for a
+ * single transfer, which reads as double the money that actually moved.
  */
 async function processNotification(payload: CircleNotification) {
-  switch (payload.notificationType) {
-    case "transactions.inbound":
-      return handleInboundTransaction(payload.notification);
-    case "transactions.outbound":
-      return handleOutboundTransaction(payload.notification);
-    default:
-      console.log("[circle-webhook] unhandled type", payload.notificationType);
-  }
-}
+  const { notificationType, notification } = payload;
 
-/**
- * Handle an inbound USDC transaction.
- *
- *   1. Skip if the transaction is still pending — we'll get another event
- *      when it confirms. Notifying twice is worse than late.
- *   2. Find the recipient user by walletId.
- *   3. Send a friendly "you received X from Y" message via WhatsApp.
- *
- * Circle's `state` goes through a sequence (INITIATED, PENDING_RISK_SCREENING,
- * SENT, COMPLETE, …). We only fire the user-facing notification on COMPLETE
- * so users see funds as actually spendable, not "almost there."
- */
-async function handleInboundTransaction(
-  notification: CircleNotification["notification"],
-) {
+  const handler =
+    notificationType === "transactions.inbound"
+      ? handleInboundTransaction
+      : notificationType === "transactions.outbound"
+        ? handleOutboundTransaction
+        : null;
+
+  if (!handler) {
+    console.log("[circle-webhook] unhandled type", notificationType);
+    return;
+  }
+
   if (notification.state !== "COMPLETE") {
-    console.log("[circle-webhook] inbound not yet complete, skipping", {
+    console.log("[circle-webhook] not yet complete, skipping", {
+      type: notificationType,
       state: notification.state,
       walletId: notification.walletId,
     });
     return;
   }
 
+  const key = notificationKey(notificationType, notification.id);
+  const claimed = await claimNotification({
+    key,
+    notificationId: notification.id,
+    notificationType,
+  });
+  if (!claimed) {
+    console.log("[circle-webhook] duplicate delivery ignored", { key });
+    return;
+  }
+
+  try {
+    await handler(notification);
+  } catch (err) {
+    // Hand the claim back: a transient failure here must not be the reason
+    // a user never learns their money arrived. Circle's next retry redoes it.
+    await releaseNotification(key);
+    throw err;
+  }
+}
+
+/**
+ * Handle a completed inbound USDC transaction.
+ *
+ *   1. Find the recipient user by walletId.
+ *   2. Send a friendly "you received X from Y" message via WhatsApp.
+ *   3. Record it in history.
+ *
+ * Reached only for COMPLETE notifications, and only once per notification —
+ * both gates live in processNotification.
+ */
+async function handleInboundTransaction(
+  notification: CircleNotification["notification"],
+) {
   const user = await findUserByCircleWalletId(notification.walletId);
   if (!user) {
     console.warn("[circle-webhook] no user for walletId", {
@@ -216,6 +260,11 @@ async function handleInboundTransaction(
         counterpartyLabel: sourceLabel,
         counterpartyAddress: notification.sourceAddress ?? null,
         txHash: notification.txHash ?? null,
+        // notification.id is Circle's transaction id. Stored so the unique
+        // index from migration 0011 can refuse a second row for this same
+        // transfer even if the claim above is somehow lost — a receipt
+        // written twice is a balance that reads double.
+        circleTransactionId: notification.id,
         status: "complete",
       });
     } catch (err) {
@@ -233,28 +282,21 @@ async function handleInboundTransaction(
 /**
  * Handle a completed outbound USDC transaction.
  *
- *   1. Skip until COMPLETE — earlier states have no txHash yet, and we
- *      only want to surface a link to a transaction that actually landed.
- *   2. Bail if there's still no txHash (shouldn't happen on COMPLETE, but
- *      a link to nothing is worse than no link).
- *   3. Find the sender by walletId (outbound walletId is the source).
- *   4. Follow up the immediate "✓ Sent" receipt with the explorer link.
+ *   1. Bail if there's no txHash (shouldn't happen on COMPLETE, but a link
+ *      to nothing is worse than no link).
+ *   2. Find the sender by walletId (outbound walletId is the source).
+ *   3. Follow up the immediate "✓ Sent" receipt with the explorer link.
  *
  * This is the second of two messages a sender sees: the PIN-verify route
  * sends the instant receipt (with a Circle reference), this adds the live
  * on-chain link once the chain confirms a few seconds later.
+ *
+ * Reached only for COMPLETE notifications, and only once per notification —
+ * both gates live in processNotification.
  */
 async function handleOutboundTransaction(
   notification: CircleNotification["notification"],
 ) {
-  if (notification.state !== "COMPLETE") {
-    console.log("[circle-webhook] outbound not yet complete, skipping", {
-      state: notification.state,
-      walletId: notification.walletId,
-    });
-    return;
-  }
-
   if (!notification.txHash) {
     console.warn("[circle-webhook] outbound complete but no txHash", {
       walletId: notification.walletId,

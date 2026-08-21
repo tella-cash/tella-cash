@@ -76,6 +76,21 @@ export async function GET(request: Request) {
     return data?.length ?? 0;
   });
 
+  // Webhook dedupe keys (migration 0011). Circle stops retrying a delivery
+  // long before this, so a week-old key can only ever match a notification
+  // that will never arrive again. Kept a week rather than a day so a
+  // redelivery during an outage still finds its claim.
+  results.processed_notifications = await purge(async () => {
+    const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const { data, error } = await supabase
+      .from("tella_processed_notification")
+      .delete()
+      .lt("processed_at", cutoff)
+      .select("key");
+    if (error) throw new Error(error.message);
+    return data?.length ?? 0;
+  });
+
   // Only rows whose window and lockout have both elapsed — deleting an
   // active counter would hand an attacker a free reset of their attempts.
   results.auth_attempts = await purge(async () => {

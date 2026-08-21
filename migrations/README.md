@@ -82,7 +82,40 @@ SECURITY` is deliberately not used; see the comment in the file.
 WhatsApp-initiated PIN reset (`/security/[token]`). Without it the recovery
 page 500s and locked-out users stay locked out.
 
-### Environment added alongside 0007–0010
+### `0011_webhook_idempotency.sql` — apply BEFORE the code that uses it
+
+`tella_processed_notification` (once-only claim for Circle webhook
+deliveries) plus a unique index on
+`tella_transactions(user_id, direction, circle_transaction_id)`.
+
+Circle's webhooks are at-least-once. Before this, every redelivery of a
+`transactions.inbound` COMPLETE re-ran the whole handler — a second
+"💰 Received" WhatsApp message and a second `tella_transactions` row for one
+transfer, so 10 USDC received read as 20 in "history".
+
+> **Order matters.** `claimNotification` fails closed: with the table absent
+> every notification throws and no inbound or outbound message is delivered.
+
+The migration deletes pre-existing duplicate rows that already carry a
+`circle_transaction_id` (outbound sends only) so the unique index can build.
+Duplicate **inbound** rows — the ones this fixes — were written with a null
+`circle_transaction_id` and are left alone; deleting money records on a guess
+isn't a migration's call. Review them by hand:
+
+```sql
+select user_id, tx_hash, amount_usdc, count(*), min(created_at), max(created_at)
+  from tella_transactions
+ where direction = 'received' and tx_hash is not null
+ group by 1, 2, 3
+having count(*) > 1;
+```
+
+Each group is one on-chain transfer recorded more than once — unless the
+sender genuinely batched two identical transfers to the same wallet in one
+transaction, which the tx hash alone can't distinguish. Check the hash on the
+explorer before deleting the extras.
+
+### Environment added alongside 0007–0011
 
 ```
 CRON_SECRET=<random string>            # required by /api/cron/*; they refuse to run without it
