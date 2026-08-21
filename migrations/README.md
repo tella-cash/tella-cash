@@ -41,3 +41,94 @@ After applying, set these env vars in `.env` (and on Vercel):
 SENDAM_AI_BASE_URL=https://intent-decoder.onrender.com
 SENDAM_AI_SIGNING_SECRET=<same value as sendam-ai's SERVICE_SIGNING_SECRET>
 ```
+
+### `0007_auth_attempts.sql` — apply BEFORE the code that uses it
+
+Per-user attempt counter and lockout (`tella_auth_attempts`) plus the atomic
+`tella_record_auth_attempt` / `tella_reset_auth_attempts` functions, backing
+`lib/auth/rate-limit.ts`.
+
+> **Order matters.** The limiter fails closed: with the table absent, every
+> PIN confirmation is refused. Apply this before deploying.
+
+### `0008_pending_send_claim.sql` — apply BEFORE the code that uses it
+
+Adds `claimed_at` and `outcome` to `tella_pending_send`, so a confirmed send
+is claimed rather than deleted before the transfer. Without these columns
+`claimPendingSend` errors and no send completes.
+
+Rows left with `claimed_at set, outcome = 'unknown'` are transfers whose fate
+is genuinely unknown — reconcile them against Circle by hand:
+
+```sql
+select id, user_id, payload->>'amount' as amount, claimed_at
+  from tella_pending_send
+ where claimed_at is not null and outcome is null or outcome = 'unknown';
+```
+
+### `0009_enable_rls.sql`
+
+Enables row-level security on every `tella_*` table, with no policies. The
+app uses only the service-role key (which bypasses RLS), so this is a no-op
+for behaviour — it closes the gap where a leaked **anon** key could read
+every user's phone number, wallet address and PIN hash.
+
+Verify afterwards that the app can still read and write. `FORCE ROW LEVEL
+SECURITY` is deliberately not used; see the comment in the file.
+
+### `0010_security_tokens.sql`
+
+`tella_security_token` — single-use, 10-minute recovery tokens for the
+WhatsApp-initiated PIN reset (`/security/[token]`). Without it the recovery
+page 500s and locked-out users stay locked out.
+
+### `0011_webhook_idempotency.sql` — apply BEFORE the code that uses it
+
+`tella_processed_notification` (once-only claim for Circle webhook
+deliveries) plus a unique index on
+`tella_transactions(user_id, direction, circle_transaction_id)`.
+
+Circle's webhooks are at-least-once. Before this, every redelivery of a
+`transactions.inbound` COMPLETE re-ran the whole handler — a second
+"💰 Received" WhatsApp message and a second `tella_transactions` row for one
+transfer, so 10 USDC received read as 20 in "history".
+
+> **Order matters.** `claimNotification` fails closed: with the table absent
+> every notification throws and no inbound or outbound message is delivered.
+
+The migration deletes pre-existing duplicate rows that already carry a
+`circle_transaction_id` (outbound sends only) so the unique index can build.
+Duplicate **inbound** rows — the ones this fixes — were written with a null
+`circle_transaction_id` and are left alone; deleting money records on a guess
+isn't a migration's call. Review them by hand:
+
+```sql
+select user_id, tx_hash, amount_usdc, count(*), min(created_at), max(created_at)
+  from tella_transactions
+ where direction = 'received' and tx_hash is not null
+ group by 1, 2, 3
+having count(*) > 1;
+```
+
+Each group is one on-chain transfer recorded more than once — unless the
+sender genuinely batched two identical transfers to the same wallet in one
+transaction, which the tx hash alone can't distinguish. Check the hash on the
+explorer before deleting the extras.
+
+### Environment added alongside 0007–0011
+
+```
+CRON_SECRET=<random string>            # required by /api/cron/*; they refuse to run without it
+ALERT_WEBHOOK_URL=                     # optional: Slack/Discord webhook for security events
+TELLA_MAX_SEND_USDC=100                # optional, per-transfer cap
+TELLA_DAILY_SEND_LIMIT_USDC=500        # optional, rolling 24h cap
+TELLA_AUTH_MAX_ATTEMPTS=5              # optional
+TELLA_AUTH_WINDOW_SECONDS=900          # optional
+TELLA_AUTH_LOCKOUT_SECONDS=900         # optional
+```
+
+`APP_BASE_URL` is now **required** — it no longer falls back to
+`http://localhost:3000`. That fallback silently bound passkeys to rpID
+`localhost`, which registers fine and then never authenticates.
+
+See `.env.example` for the full list.

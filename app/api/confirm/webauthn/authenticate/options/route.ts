@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { loadConfirmContext } from "@/lib/confirm/context";
+import { readJson } from "@/lib/http/json";
 import { buildAuthenticationOptions } from "@/lib/webauthn/server";
 import { saveChallenge } from "@/lib/webauthn/repository";
 
@@ -13,7 +14,9 @@ export const dynamic = "force-dynamic";
  * verification.
  */
 export async function POST(request: Request) {
-  const body = (await request.json()) as { token?: string };
+  const parsed = await readJson<{ token?: string }>(request);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.body;
   if (!body.token) {
     return NextResponse.json({ error: "Missing token" }, { status: 400 });
   }

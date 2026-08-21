@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import type { ConfirmContext } from "./context";
-import { executePendingSend } from "@/lib/sends/execute";
+import {
+  executePendingSend,
+  formatSendResultForChat,
+  sendFailureStatus,
+} from "@/lib/sends/execute";
 import { sendReceiptAndFollowUp } from "@/lib/sends/follow-up";
 
 /**
@@ -21,9 +25,11 @@ export async function completeConfirmedSend(
   await sendReceiptAndFollowUp({ user: ctx.user, result });
 
   if (!result.ok) {
+    // Same wording the user just got over WhatsApp, so the page and the chat
+    // don't tell them two different stories about their money.
     return NextResponse.json(
-      { ok: false, reason: result.reason },
-      { status: 502 },
+      { ok: false, reason: result.reason, error: formatSendResultForChat(result) },
+      { status: sendFailureStatus(result.reason) },
     );
   }
 

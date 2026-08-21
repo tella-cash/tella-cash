@@ -10,7 +10,12 @@ import {
  *
  * Status flow:
  *   none → pending → active   (happy path)
- *   none → pending → failed   (Circle errored; retry job will pick up)
+ *   none → pending → failed   (Circle errored)
+ *
+ * 'failed' users are picked up by app/api/cron/retry-wallets, which also
+ * sweeps up anyone left stranded in 'pending' by a crash mid-flight. That
+ * job did not exist when this comment first claimed it did, so users who
+ * were told "I'll retry automatically" were stuck forever; it exists now.
  *
  * Designed to be called from a fire-and-forget context (e.g. inside
  * `after()` in a webhook). Errors are caught and logged here rather than

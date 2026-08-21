@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { loadConfirmContext } from "@/lib/confirm/context";
+import { readJson } from "@/lib/http/json";
 import { buildRegistrationOptions } from "@/lib/webauthn/server";
-import { saveChallenge } from "@/lib/webauthn/repository";
+import { saveChallenge, userHasCredential } from "@/lib/webauthn/repository";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,9 @@ export const dynamic = "force-dynamic";
  * the context of a real pending send.
  */
 export async function POST(request: Request) {
-  const body = (await request.json()) as { token?: string };
+  const parsed = await readJson<{ token?: string }>(request);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.body;
   if (!body.token) {
     return NextResponse.json({ error: "Missing token" }, { status: 400 });
   }
@@ -24,6 +27,15 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "Confirmation link is invalid or expired" },
       { status: 404 },
+    );
+  }
+
+  // Same guard as register/verify, applied here so the ceremony never even
+  // starts for an account that already has a factor.
+  if (ctx.user.pin_hash || (await userHasCredential(ctx.user.id))) {
+    return NextResponse.json(
+      { error: "This account already has a confirmation method set up." },
+      { status: 409 },
     );
   }
 

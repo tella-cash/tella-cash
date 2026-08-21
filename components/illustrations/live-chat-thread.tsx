@@ -66,7 +66,7 @@ export function LiveChatThread() {
 
   useEffect(() => {
     let cancelled = false;
-    let timeouts: ReturnType<typeof setTimeout>[] = [];
+    const timeouts: ReturnType<typeof setTimeout>[] = [];
 
     function runScript() {
       if (cancelled) return;

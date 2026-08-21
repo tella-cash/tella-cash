@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { AuthenticationResponseJSON } from "@simplewebauthn/server";
 import { loadConfirmContext } from "@/lib/confirm/context";
+import { readJson } from "@/lib/http/json";
 import { completeConfirmedSend } from "@/lib/confirm/complete";
 import { verifyAuthentication } from "@/lib/webauthn/server";
 import {
@@ -8,6 +9,11 @@ import {
   listCredentials,
   updateCredentialCounter,
 } from "@/lib/webauthn/repository";
+import {
+  recordAuthAttempt,
+  resetAuthAttempts,
+  formatRetryAfter,
+} from "@/lib/auth/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -19,10 +25,12 @@ export const dynamic = "force-dynamic";
  * verify route.
  */
 export async function POST(request: Request) {
-  const body = (await request.json()) as {
+  const parsed = await readJson<{
     token?: string;
     response?: AuthenticationResponseJSON;
-  };
+  }>(request);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.body;
   if (!body.token || !body.response) {
     return NextResponse.json(
       { error: "Missing token or response" },
@@ -46,6 +54,23 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "That took too long — tap confirm again." },
       { status: 400 },
+    );
+  }
+
+  // Forged assertions are far more expensive to grind than a 4-digit PIN,
+  // but the same counter keeps the confirm link from being a free harness
+  // for hammering credential IDs.
+  const attempt = await recordAuthAttempt(ctx.user.id, "webauthn_authenticate");
+  if (!attempt.allowed) {
+    return NextResponse.json(
+      {
+        error: `Too many attempts. Try again in ${formatRetryAfter(attempt.retryAfterSeconds)}.`,
+        retryAfter: attempt.retryAfterSeconds,
+      },
+      {
+        status: 429,
+        headers: { "Retry-After": String(attempt.retryAfterSeconds) },
+      },
     );
   }
 
@@ -81,6 +106,8 @@ export async function POST(request: Request) {
       { status: 401 },
     );
   }
+
+  await resetAuthAttempts(ctx.user.id, "webauthn_authenticate");
 
   await updateCredentialCounter(
     credential.credential_id,

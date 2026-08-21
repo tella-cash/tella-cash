@@ -1,7 +1,17 @@
 import { NextResponse } from "next/server";
 import { loadConfirmContext } from "@/lib/confirm/context";
+import { readJson } from "@/lib/http/json";
 import { verifyPin } from "@/lib/auth/pin";
-import { executePendingSend } from "@/lib/sends/execute";
+import {
+  recordAuthAttempt,
+  resetAuthAttempts,
+  formatRetryAfter,
+} from "@/lib/auth/rate-limit";
+import {
+  executePendingSend,
+  formatSendResultForChat,
+  sendFailureStatus,
+} from "@/lib/sends/execute";
 import { sendReceiptAndFollowUp } from "@/lib/sends/follow-up";
 
 export const dynamic = "force-dynamic";
@@ -14,12 +24,14 @@ export const dynamic = "force-dynamic";
  * WhatsApp Web, etc). Same downstream effects: execute the send, DM
  * the user the receipt.
  *
- * No rate limiting yet — TODO: add per-user attempt counter + lockout
- * before real users so a leaked confirm link can't be brute-forced
- * (10^4 PINs is small).
+ * Rate limited per user via lib/auth/rate-limit — 10^4 PINs is small enough
+ * that a leaked confirm link is otherwise a few thousand requests away from
+ * moving someone's money.
  */
 export async function POST(request: Request) {
-  const body = (await request.json()) as { token?: string; pin?: string };
+  const parsed = await readJson<{ token?: string; pin?: string }>(request);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.body;
   if (!body.token || !body.pin) {
     return NextResponse.json(
       { error: "Missing token or pin" },
@@ -42,6 +54,22 @@ export async function POST(request: Request) {
     );
   }
 
+  // Counted before the PIN is checked, so a timeout or crash mid-verify
+  // can't hand back a free guess.
+  const attempt = await recordAuthAttempt(ctx.user.id, "pin_verify");
+  if (!attempt.allowed) {
+    return NextResponse.json(
+      {
+        error: `Too many attempts. Try again in ${formatRetryAfter(attempt.retryAfterSeconds)}.`,
+        retryAfter: attempt.retryAfterSeconds,
+      },
+      {
+        status: 429,
+        headers: { "Retry-After": String(attempt.retryAfterSeconds) },
+      },
+    );
+  }
+
   const ok = await verifyPin(body.pin, ctx.user.pin_hash);
   if (!ok) {
     return NextResponse.json(
@@ -49,6 +77,8 @@ export async function POST(request: Request) {
       { status: 401 },
     );
   }
+
+  await resetAuthAttempts(ctx.user.id, "pin_verify");
 
   const result = await executePendingSend({
     user: ctx.user,
@@ -59,8 +89,8 @@ export async function POST(request: Request) {
 
   if (!result.ok) {
     return NextResponse.json(
-      { ok: false, reason: result.reason },
-      { status: 502 },
+      { ok: false, reason: result.reason, error: formatSendResultForChat(result) },
+      { status: sendFailureStatus(result.reason) },
     );
   }
 

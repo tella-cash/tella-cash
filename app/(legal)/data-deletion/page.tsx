@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { SITE } from "@/lib/data/site";
 
 export const metadata: Metadata = {
   title: "Data Deletion · Tella",
@@ -55,7 +56,7 @@ export default function DataDeletionPage() {
           <li>
             <strong>By email.</strong> Email{" "}
             <a
-              href="mailto:privacy@example.com"
+              href={`mailto:${SITE.privacyEmail}`}
               className="legal-link"
             >
               <Placeholder>[privacy@yourdomain.com]</Placeholder>
@@ -169,7 +170,7 @@ export default function DataDeletionPage() {
         <p>
           For anything about this process, contact our Data Protection
           Officer at{" "}
-          <a href="mailto:privacy@example.com" className="legal-link">
+          <a href={`mailto:${SITE.privacyEmail}`} className="legal-link">
             <Placeholder>[privacy@yourdomain.com]</Placeholder>
           </a>
           . You also have the right to lodge a complaint with the{" "}

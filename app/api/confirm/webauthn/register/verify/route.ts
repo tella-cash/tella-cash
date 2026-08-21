@@ -1,13 +1,18 @@
 import { NextResponse } from "next/server";
 import type { RegistrationResponseJSON } from "@simplewebauthn/server";
 import { loadConfirmContext } from "@/lib/confirm/context";
+import { readJson } from "@/lib/http/json";
 import { completeConfirmedSend } from "@/lib/confirm/complete";
 import {
   verifyRegistration,
   encodePublicKey,
   deviceLabelFromRequest,
 } from "@/lib/webauthn/server";
-import { consumeChallenge, saveCredential } from "@/lib/webauthn/repository";
+import {
+  consumeChallenge,
+  saveCredential,
+  userHasCredential,
+} from "@/lib/webauthn/repository";
 
 export const dynamic = "force-dynamic";
 
@@ -18,12 +23,21 @@ export const dynamic = "force-dynamic";
  * a user-verification gesture (Face ID / fingerprint / device PIN), it
  * doubles as authorization for the pending send — so on success we save the
  * credential and execute the send in the same step. One gesture, done.
+ *
+ * That shortcut is only sound for a FIRST enrollment. Once the account has
+ * any credential of its own (a PIN or an existing passkey), enrolling a new
+ * one proves nothing about who is holding the link — the gesture just
+ * authenticates the attacker to their own phone. So enrollment is refused
+ * once a factor exists; adding a second device goes through the recovery
+ * flow instead. Mirrors the 409 guard in /api/confirm/pin/setup.
  */
 export async function POST(request: Request) {
-  const body = (await request.json()) as {
+  const parsed = await readJson<{
     token?: string;
     response?: RegistrationResponseJSON;
-  };
+  }>(request);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.body;
   if (!body.token || !body.response) {
     return NextResponse.json(
       { error: "Missing token or response" },
@@ -36,6 +50,13 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "Confirmation link is invalid or expired" },
       { status: 404 },
+    );
+  }
+
+  if (ctx.user.pin_hash || (await userHasCredential(ctx.user.id))) {
+    return NextResponse.json(
+      { error: "This account already has a confirmation method set up." },
+      { status: 409 },
     );
   }
 

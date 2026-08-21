@@ -50,6 +50,10 @@ export interface PendingSend {
   payload: SendPayload;
   expires_at: string;
   created_at: string;
+  /** Set when a confirm won the race and the transfer was handed to Circle. */
+  claimed_at: string | null;
+  /** How a claimed send resolved. 'unknown' means it may or may not have landed. */
+  outcome: "sent" | "failed" | "unknown" | null;
 }
 
 export interface SendPayload {

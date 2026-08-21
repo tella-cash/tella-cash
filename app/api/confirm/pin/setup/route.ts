@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { loadConfirmContext } from "@/lib/confirm/context";
+import { readJson } from "@/lib/http/json";
 import { isValidPin, setPinForUser } from "@/lib/auth/pin";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +17,9 @@ export const dynamic = "force-dynamic";
  * existing one rather than silently rotate it.
  */
 export async function POST(request: Request) {
-  const body = (await request.json()) as { token?: string; pin?: string };
+  const parsed = await readJson<{ token?: string; pin?: string }>(request);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.body;
   if (!body.token || !body.pin) {
     return NextResponse.json(
       { error: "Missing token or pin" },
