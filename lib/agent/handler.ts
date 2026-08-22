@@ -32,6 +32,7 @@ import { isFreezeRequest } from "@/lib/agent/detect-freeze-request";
 import { gateSpend, gateWalletReady, isFrozen } from "@/lib/users/wallet-gate";
 import { freezeAccount } from "@/lib/users/freeze";
 import { cancelHeldSend, listHoldingForUser } from "@/lib/held_sends/repository";
+import { factorCount } from "@/lib/auth/factors";
 import {
   createResetToken,
   buildResetUrl,
@@ -147,6 +148,8 @@ export async function handleIncomingMessage(
   // detect-freeze-request.ts gives: the kill switch cannot depend on a
   // network call to a service that may be the thing that is down.
   if (isFreezeRequest(text)) return handleFreezeRequest(user);
+
+  if (isTelegramLinkRequest(text)) return handleTelegramLinkRequest(user);
 
   const flowPending = await getActivePending(user.id);
   if (flowPending) {
@@ -1003,6 +1006,72 @@ async function cancelMostRecent(user: tellaUser): Promise<HandlerResult> {
   }
 
   return cancelMostRecentPendingSend(user);
+}
+
+/**
+ * "link telegram", and the handful of ways people phrase it.
+ *
+ * Local rather than a decoder intent for the usual reason (it should work
+ * during an outage) and one specific one: sendam-ai has a closed intent set
+ * that knows nothing about channels, so this would land on UNKNOWN and get a
+ * shrug.
+ */
+const TELEGRAM_LINK_PATTERNS: RegExp[] = [
+  /\b(link|connect|add|use)\b[^.!?]{0,16}\btelegram\b/i,
+  /\btelegram\b[^.!?]{0,16}\b(link|account|bot)\b/i,
+];
+
+function isTelegramLinkRequest(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed || trimmed.length > 80) return false;
+  return TELEGRAM_LINK_PATTERNS.some((p) => p.test(trimmed));
+}
+
+/**
+ * Mint a single-use deep link that binds a Telegram chat to this account.
+ *
+ * Gated on an existing factor. Attaching a new way to reach a wallet is a
+ * money-grade action — an attacker holding the phone for five minutes should
+ * not be able to give themselves a channel that outlives their access to it.
+ * A user with no factor yet is pointed at setting one up first, which is the
+ * same funnel the enrollment prompt uses rather than a dead end.
+ */
+async function handleTelegramLinkRequest(user: tellaUser): Promise<HandlerResult> {
+  const name = firstName(user);
+
+  if (isFrozen(user)) {
+    return {
+      reply: "Your account is frozen, so I can't link a new channel to it right now.",
+    };
+  }
+
+  if ((await factorCount(user)) === 0) {
+    return {
+      reply: [
+        `Before I link another channel, ${name}, let's put a lock on this account.`,
+        "",
+        "Start a send and you'll be asked to set up Face ID or a PIN — it takes about ten seconds. Then say *link telegram* again.",
+      ].join("\n"),
+    };
+  }
+
+  const botUsername = process.env.TELEGRAM_BOT_USERNAME;
+  if (!botUsername) {
+    console.error("[telegram] TELEGRAM_BOT_USERNAME is not set");
+    return { reply: "Telegram isn't set up yet on my side. Try again later." };
+  }
+
+  const token = await createResetToken(user.id, "link_telegram");
+
+  return {
+    reply: [
+      "Tap this to connect Telegram:",
+      "",
+      `https://t.me/${botUsername}?start=${token.id}`,
+      "",
+      "It works once and expires in 10 minutes. On Telegram you'll be able to check your balance and freeze your account — sending stays here.",
+    ].join("\n"),
+  };
 }
 
 async function getBalanceReply(

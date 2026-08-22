@@ -1,7 +1,7 @@
 import type { tellaUser } from "@/lib/supabase/types";
 import type { ExecuteSendResult } from "@/lib/sends/execute";
 import { formatSendResultForChat } from "@/lib/sends/execute";
-import { notifyUser } from "@/lib/whatsapp/notify";
+import { notifyUser } from "@/lib/messaging/notify";
 import { findBeneficiaryByAddress } from "@/lib/beneficiaries/repository";
 import { createPendingFlow } from "@/lib/pending_actions/repository";
 import { flowStart } from "@/lib/sendam-ai/client";

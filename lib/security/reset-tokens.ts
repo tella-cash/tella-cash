@@ -10,7 +10,7 @@ import type { tellaUser } from "@/lib/supabase/types";
  * blast radius is larger, so the window is smaller.
  */
 
-export type SecurityTokenKind = "pin_reset";
+export type SecurityTokenKind = "pin_reset" | "link_telegram";
 
 const TTL_MINUTES = 10;
 
@@ -106,18 +106,30 @@ export async function consumeResetToken(id: string): Promise<boolean> {
 }
 
 /**
- * Invalidate any outstanding reset tokens for a user.
+ * Invalidate a user's outstanding tokens OF ONE KIND.
  *
  * Called after a successful reset so a second link, requested minutes
  * earlier and still inside its window, can't be used to reset again by
  * someone who saw it in a notification preview.
+ *
+ * The `kind` filter is not optional politeness. Without it this revokes every
+ * unused token the user holds, which was harmless while 'pin_reset' was the
+ * only kind and became a real bug the moment a second one existed: completing
+ * a PIN reset would silently kill an in-flight Telegram link, and the user
+ * would tap a deep link that just did nothing. Revoking a channel link is
+ * also not a security requirement the way revoking a spare reset link is —
+ * they authorize different things and their blast radii are different.
  */
-export async function revokeResetTokens(userId: string): Promise<void> {
+export async function revokeResetTokens(
+  userId: string,
+  kind: SecurityTokenKind = "pin_reset",
+): Promise<void> {
   const supabase = getSupabaseAdmin();
   const { error } = await supabase
     .from("tella_security_token")
     .update({ used_at: new Date().toISOString() })
     .eq("user_id", userId)
+    .eq("kind", kind)
     .is("used_at", null);
 
   if (error) {

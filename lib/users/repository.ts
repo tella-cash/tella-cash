@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { upsertChannel } from "@/lib/messaging/channels";
 import type { tellaUser, WhatsAppChannel } from "@/lib/supabase/types";
 
 /**
@@ -11,6 +12,17 @@ import type { tellaUser, WhatsAppChannel } from "@/lib/supabase/types";
  * received, send receipts) routed through whichever API they're actually
  * reachable on. Same underlying `whatsapp_number` matches either way, since
  * both webhooks normalize to Twilio-style `whatsapp:+E164`.
+ */
+/**
+ * Resolve an inbound WhatsApp identifier to a user, creating one if needed.
+ *
+ * The channel column is no longer clobbered. It used to be updated in place
+ * whenever a message arrived on a different provider, which recorded "the
+ * channel last used" rather than "the channels available" and silently
+ * repointed every outbound notification at whichever provider happened to
+ * deliver last. tella_user_channel is the record now; this column survives
+ * only because half a dozen call sites still read it, and is kept in step as
+ * the user's PRIMARY channel rather than as a running log of the last one.
  */
 export async function findOrCreateUser({
   whatsappNumber,
@@ -35,6 +47,12 @@ export async function findOrCreateUser({
 
   if (existing) {
     const existingUser = existing as tellaUser;
+
+    // Dual-write while the legacy columns are still read elsewhere. The
+    // channel row is the authority; this keeps the column usable until the
+    // contract migration retires it.
+    await recordChannel(existingUser.id, channel, whatsappNumber, existingUser.whatsapp_channel === channel);
+
     if (existingUser.whatsapp_channel !== channel) {
       const { data: updated, error: updateError } = await supabase
         .from("tella_users")
@@ -70,7 +88,41 @@ export async function findOrCreateUser({
     });
   }
 
-  return { user: created as tellaUser, isNew: true };
+  const createdUser = created as tellaUser;
+  await recordChannel(createdUser.id, channel, whatsappNumber, true);
+
+  return { user: createdUser, isNew: true };
+}
+
+/**
+ * Mirror an inbound WhatsApp identifier into tella_user_channel.
+ *
+ * Best-effort and deliberately non-fatal: the legacy columns are still
+ * written and still read, so a failure here degrades the fan-out for one
+ * message rather than dropping the message. It becomes fatal on the day the
+ * contract migration removes that fallback, and not before.
+ *
+ * An inbound message is proof the channel belongs to whoever answered on it,
+ * so it is verified on sight — unlike Telegram, which has to be linked from
+ * an already-authenticated channel first.
+ */
+async function recordChannel(
+  userId: string,
+  provider: WhatsAppChannel,
+  externalId: string,
+  isPrimary: boolean,
+): Promise<void> {
+  try {
+    await upsertChannel({
+      userId,
+      provider,
+      externalId,
+      isPrimary,
+      verified: true,
+    });
+  } catch (err) {
+    console.error("[users] channel mirror failed", { userId, provider, err });
+  }
 }
 
 

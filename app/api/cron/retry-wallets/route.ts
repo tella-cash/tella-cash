@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { isAuthorizedCron } from "@/lib/cron/auth";
 import { listUsersNeedingWallet } from "@/lib/users/repository";
 import { provisionWalletForUser } from "@/lib/wallet/provision";
-import { notifyUser } from "@/lib/whatsapp/notify";
+import { notifyUser } from "@/lib/messaging/notify";
 import { raiseAlert } from "@/lib/observability/alerts";
 
 export const dynamic = "force-dynamic";
