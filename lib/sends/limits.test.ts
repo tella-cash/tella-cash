@@ -87,6 +87,21 @@ const CASES: Case[] = [
   ],
 ];
 
+// Caps default to off, and Infinity is what "off" means throughout. A
+// per-user override still binds against it — min(20, Infinity) is 20 — which
+// is what keeps opt-in ceilings working with no deployment-wide cap set.
+const NO_CAPS = { perTx: Infinity, daily: Infinity };
+CASES.push([
+  "with caps off and no override, both are infinite",
+  mergeLimits(null, NO_CAPS),
+  { perTx: Infinity, daily: Infinity, customised: false },
+]);
+CASES.push([
+  "a user's own ceiling still binds when there is no global cap",
+  mergeLimits({ per_tx_cap_usdc: 20, daily_cap_usdc: null }, NO_CAPS),
+  { perTx: 20, daily: Infinity, customised: true },
+]);
+
 let passed = 0;
 const failures: string[] = [];
 

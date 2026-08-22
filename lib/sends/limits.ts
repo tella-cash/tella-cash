@@ -7,6 +7,22 @@ import { sumHeldUsdc } from "@/lib/held_sends/repository";
 /**
  * Spending guards for the send path.
  *
+ * THE DEPLOYMENT-WIDE CAPS ARE OFF BY DEFAULT. Users hated them, and a cap
+ * that stops a legitimate person paying their rent is a cap that gets the
+ * product uninstalled. What remains unconditional is the only check nobody
+ * argues with: you cannot send money you do not have.
+ *
+ * Nothing was deleted to achieve that. Setting TELLA_MAX_SEND_USDC or
+ * TELLA_DAILY_SEND_LIMIT_USDC re-imposes them globally without a deploy,
+ * which is the property these were env vars for in the first place, and
+ * per-user ceilings in tella_user_limits still apply for anyone who opts
+ * into one.
+ *
+ * Worth being clear-eyed about the trade: these bounded the damage a
+ * compromised account could do in a single burst. Without them that bound is
+ * gone, and the freeze and panic code are what is left — both of which
+ * depend on somebody noticing.
+ *
  * Before this, nothing checked whether a user could afford a send or whether
  * the amount was sane — the first thing to notice a 10,000 USDC typo, or a
  * compromised session draining an account, was Circle. Three checks now sit
@@ -38,11 +54,37 @@ export type LimitResult =
   | { ok: true; usdc: SpendableUsdc; limits: ResolvedLimits }
   | { ok: false; failure: LimitFailure };
 
-function numberFromEnv(name: string, fallback: number): number {
-  const raw = process.env[name];
-  if (!raw) return fallback;
+/**
+ * A cap from the environment, where "no cap" is a real answer.
+ *
+ * Returns Infinity when unset or explicitly switched off, and Infinity is not
+ * a fudge here — every check below is a `>` comparison, so an infinite cap
+ * simply never fails one. Nothing needs an `if (capsEnabled)` branch, which
+ * means there is no second code path to get wrong and no way for the checks
+ * to be half-applied.
+ *
+ * Accepts `off`, `none`, `unlimited` or `0` so switching them back on during
+ * an incident is a config change with an obvious inverse, rather than
+ * somebody having to remember which enormous number meant "disabled".
+ */
+const DISABLED = new Set(["off", "none", "unlimited", "0", "false"]);
+
+function capFromEnv(name: string): number {
+  const raw = process.env[name]?.trim();
+  if (!raw) return Infinity;
+  if (DISABLED.has(raw.toLowerCase())) return Infinity;
+
   const n = Number.parseFloat(raw);
-  return Number.isFinite(n) && n > 0 ? n : fallback;
+  // A malformed value must not silently become "no limit" — if someone set
+  // this deliberately, they meant to constrain something, and the safe
+  // reading of a typo is the value they last successfully used. There is no
+  // such value to fall back to, so refuse to guess and treat it as unset,
+  // loudly.
+  if (!Number.isFinite(n) || n <= 0) {
+    console.error("[send-limits] ignoring unparseable cap", { name, raw });
+    return Infinity;
+  }
+  return n;
 }
 
 /**
@@ -54,11 +96,11 @@ function numberFromEnv(name: string, fallback: number): number {
  * are stored sparsely and NULL keeps meaning "whatever the default is now".
  */
 export function defaultPerTxCap(): number {
-  return numberFromEnv("TELLA_MAX_SEND_USDC", 100);
+  return capFromEnv("TELLA_MAX_SEND_USDC");
 }
 
 export function defaultDailyCap(): number {
-  return numberFromEnv("TELLA_DAILY_SEND_LIMIT_USDC", 500);
+  return capFromEnv("TELLA_DAILY_SEND_LIMIT_USDC");
 }
 
 export interface ResolvedLimits {

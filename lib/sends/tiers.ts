@@ -23,26 +23,40 @@ export type SendTier = "normal" | "hold";
 export const HOLD_HOURS = 24;
 
 /**
- * Default hold threshold as a fraction of the per-transaction cap.
+ * The hold threshold, from the environment. Infinity means no holds.
  *
- * Expressed relative to the cap rather than as its own absolute number so a
- * deployment that tightens TELLA_MAX_SEND_USDC during an incident tightens
- * this with it, instead of leaving a hold threshold above the new cap where
- * it would never fire.
+ * OFF BY DEFAULT. A 24-hour delay on a payment is the single most intrusive
+ * thing this product can do to someone, and it lands on exactly the people
+ * moving the most money — who are least willing to wait for it.
+ *
+ * It used to derive from the per-transaction cap (half of it), which was neat
+ * and wrong: re-imposing a cap during an incident would have silently
+ * reintroduced 24-hour delays as a side effect, which is not a thing anybody
+ * would have chosen deliberately at that moment. It gets its own switch.
+ *
+ * Per-user thresholds in tella_user_limits still apply, so a cautious user
+ * can opt into a delay on their own account without it being imposed on
+ * everyone.
  */
-const DEFAULT_HOLD_FRACTION = 0.5;
+const DISABLED = new Set(["off", "none", "never", "0", "false"]);
 
-export function holdThreshold(limits: ResolvedLimits): number {
-  return limits.holdThreshold ?? limits.perTx * DEFAULT_HOLD_FRACTION;
+function envHoldThreshold(): number {
+  const raw = process.env.TELLA_HOLD_THRESHOLD_USDC?.trim();
+  if (!raw) return Infinity;
+  if (DISABLED.has(raw.toLowerCase())) return Infinity;
+
+  const n = Number.parseFloat(raw);
+  if (!Number.isFinite(n) || n <= 0) {
+    console.error("[tiers] ignoring unparseable hold threshold", { raw });
+    return Infinity;
+  }
+  return n;
 }
 
-/**
- * Pure, so the boundary is testable without a wallet.
- *
- * Amounts strictly ABOVE the threshold are held. At exactly the threshold a
- * send goes straight through, which matters because a user who sets their own
- * threshold to 50 means "50 is fine, more than 50 is not".
- */
+export function holdThreshold(limits: ResolvedLimits): number {
+  return limits.holdThreshold ?? envHoldThreshold();
+}
+
 export function tierFor(amount: number, limits: ResolvedLimits): SendTier {
   if (!Number.isFinite(amount) || amount <= 0) return "normal";
   return amount > holdThreshold(limits) ? "hold" : "normal";

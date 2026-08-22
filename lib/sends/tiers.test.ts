@@ -16,46 +16,39 @@ function limits(over: Partial<ResolvedLimits> = {}): ResolvedLimits {
 type Check = [string, () => boolean];
 
 const CHECKS: Check[] = [
-  // --- derived threshold: half the per-transaction cap ---
-  ["the derived threshold is half the per-tx cap", () => holdThreshold(limits()) === 50],
-  ["below the derived threshold goes straight out", () => tierFor(10, limits()) === "normal"],
-  ["exactly at the threshold goes straight out", () => tierFor(50, limits()) === "normal"],
-  ["above the threshold is held", () => tierFor(50.01, limits()) === "hold"],
-  ["well above the threshold is held", () => tierFor(99, limits()) === "hold"],
-
-  // The threshold follows the cap down, which is the point of deriving it
-  // rather than hardcoding a number: tightening the deployment cap during an
-  // incident tightens this too, instead of leaving a threshold above the new
-  // cap where it could never fire.
+  // --- off by default, which is the whole point of this change ---
+  ["with nothing configured, the threshold is infinite", () => holdThreshold(limits()) === Infinity],
+  ["a small send is not held", () => tierFor(5, limits()) === "normal"],
+  ["a large send is not held either", () => tierFor(100_000, limits()) === "normal"],
   [
-    "a tightened per-tx cap tightens the derived threshold with it",
-    () => holdThreshold(limits({ perTx: 20 })) === 10 && tierFor(15, limits({ perTx: 20 })) === "hold",
+    "a per-tx cap no longer drags holds back in as a side effect",
+    () => tierFor(90, limits({ perTx: 100 })) === "normal",
   ],
 
-  // --- explicit user threshold wins ---
+  // --- a user who opts in still gets one ---
   [
-    "an explicit threshold is used instead of the derived one",
+    "an explicit per-user threshold is honoured",
     () => holdThreshold(limits({ holdThreshold: 5 })) === 5,
   ],
   [
-    "a user who set a low threshold gets more held, not less",
-    () =>
-      tierFor(10, limits({ holdThreshold: 5 })) === "hold" &&
-      tierFor(10, limits()) === "normal",
+    "above a user's own threshold is held",
+    () => tierFor(10, limits({ holdThreshold: 5 })) === "hold",
   ],
   [
-    "at exactly the user's own threshold, nothing is held",
+    "at exactly their threshold, nothing is held",
     () => tierFor(5, limits({ holdThreshold: 5 })) === "normal",
   ],
+  [
+    "below their threshold, nothing is held",
+    () => tierFor(1, limits({ holdThreshold: 5 })) === "normal",
+  ],
 
-  // --- degenerate inputs must not silently become "hold everything" or
-  //     "hold nothing"; they are not sends at all and checkSendLimits has
-  //     already rejected them by the time this runs.
-  ["zero is not held", () => tierFor(0, limits()) === "normal"],
-  ["negative is not held", () => tierFor(-5, limits()) === "normal"],
-  ["NaN is not held", () => tierFor(NaN, limits()) === "normal"],
+  // --- degenerate inputs are not sends; checkSendLimits rejected them already ---
+  ["zero is not held", () => tierFor(0, limits({ holdThreshold: 5 })) === "normal"],
+  ["negative is not held", () => tierFor(-5, limits({ holdThreshold: 5 })) === "normal"],
+  ["NaN is not held", () => tierFor(NaN, limits({ holdThreshold: 5 })) === "normal"],
 
-  ["the hold is a full day", () => HOLD_HOURS === 24],
+  ["the hold, when one applies, is still a full day", () => HOLD_HOURS === 24],
 ];
 
 let passed = 0;
