@@ -281,6 +281,53 @@ curl -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
   -d "secret_token=$TELEGRAM_WEBHOOK_SECRET"
 ```
 
+### `0018_google_identity.sql` — apply BEFORE the code that uses it
+
+`tella_google_identity`, plus two more token kinds (`link_google`,
+`unfreeze`).
+
+**Match on `google_sub`, never on email.** Addresses get reassigned,
+especially on Workspace domains, and matching on email is the classic
+account-takeover bug in exactly this integration. `google_email` is stored
+for display and alert delivery and is never a lookup key.
+
+**The asymmetry is the design, and it is the thing to preserve:**
+
+| Action | What Google is worth |
+|---|---|
+| Freeze | **Sufficient on its own.** The person who most needs it has no phone to prove anything else with, and the worst an attacker achieves is inconveniencing someone. |
+| Unfreeze | **Necessary, not sufficient.** Mints a short-lived token and hands off to a page that also demands a PIN or passkey set up before the freeze. |
+| Send money | Never. |
+
+Once Google alone could unfreeze, a compromised Google account would be a
+compromised wallet — and Google's own recovery is frequently phone-based, so
+it is less independent of the SIM than it looks.
+
+There is deliberately **no session and no cookie**. Each sign-in authorizes
+exactly one action. The original plan called for a scoped settings session;
+there is no settings surface yet, every piece of this is a single action, and
+a cookie on a custodial wallet is a strictly larger bearer credential than
+anything else this app issues.
+
+### Environment added alongside 0007–0018
+
+```
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_STATE_SECRET=      # optional; falls back to the service-role key
+
+EMAIL_API_URL=            # optional, Resend-shaped POST endpoint
+EMAIL_API_KEY=
+EMAIL_FROM=
+```
+
+Authorized redirect URI in the Google console must be exactly
+`$APP_BASE_URL/api/auth/google/callback`.
+
+Email is optional and degrades to a structured `console.error` when unset,
+the same way `raiseAlert` does without `ALERT_WEBHOOK_URL` — every call site
+stays correct either way and a missing provider never breaks a freeze.
+
 ### Environment added alongside 0007–0015
 
 ```
