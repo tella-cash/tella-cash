@@ -1118,7 +1118,16 @@ async function handleTelegramLinkRequest(user: tellaUser): Promise<HandlerResult
     };
   }
 
-  const botUsername = process.env.TELEGRAM_BOT_USERNAME;
+  // Normalised rather than trusted. BotFather displays the username as
+  // "@cashtellaBot" and that is what gets pasted into env, but t.me links
+  // take the bare name — https://t.me/@name is a dead link, and the failure
+  // is a user tapping something that goes nowhere rather than an error
+  // anybody sees. Also tolerates someone pasting the whole t.me URL.
+  const botUsername = (process.env.TELEGRAM_BOT_USERNAME ?? "")
+    .trim()
+    .replace(/^https?:\/\/t\.me\//i, "")
+    .replace(/^@/, "");
+
   if (!botUsername) {
     console.error("[telegram] TELEGRAM_BOT_USERNAME is not set");
     return { reply: "Telegram isn't set up yet on my side. Try again later." };
