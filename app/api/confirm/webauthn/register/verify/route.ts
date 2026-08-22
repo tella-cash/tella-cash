@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { RegistrationResponseJSON } from "@simplewebauthn/server";
 import { loadConfirmContext } from "@/lib/confirm/context";
+import { canEnrollFromConfirmLink } from "@/lib/auth/factors";
 import { readJson } from "@/lib/http/json";
 import { completeConfirmedSend } from "@/lib/confirm/complete";
 import {
@@ -11,7 +12,6 @@ import {
 import {
   consumeChallenge,
   saveCredential,
-  userHasCredential,
 } from "@/lib/webauthn/repository";
 
 export const dynamic = "force-dynamic";
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
     );
   }
 
-  if (ctx.user.pin_hash || (await userHasCredential(ctx.user.id))) {
+  if (!(await canEnrollFromConfirmLink(ctx.user))) {
     return NextResponse.json(
       { error: "This account already has a confirmation method set up." },
       { status: 409 },

@@ -74,21 +74,35 @@ export function ConfirmClient({
   const canUseBiometric = hasPasskey || !hasPin;
   const biometricAvailable = webauthnReady && canUseBiometric;
 
+  // The mirror of the rule above. Setting a PIN is only legitimate while the
+  // account has no factor at all — the setup route refuses once a passkey
+  // exists, for exactly the reason the register routes refuse once a PIN
+  // does. So a passkey-only account has no PIN path here, and offering one
+  // would render a form whose submit is guaranteed to 409.
+  const canUsePin = hasPin || !hasPasskey;
+  const pinStage: Stage = { kind: "pin", mode: hasPin ? "verify" : "setup" };
+
+  // Where to land when biometric isn't on offer. Usually the PIN form; for a
+  // passkey-only account on a browser that can't do WebAuthn there is no
+  // path at all from here, so say so plainly and point at recovery rather
+  // than dead-ending on a form.
+  const fallbackStage: Stage = canUsePin
+    ? pinStage
+    : {
+        kind: "error",
+        message:
+          "This account confirms with a passkey, and this browser can't use one. Open this link on the device where you set it up, or reply \"reset\" on WhatsApp to set a new confirmation method.",
+      };
+
   // If the browser can't do WebAuthn (or biometric isn't on offer), the
-  // chooser collapses straight to the PIN form rather than showing a button
+  // chooser collapses straight to that fallback rather than showing a button
   // that would only fail.
   const effectiveStage: Stage =
-    stage.kind === "choose" && !biometricAvailable
-      ? { kind: "pin", mode: hasPin ? "verify" : "setup" }
-      : stage;
+    stage.kind === "choose" && !biometricAvailable ? fallbackStage : stage;
 
   function goHome() {
     busyRef.current = false;
-    setStage(
-      biometricAvailable
-        ? { kind: "choose" }
-        : { kind: "pin", mode: hasPin ? "verify" : "setup" },
-    );
+    setStage(biometricAvailable ? { kind: "choose" } : fallbackStage);
   }
 
   async function runBiometric() {
@@ -208,10 +222,9 @@ export function ConfirmClient({
             {effectiveStage.kind === "choose" && (
               <ChooseView
                 hasPasskey={hasPasskey}
+                canUsePin={canUsePin}
                 onBiometric={runBiometric}
-                onUsePin={() =>
-                  setStage({ kind: "pin", mode: hasPin ? "verify" : "setup" })
-                }
+                onUsePin={() => setStage(pinStage)}
               />
             )}
 
@@ -236,10 +249,13 @@ export function ConfirmClient({
 
 function ChooseView({
   hasPasskey,
+  canUsePin,
   onBiometric,
   onUsePin,
 }: {
   hasPasskey: boolean;
+  /** False for a passkey-only account, where the PIN routes refuse. */
+  canUsePin: boolean;
   onBiometric: () => void;
   onUsePin: () => void;
 }) {
@@ -267,13 +283,15 @@ function ChooseView({
         {hasPasskey ? "Confirm with biometrics" : "Set up & confirm"}
       </button>
 
-      <button
-        onClick={onUsePin}
-        disabled={clicked}
-        className="w-full rounded-2xl px-6 py-3 text-sm font-medium text-ink-500 transition-colors hover:text-ink-900 disabled:opacity-60"
-      >
-        Use a PIN instead
-      </button>
+      {canUsePin && (
+        <button
+          onClick={onUsePin}
+          disabled={clicked}
+          className="w-full rounded-2xl px-6 py-3 text-sm font-medium text-ink-500 transition-colors hover:text-ink-900 disabled:opacity-60"
+        >
+          Use a PIN instead
+        </button>
+      )}
 
       <SecurityNote />
     </div>

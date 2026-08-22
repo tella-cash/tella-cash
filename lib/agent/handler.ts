@@ -28,6 +28,9 @@ import {
 import { getUsdToNgnRate, usdToNgn } from "@/lib/fx/naira";
 import { checkSendLimits, formatLimitFailure } from "@/lib/sends/limits";
 import { isResetRequest } from "@/lib/agent/detect-reset-request";
+import { isFreezeRequest } from "@/lib/agent/detect-freeze-request";
+import { gateSpend, gateWalletReady, isFrozen } from "@/lib/users/wallet-gate";
+import { freezeAccount } from "@/lib/users/freeze";
 import {
   createResetToken,
   buildResetUrl,
@@ -128,6 +131,14 @@ export async function handleIncomingMessage(
   // outstanding must start a fresh one rather than being swallowed by an
   // old prompt (see handleOnboardedUser, which checks for a structured send
   // before anything pending-send-related).
+  // Checked before the pending-flow interception below, not after. A user
+  // halfway through "save this recipient?" whose phone has just been stolen
+  // must not have "freeze" swallowed as an answer to a beneficiary prompt.
+  // This is also matched before any decoder runs, for the reason
+  // detect-freeze-request.ts gives: the kill switch cannot depend on a
+  // network call to a service that may be the thing that is down.
+  if (isFreezeRequest(text)) return handleFreezeRequest(user);
+
   const flowPending = await getActivePending(user.id);
   if (flowPending) {
     return handleFlowPendingResponse({ user, pending: flowPending, text });
@@ -392,7 +403,11 @@ async function handleFaucetIntent({
 }): Promise<HandlerResult> {
   const name = firstName(user);
 
-  if (user.wallet_status !== "active" || !user.circle_wallet_id || !user.wallet_address) {
+  // A faucet drip is a write against the wallet, so it follows the same
+  // gate as a send rather than the read gate.
+  const gate = gateSpend(user);
+  if (!gate.ok || !user.wallet_address) {
+    if (gate.ok === false && gate.reason === "frozen") return frozenReply(name);
     return { reply: pickReply(REPLIES.walletNotReady, { name }) };
   }
 
@@ -623,9 +638,12 @@ async function cancelMostRecentPendingSend(user: tellaUser): Promise<HandlerResu
   };
 }
 
+// Reads deliberately ignore the freeze. A frozen user still needs their
+// receiving address and their balance, and needs them most right after
+// freezing, while working out what happened. See lib/users/wallet-gate.ts.
 function addressReply(user: tellaUser): Pick<HandlerResult, "reply" | "followUp"> {
   const name = firstName(user);
-  if (user.wallet_status === "active" && user.wallet_address) {
+  if (gateWalletReady(user).ok && user.wallet_address) {
     return {
       reply: pickReply(REPLIES.address, { name, address: user.wallet_address }),
       followUp: user.wallet_address,
@@ -650,7 +668,9 @@ async function startSendFlow({
         'I couldn\'t understand that send instruction. Try "send 5 usdc to +234..." or "send 5 usdc to Chidi".',
     };
 
-  if (user.wallet_status !== "active" || !user.circle_wallet_id) {
+  const gate = gateSpend(user);
+  if (!gate.ok) {
+    if (gate.reason === "frozen") return frozenReply(firstName(user));
     return {
       reply:
         "Your wallet isn't ready yet. Once it's set up you'll be able to send.",
@@ -688,7 +708,10 @@ async function startSendFlow({
       return { reply: "That's your own number — can't send to yourself." };
     }
 
-    if (recipient.wallet_status !== "active" || !recipient.wallet_address) {
+    // gateWalletReady, not gateSpend: this is the RECIPIENT's row. Freezing
+    // is about outbound only, so a frozen user can still be paid, and
+    // refusing here would leak their security state to the sender.
+    if (!gateWalletReady(recipient).ok || !recipient.wallet_address) {
       return {
         reply: `${recipient.profile_name ?? "That user"} hasn't finished setting up their wallet yet. Try again in a moment.`,
       };
@@ -745,18 +768,100 @@ async function startSendFlow({
   return confirmResult(pending);
 }
 
+/**
+ * The reply every spend path gives a frozen account. One wording, one place,
+ * so a user who hits the wall from three directions is told the same thing
+ * three times rather than three different things.
+ */
+function frozenReply(name: string): HandlerResult {
+  return {
+    reply: [
+      `Your account is frozen, ${name}, so I can't send anything.`,
+      "",
+      "Nothing has left your wallet. You can still check your balance and receive money.",
+      "",
+      "Reply *unfreeze* when you want it lifted and I'll walk you through it.",
+    ].join("\n"),
+  };
+}
+
+/**
+ * Turn outbound money off, now.
+ *
+ * Requires no factor and no confirmation on purpose. Someone whose phone has
+ * just been taken has seconds, not minutes, and an attacker who freezes an
+ * account has achieved nothing an attacker wants. The asymmetry is the whole
+ * design: see migrations/0012_account_freeze.sql.
+ */
+async function handleFreezeRequest(user: tellaUser): Promise<HandlerResult> {
+  const name = firstName(user);
+
+  if (isFrozen(user)) {
+    return {
+      reply: [
+        `Your account is already frozen, ${name}. Nothing can leave your wallet.`,
+        "",
+        "Reply *unfreeze* when you want it lifted.",
+      ].join("\n"),
+    };
+  }
+
+  let cancelled = 0;
+  try {
+    ({ cancelledSends: cancelled } = await freezeAccount({
+      userId: user.id,
+      source: "whatsapp",
+      reason: "user requested via chat",
+    }));
+  } catch (err) {
+    // Say so plainly. Telling someone their money is safe when the freeze
+    // did not apply is the worst outcome available here.
+    console.error("[freeze] request failed", { userId: user.id, err });
+    return {
+      reply: [
+        "I couldn't freeze your account just then, and I don't want to tell you it's safe when I'm not sure.",
+        "",
+        "Try again right now — reply *freeze*.",
+      ].join("\n"),
+    };
+  }
+
+  // The cancellation count is surfaced rather than swallowed: those were
+  // real transfers the user had started, and money quietly disappearing from
+  // a flow they began is not something to be terse about.
+  const cancelledNote =
+    cancelled === 0
+      ? "You had no pending sends waiting."
+      : cancelled === 1
+        ? "I also cancelled the 1 pending send you had waiting."
+        : `I also cancelled the ${cancelled} pending sends you had waiting.`;
+
+  return {
+    reply: [
+      `🔒 Frozen. Nothing can leave your wallet, ${name}.`,
+      "",
+      cancelledNote,
+      "",
+      "You can still check your balance and receive money as normal.",
+      "",
+      "Reply *unfreeze* when you want it lifted.",
+    ].join("\n"),
+  };
+}
+
 async function getBalanceReply(
   user: tellaUser,
 ): Promise<Pick<HandlerResult, "reply" | "followUp">> {
   const name = firstName(user);
 
-  if (user.wallet_status !== "active" || !user.circle_wallet_id) {
+  const gate = gateWalletReady(user);
+  if (!gate.ok) {
     return { reply: pickReply(REPLIES.walletNotReady, { name }) };
   }
 
   let balances;
   try {
-    balances = await getWalletBalances(user.circle_wallet_id);
+    balances = await getWalletBalances(gate.walletId);
   } catch (err) {
     console.error("[balance] fetch failed", { userId: user.id, err });
     return { reply: pickReply(REPLIES.balanceError, { name }) };

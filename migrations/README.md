@@ -115,7 +115,34 @@ sender genuinely batched two identical transfers to the same wallet in one
 transaction, which the tx hash alone can't distinguish. Check the hash on the
 explorer before deleting the extras.
 
-### Environment added alongside 0007–0011
+### `0012_account_freeze.sql` — apply BEFORE the code that uses it
+
+`frozen_at` / `frozen_reason` / `frozen_source` / `panic_code_hash` on
+`tella_users`, backing the account freeze (`lib/users/freeze.ts`) and the
+panic code (`lib/security/panic-code.ts`).
+
+Deliberately **not** a new `wallet_status` value. `listUsersNeedingWallet`
+selects on that column, so a `'frozen'` value would have the `retry-wallets`
+cron treat a frozen account as failed provisioning, and `setWalletActive`
+would then silently thaw it on a successful retry.
+
+With the columns absent the freeze fails loudly at the moment it is needed
+(the update errors and the user is told it did not work), which is the right
+failure but not one you want a real user to meet.
+
+Freeze is reachable from chat (`freeze`, `my phone was stolen`) and from
+`/panic` with a phone number and panic code. Unfreeze is operator-assisted
+for now, on purpose — until a factor exists that WhatsApp possession does not
+grant, an unfreeze link over WhatsApp would let an attacker holding the phone
+undo it in one tap:
+
+```sql
+update public.tella_users
+   set frozen_at = null, frozen_reason = null, frozen_source = null
+ where id = '<user id>';
+```
+
+### Environment added alongside 0007–0012
 
 ```
 CRON_SECRET=<random string>            # required by /api/cron/*; they refuse to run without it

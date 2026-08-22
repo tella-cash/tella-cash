@@ -5,6 +5,7 @@ import {
   markPendingSendOutcome,
 } from "@/lib/pending_sends/repository";
 import { sendUsdc } from "@/lib/wallet/circle";
+import { gateSpend } from "@/lib/users/wallet-gate";
 import { checkSendLimits, formatLimitFailure, type LimitFailure } from "./limits";
 import { raiseAlert } from "@/lib/observability/alerts";
 
@@ -21,6 +22,9 @@ export type ExecuteSendResult =
       recipientWhatsappNumber: string | null;
     }
   | { ok: false; reason: "wallet_inactive" | "already_used" | "transfer_failed" }
+  // The account is frozen. Distinct from wallet_inactive: nothing is wrong
+  // with the wallet, the owner turned outbound off on purpose.
+  | { ok: false; reason: "frozen" }
   // Distinct from transfer_failed: the request may have reached Circle. We
   // must not tell the user their balance is unchanged.
   | { ok: false; reason: "transfer_unknown" }
@@ -47,7 +51,19 @@ export async function executePendingSend({
   user: tellaUser;
   pending: PendingSend;
 }): Promise<ExecuteSendResult> {
-  if (user.wallet_status !== "active" || !user.circle_wallet_id) {
+  // The authoritative spend gate. Everything earlier is advisory: the agent
+  // checks at compose time so the user gets a useful message, but the row
+  // can sit for five minutes and an account can be frozen inside that window
+  // — which is precisely the window a freeze exists to act on.
+  const gate = gateSpend(user);
+  if (!gate.ok) {
+    if (gate.reason === "frozen") {
+      // Deliberately NOT deleted here. freezeAccount already removes every
+      // unclaimed row for the user, so reaching this branch means the row
+      // was created after the freeze, and deleting it silently would hide
+      // that from anyone reading the table afterwards.
+      return { ok: false, reason: "frozen" };
+    }
     await deletePendingSend(pending.id);
     return { ok: false, reason: "wallet_inactive" };
   }
@@ -73,7 +89,10 @@ export async function executePendingSend({
 
   try {
     const result = await sendUsdc({
-      fromWalletId: user.circle_wallet_id,
+      // From the gate, not user.circle_wallet_id: the gate is what proved it
+      // non-null, so reading it back off the row would need a second check
+      // TypeScript can't tie to the first.
+      fromWalletId: gate.walletId,
       toAddress: p.recipientAddress,
       amount: p.amount,
       tokenId: limits.usdc.tokenId,
@@ -162,6 +181,10 @@ export function sendFailureStatus(
       return 409;
     case "wallet_inactive":
       return 409;
+    case "frozen":
+      // Not 403: the request is well-formed and the caller is authorized.
+      // The account's own state forbids it, which is what 409 is for.
+      return 409;
     case "transfer_unknown":
     case "transfer_failed":
       return 502;
@@ -175,6 +198,12 @@ export function formatSendResultForChat(result: ExecuteSendResult): string {
         return "Your wallet isn't ready to send right now. Try again in a moment.";
       case "already_used":
         return "That send was already confirmed — I didn't send it twice.";
+      case "frozen":
+        return [
+          "Your account is frozen, so I didn't send that.",
+          "",
+          "Nothing has left your wallet. You can still check your balance and receive money.",
+        ].join("\n");
       case "limit":
         return formatLimitFailure(result.failure);
       case "transfer_unknown":
