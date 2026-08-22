@@ -1,4 +1,5 @@
 import { NextResponse, after } from "next/server";
+import { claimMessage, releaseMessage } from "@/lib/messaging/processed-messages";
 import twilio from "twilio";
 import {
   sendWhatsAppMessage,
@@ -11,6 +12,14 @@ import { findOrCreateUser } from "@/lib/users/repository";
 import { provisionWalletForUser } from "@/lib/wallet/provision";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { allowUnsignedWebhooks, redactNumber } from "@/lib/whatsapp/signature-policy";
+
+// The reply is composed inside after(), past the 200 the provider already
+// has. Without an explicit ceiling that background work runs on the platform
+// default and a slow call can be killed mid-flight, which is exactly how a
+// turn goes missing with no reply and no error. The per-call timeouts in the
+// decoder are sized to fit inside this.
+export const maxDuration = 60;
+
 
 interface TwilioWebhookPayload {
   From: string;
@@ -72,12 +81,28 @@ export async function POST(request: Request) {
   // keeps the function alive past the response so async work doesn't get
   // frozen mid-flight.
   after(async () => {
+    // Twilio redelivers on a slow response or a non-2xx, and every
+    // redelivery used to re-run the whole handler: a second reply, and a
+    // second confirm link for a send the user asked for once. Claim first,
+    // release if the work fails so a genuine retry can still do it.
+    const claimed = await claimMessage({
+      provider: "twilio",
+      messageId: payload.MessageSid,
+    });
+    if (!claimed) {
+      console.log("[whatsapp] duplicate delivery ignored", {
+        sid: payload.MessageSid,
+      });
+      return;
+    }
+
     try {
       await processMessageAsync(fromNumber, userMessage);
     } catch (err) {
       // Last-resort net: processMessageAsync handles its own errors, so
       // reaching here means something unexpected slipped through.
       logProcessingError("unexpected", err);
+      await releaseMessage({ provider: "twilio", messageId: payload.MessageSid });
     }
   });
 

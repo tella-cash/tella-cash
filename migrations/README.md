@@ -142,7 +142,24 @@ update public.tella_users
  where id = '<user id>';
 ```
 
-### Environment added alongside 0007–0012
+### `0013_inbound_message_idempotency.sql` — apply BEFORE the code that uses it
+
+`tella_processed_message`, the same claim-then-release-on-failure shape as
+`tella_processed_notification` (0011), applied to inbound WhatsApp messages
+instead of Circle webhooks.
+
+Neither WhatsApp route deduped before this. A redelivered message re-ran the
+whole handler: a second reply, and a second confirm link for a send the user
+asked for once. `createPendingSend` is a plain insert by design, so nothing
+downstream could tell a duplicate from a deliberate second send.
+
+It lands before the decoder gets retries, deliberately. A retry loop on top
+of a non-idempotent handler multiplies exactly the wrong thing.
+
+> `claimMessage` fails closed, so with the table absent every inbound message
+> is refused and the bot goes silent.
+
+### Environment added alongside 0007–0013
 
 ```
 CRON_SECRET=<random string>            # required by /api/cron/*; they refuse to run without it

@@ -64,9 +64,77 @@ function signRequest(rawBody: string, secret: string, nowMs: number): Record<str
   };
 }
 
+/**
+ * Time budget per call.
+ *
+ * Everything here runs inside after(), behind a 200 the provider already has,
+ * under a 60s ceiling. A fetch with no timeout does not respect any of that:
+ * it hangs until the platform kills the whole invocation, and the user gets
+ * no reply, no error, and no retry, because nothing ever noticed. That was
+ * the single worst failure in the inbound path and it was silent.
+ *
+ * /decode is on the critical path of every message, so it gets the tighter
+ * budget. /flow/start is only reached mid-conversation.
+ */
+const TIMEOUT_MS: Record<string, number> = {
+  "/decode": 4000,
+  "/flow/start": 3000,
+};
+const DEFAULT_TIMEOUT_MS = 4000;
+
+/**
+ * Circuit breaker.
+ *
+ * Without one, an outage costs every single message its full timeout before
+ * falling through — so a dead service does not just fail, it makes the whole
+ * bot slow while failing. After a few consecutive failures we stop asking for
+ * a while and let the caller fall through immediately.
+ *
+ * Per-process and therefore per-instance, which on serverless means it resets
+ * on cold start. That is fine: this is a latency guard, not a correctness
+ * one, and every instance learns the same lesson within a few messages.
+ */
+const BREAKER_THRESHOLD = 4;
+const BREAKER_COOLDOWN_MS = 30_000;
+let consecutiveFailures = 0;
+let breakerOpenedAt = 0;
+
+function breakerIsOpen(): boolean {
+  if (consecutiveFailures < BREAKER_THRESHOLD) return false;
+  if (Date.now() - breakerOpenedAt > BREAKER_COOLDOWN_MS) {
+    // Cooldown elapsed. Let one call through to test the water; if it fails
+    // the counter is still high and the breaker re-opens immediately.
+    consecutiveFailures = BREAKER_THRESHOLD - 1;
+    return false;
+  }
+  return true;
+}
+
+function recordFailure(): void {
+  consecutiveFailures++;
+  if (consecutiveFailures >= BREAKER_THRESHOLD) breakerOpenedAt = Date.now();
+}
+
+function recordSuccess(): void {
+  consecutiveFailures = 0;
+}
+
+/** Thrown when the breaker is open, so callers can tell it apart from a 4xx. */
+export class SendamUnavailableError extends Error {
+  constructor(message = "sendam-ai is unavailable") {
+    super(message);
+    this.name = "SendamUnavailableError";
+  }
+}
+
 async function post<T>(path: string, body: unknown): Promise<T> {
   if (!BASE_URL) throw new Error("Missing SENDAM_AI_BASE_URL");
   if (!SIGNING_SECRET) throw new Error("Missing SENDAM_AI_SIGNING_SECRET");
+
+  if (breakerIsOpen()) {
+    console.warn(`[sendam-ai] breaker open, skipping ${path}`);
+    throw new SendamUnavailableError();
+  }
 
   const rawBody = JSON.stringify(body);
   const startedAt = Date.now();
@@ -79,30 +147,72 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   // aggregator reads the platform logs.
   if (DEBUG_BODIES) console.log(`[sendam-ai] -> ${path}`, rawBody);
 
-  const res = await fetch(`${BASE_URL}${path}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...signRequest(rawBody, SIGNING_SECRET, Date.now()),
-    },
-    body: rawBody,
-  });
+  const timeoutMs = TIMEOUT_MS[path] ?? DEFAULT_TIMEOUT_MS;
 
-  const resText = await res.text();
-  const ms = Date.now() - startedAt;
+  // Retried at most once, and only for failures that a retry can plausibly
+  // fix. A 4xx is a considered rejection — a bad signature retried is just a
+  // second bad signature — so it fails immediately and does not count toward
+  // the breaker either, since the service is up and answering.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-  if (!res.ok) {
-    // The body goes into the thrown Error either way, so a failure is still
-    // diagnosable from the caller's own error log without broadcasting it
-    // on the happy path.
-    console.error(`[sendam-ai] <- ${path} ${res.status} (${ms}ms)`);
-    if (DEBUG_BODIES) console.error(`[sendam-ai] <- ${path} body`, resText);
-    throw new Error(`sendam-ai ${path} failed (${res.status}): ${resText}`);
+    try {
+      const res = await fetch(`${BASE_URL}${path}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...signRequest(rawBody, SIGNING_SECRET, Date.now()),
+        },
+        body: rawBody,
+        signal: controller.signal,
+      });
+
+      const resText = await res.text();
+      const ms = Date.now() - startedAt;
+
+      if (res.status >= 400 && res.status < 500) {
+        console.error(`[sendam-ai] <- ${path} ${res.status} (${ms}ms)`);
+        if (DEBUG_BODIES) console.error(`[sendam-ai] <- ${path} body`, resText);
+        recordSuccess();
+        throw new Error(`sendam-ai ${path} failed (${res.status}): ${resText}`);
+      }
+
+      if (!res.ok) {
+        console.error(`[sendam-ai] <- ${path} ${res.status} (${ms}ms)`);
+        if (DEBUG_BODIES) console.error(`[sendam-ai] <- ${path} body`, resText);
+        if (attempt === 0) continue;
+        recordFailure();
+        throw new Error(`sendam-ai ${path} failed (${res.status}): ${resText}`);
+      }
+
+      console.log(`[sendam-ai] <- ${path} ${res.status} (${ms}ms)`);
+      if (DEBUG_BODIES) console.log(`[sendam-ai] <- ${path} body`, resText);
+      recordSuccess();
+      return JSON.parse(resText) as T;
+    } catch (err) {
+      // A 4xx above throws a plain Error; don't retry or penalise those.
+      if (err instanceof Error && err.message.startsWith("sendam-ai ")) throw err;
+
+      const aborted = err instanceof Error && err.name === "AbortError";
+      console.error(`[sendam-ai] <- ${path} ${aborted ? "timeout" : "network error"}`, {
+        attempt,
+        timeoutMs,
+      });
+
+      if (attempt === 0) continue;
+      recordFailure();
+      throw new SendamUnavailableError(
+        aborted ? `sendam-ai ${path} timed out` : `sendam-ai ${path} unreachable`,
+      );
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
-  console.log(`[sendam-ai] <- ${path} ${res.status} (${ms}ms)`);
-  if (DEBUG_BODIES) console.log(`[sendam-ai] <- ${path} body`, resText);
-  return JSON.parse(resText) as T;
+  // Unreachable: the loop either returns or throws on its second pass.
+  recordFailure();
+  throw new SendamUnavailableError();
 }
 
 /** Classifies one message. Throws on any failure — the caller decides the

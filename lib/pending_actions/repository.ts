@@ -48,12 +48,18 @@ export function createPendingFlow({
   userId,
   flow,
   token,
+  failures,
 }: {
   userId: string;
   flow: string;
   token: string;
+  failures?: number;
 }): Promise<PendingAction> {
-  return createPending({ userId, kind: "flow", payload: { flow, token } });
+  return createPending({
+    userId,
+    kind: "flow",
+    payload: { flow, token, ...(failures ? { failures } : {}) },
+  });
 }
 
 export async function getActivePending(userId: string): Promise<PendingAction | null> {

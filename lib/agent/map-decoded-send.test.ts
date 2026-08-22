@@ -28,6 +28,22 @@ const CASES: Array<[DecodedIntent, unknown]> = [
     { ...base, amount: "5", recipient: "Chidi" },
     { amount: "5", token: "USDC", recipient: { kind: "label", label: "Chidi" } },
   ],
+  [
+    // Phone-shaped but not a valid number: reported as a bad number rather
+    // than falling into the beneficiary-label branch, which used to send the
+    // user off to check their saved contacts for a mistyped number.
+    { ...base, amount: "5", recipient: "+234801" },
+    { amount: "5", token: "USDC", recipient: { kind: "invalid_phone", typed: "+234801" } },
+  ],
+  [
+    { ...base, amount: "5", recipient: "0803 123" },
+    { amount: "5", token: "USDC", recipient: { kind: "invalid_phone", typed: "0803 123" } },
+  ],
+  [
+    // Still a label: it has letters, so it was never a number attempt.
+    { ...base, amount: "5", recipient: "Chidi 2" },
+    { amount: "5", token: "USDC", recipient: { kind: "label", label: "Chidi 2" } },
+  ],
   [{ ...base, amount: null, recipient: "Chidi" }, null],
   [{ ...base, amount: "0", recipient: "Chidi" }, null],
   [{ ...base, amount: "-5", recipient: "Chidi" }, null],

@@ -1,5 +1,6 @@
 import { NextResponse, after } from "next/server";
 import crypto from "node:crypto";
+import { claimMessage, releaseMessage } from "@/lib/messaging/processed-messages";
 import {
   sendWhatsAppMessage,
   sendWhatsAppButtons,
@@ -11,6 +12,14 @@ import { findOrCreateUser } from "@/lib/users/repository";
 import { provisionWalletForUser } from "@/lib/wallet/provision";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { allowUnsignedWebhooks, redactNumber } from "@/lib/whatsapp/signature-policy";
+
+// The reply is composed inside after(), past the 200 the provider already
+// has. Without an explicit ceiling that background work runs on the platform
+// default and a slow call can be killed mid-flight, which is exactly how a
+// turn goes missing with no reply and no error. The per-call timeouts in the
+// decoder are sized to fit inside this.
+export const maxDuration = 60;
+
 
 /**
  * Meta WhatsApp Cloud API webhook.
@@ -80,11 +89,23 @@ export async function POST(request: Request) {
   }
 
   after(async () => {
+    // Claimed per message, not per request: one delivery can carry several,
+    // and a redelivery can carry a different subset of the same ones.
     for (const msg of messages) {
+      const claimed = await claimMessage({
+        provider: "meta",
+        messageId: msg.messageId,
+      });
+      if (!claimed) {
+        console.log("[meta] duplicate delivery ignored", { id: msg.messageId });
+        continue;
+      }
+
       try {
         await processIncoming(msg);
       } catch (err) {
         console.error("[meta] processing error", err);
+        await releaseMessage({ provider: "meta", messageId: msg.messageId });
       }
     }
   });

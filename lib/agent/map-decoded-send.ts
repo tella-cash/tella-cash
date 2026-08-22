@@ -3,6 +3,16 @@ import type { DecodedIntent } from "@/lib/sendam-ai/client";
 import type { ParsedSendIntent } from "@/lib/agent/parse-send";
 
 /**
+ * Digits and phone punctuation, and enough of them to be a phone number
+ * attempt rather than a name. Deliberately loose: this only decides which
+ * error message the user sees, never whether money moves.
+ */
+function looksLikePhone(value: string): boolean {
+  if (/[a-z]/i.test(value)) return false;
+  return /^[+\d][\d\s\-().]{5,}$/.test(value);
+}
+
+/**
  * Maps a sendam-ai /decode result onto the shape startSendFlow() expects, or
  * returns null if it's not an actionable SEND. Reuses the same
  * isEvmAddress/normalizePhone recipient classification the old regex-based
@@ -36,6 +46,18 @@ export function mapDecodedSend(decoded: DecodedIntent): ParsedSendIntent | null 
       amount: decoded.amount,
       token: "USDC",
       recipient: { kind: "phone", whatsappNumber: `whatsapp:${normalized}` },
+    };
+  }
+
+  // Phone-SHAPED but not a valid phone number. Without this branch it falls
+  // into the label case below and comes back as "I don't have a beneficiary
+  // called +23480123", which sends the user to check their saved contacts
+  // when the actual problem is a digit missing from the number they typed.
+  if (looksLikePhone(recipientRaw)) {
+    return {
+      amount: decoded.amount,
+      token: "USDC",
+      recipient: { kind: "invalid_phone", typed: recipientRaw },
     };
   }
 

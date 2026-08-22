@@ -40,7 +40,15 @@ import { recordAuthAttempt, formatRetryAfter } from "@/lib/auth/rate-limit";
 import type { ParsedSendIntent } from "@/lib/agent/parse-send";
 import { mapDecodedSend } from "@/lib/agent/map-decoded-send";
 import { normalizeFaucetAsset } from "@/lib/agent/normalize-faucet-asset";
-import { decode, decodeFollowUp, flowStart, type FollowUpSlots } from "@/lib/sendam-ai/client";
+import {
+  decode,
+  decodeFollowUp,
+  flowStart,
+  SendamUnavailableError,
+  type FollowUpSlots,
+} from "@/lib/sendam-ai/client";
+import { fastPathDecode } from "@/lib/agent/fast-path";
+import { checkConfidence, sanitizeModelReply } from "@/lib/agent/confidence";
 import {
   SAVE_BENEFICIARY_FLOW,
   FAUCET_ASSET_FLOW,
@@ -184,6 +192,14 @@ async function handleNameEntry({
 }
 
 /**
+ * How many consecutive decode failures a flow gets before it releases the
+ * conversation. Two: the first is plausibly a blip worth retrying, and a
+ * third would mean the user has typed three messages into a conversation
+ * that cannot advance.
+ */
+const MAX_FLOW_FAILURES = 2;
+
+/**
  * Interprets one reply within a pending multi-turn flow via sendam-ai's
  * stateless token mechanism. `pending.payload` only ever holds an opaque
  * `{ flow, token }` — this function forwards the token, never parses it.
@@ -198,16 +214,49 @@ async function handleFlowPendingResponse({
   text: string;
 }): Promise<HandlerResult> {
   const { flow, token } = pending.payload;
+  const failures = pending.payload.failures ?? 0;
   const name = firstName(user);
 
   let result: Awaited<ReturnType<typeof decodeFollowUp>>;
   try {
     result = await decodeFollowUp(text, token);
   } catch (err) {
-    // Leave the pending row untouched so the user's next reply retries
-    // against the same token — never fabricate progress on our own outage,
-    // same principle sendam-ai itself follows.
-    console.error("[agent] decodeFollowUp failed", { userId: user.id, flow, err });
+    console.error("[agent] decodeFollowUp failed", {
+      userId: user.id,
+      flow,
+      failures,
+      err,
+    });
+
+    // The row is still kept on the first failure, for the original reason:
+    // the user's retry should hit the same token rather than have the flow
+    // fabricate progress on our outage.
+    //
+    // But keeping it forever was its own bug. A token that has genuinely
+    // expired on sendam-ai's side throws every time, and while it does this
+    // handler captures EVERY message the user sends — for up to the full
+    // 15-minute TTL — and answers all of them with this same line, whatever
+    // they actually typed. Someone trying to check their balance, or start a
+    // send, or ask for help, just gets told to say it again. So after a
+    // second consecutive failure the flow gives the conversation back.
+    if (failures + 1 >= MAX_FLOW_FAILURES) {
+      await deletePending(pending.id);
+      return {
+        reply: [
+          `Sorry ${name}, I lost the thread of that one.`,
+          "",
+          "Let's start over — what would you like to do?",
+        ].join("\n"),
+        interactive: "buttons",
+      };
+    }
+
+    await createPendingFlow({
+      userId: user.id,
+      flow,
+      token,
+      failures: failures + 1,
+    });
     return { reply: "Sorry, having a little trouble right now — could you say that again?" };
   }
 
@@ -491,13 +540,56 @@ async function handleOnboardedUser({
   // locked-out user must get the recovery link even when sendam-ai is down.
   if (isResetRequest(trimmed)) return startPinReset(user);
 
-  let decoded: Awaited<ReturnType<typeof decode>>;
-  try {
-    decoded = await decode(text, { userId: user.id });
-  } catch (err) {
-    // A sendam-ai outage/misconfiguration must not cost the user their
-    // message — fall through to the generic help reply.
-    console.error("[agent] decode failed", { userId: user.id, err });
+  // Tier 0. Taps on our own buttons and the handful of unambiguous typed
+  // commands never leave this server: no latency, no cost, and no dependency
+  // on a service that may be the thing that is broken. Returns null whenever
+  // it is not certain, which is always safe — it just means a smarter tier
+  // gets the message. See lib/agent/fast-path.ts.
+  let decoded = fastPathDecode(trimmed);
+
+  if (!decoded) {
+    try {
+      decoded = await decode(text, { userId: user.id });
+    } catch (err) {
+      console.error("[agent] decode failed", { userId: user.id, err });
+
+      // An outage and a genuinely unparseable message used to produce the
+      // identical reply, which meant a user got told "I didn't understand"
+      // while the truth was that we never even asked. Those are different
+      // problems and the user can act on the difference: one is worth
+      // rephrasing, the other is worth waiting a minute.
+      if (err instanceof SendamUnavailableError) {
+        return {
+          reply: [
+            `I'm having trouble understanding messages right now, ${name} — that's on my side, not yours.`,
+            "",
+            "Try again in a minute. Balance, address and history still work, and you can always reply *freeze* if something's wrong.",
+          ].join("\n"),
+          interactive: "buttons",
+        };
+      }
+
+      return { reply: pickReply(REPLIES.unknown, { name }), interactive: "buttons" };
+    }
+  }
+
+  // Confidence is finally consulted. Until now it was decoded, typed and
+  // ignored, so a SEND parsed at 0.4 minted a confirm link exactly as
+  // readily as one parsed at 0.99. Tier 0 returns 1 by construction, so this
+  // only ever constrains the tier that guesses.
+  const verdict = checkConfidence(decoded);
+  if (!verdict.ok) {
+    if (verdict.reason === "confirm_send") {
+      // Readable but not certain. Reading it back is far more useful than
+      // "I didn't understand", and no confirm link exists until they agree.
+      return {
+        reply: [
+          `Did you mean *send ${verdict.amount} USDC to ${verdict.recipient}*?`,
+          "",
+          "Send that again if so, and I'll set it up.",
+        ].join("\n"),
+      };
+    }
     return { reply: pickReply(REPLIES.unknown, { name }), interactive: "buttons" };
   }
 
@@ -521,7 +613,8 @@ async function handleOnboardedUser({
       // matching reply; fall back to our fixed template on older deploys
       // that don't send one yet.
       return {
-        reply: decoded.reply || pickReply(REPLIES.greeting, { name }),
+        reply:
+          sanitizeModelReply(decoded.reply) ?? pickReply(REPLIES.greeting, { name }),
         interactive: "buttons",
       };
     case "HELP":
@@ -681,6 +774,19 @@ async function startSendFlow({
   let recipientName: string | null = null;
   let recipientUserId: string | null = null;
   let recipientWhatsappNumber: string | null = null;
+
+  if (intent.recipient.kind === "invalid_phone") {
+    // Reported as a malformed NUMBER, not as a missing beneficiary. The old
+    // behaviour sent someone who mistyped a digit off to check their saved
+    // contacts, which is the wrong place to look.
+    return {
+      reply: [
+        `"${intent.recipient.typed}" doesn't look like a complete phone number.`,
+        "",
+        "Include the country code, like +234 801 234 5678. Or send to a wallet address, or a name you've saved.",
+      ].join("\n"),
+    };
+  }
 
   if (intent.recipient.kind === "address") {
     if (
