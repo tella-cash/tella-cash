@@ -1,6 +1,7 @@
 import type { tellaUser } from "@/lib/supabase/types";
 import { resolveSpendableUsdc, type SpendableUsdc } from "@/lib/wallet/circle";
 import { sumSentUsdcSince } from "@/lib/transactions/repository";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
 /**
  * Spending guards for the send path.
@@ -43,12 +44,100 @@ function numberFromEnv(name: string, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
-export function perTxCap(): number {
+/**
+ * The deployment-wide defaults, applying to every user without an override.
+ *
+ * These stay env vars on purpose. The header above explains why: they are the
+ * one knob that can be tightened mid-incident without a deploy. Backfilling
+ * them into per-user rows would quietly destroy that property, so overrides
+ * are stored sparsely and NULL keeps meaning "whatever the default is now".
+ */
+export function defaultPerTxCap(): number {
   return numberFromEnv("TELLA_MAX_SEND_USDC", 100);
 }
 
-export function dailyCap(): number {
+export function defaultDailyCap(): number {
   return numberFromEnv("TELLA_DAILY_SEND_LIMIT_USDC", 500);
+}
+
+export interface ResolvedLimits {
+  perTx: number;
+  daily: number;
+  /** True when this user has an override row, for logging and settings UI. */
+  customised: boolean;
+}
+
+/**
+ * A user's effective caps: their overrides where set, the deployment default
+ * everywhere else.
+ *
+ * Note what this does NOT do — it never takes the larger of the two. An
+ * override is only ever consulted as the user's own ceiling, and the env
+ * default still applies wherever they have not set one, so tightening the
+ * deployment-wide value during an incident cannot be escaped by having a row
+ * here. A user raising their own limit above the deployment cap is a decision
+ * for a settings surface that does not exist yet; until it does, min() is the
+ * conservative reading and the one that cannot surprise anyone.
+ */
+export async function resolveLimits(userId: string): Promise<ResolvedLimits> {
+  const perTxDefault = defaultPerTxCap();
+  const dailyDefault = defaultDailyCap();
+
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("tella_user_limits")
+    .select("per_tx_cap_usdc, daily_cap_usdc")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  // Throws rather than defaulting. checkSendLimits already fails closed on
+  // any error in this path, and "we could not read your limits" must not
+  // resolve to "so use the generous ones".
+  if (error) throw new Error(`resolveLimits failed: ${error.message}`);
+
+  return mergeLimits(
+    data as LimitOverrideRow | null,
+    { perTx: perTxDefault, daily: dailyDefault },
+  );
+}
+
+export interface LimitOverrideRow {
+  per_tx_cap_usdc: number | null;
+  daily_cap_usdc: number | null;
+}
+
+/**
+ * The resolution rule, separated from the query so it can be tested without
+ * a database. Three cases and they are easy to get subtly wrong:
+ *
+ *   no row        → the defaults, untouched
+ *   row, NULL col → the default for that column only; the other may still
+ *                   be overridden, since a row need not set both
+ *   row, a value  → the LOWER of the two, never the higher
+ *
+ * That last one is the important one. An override is a user's own ceiling,
+ * not a licence to exceed the deployment-wide cap, so tightening the env var
+ * during an incident still binds everybody — including users who have set
+ * their own, higher, limit.
+ */
+export function mergeLimits(
+  row: LimitOverrideRow | null,
+  defaults: { perTx: number; daily: number },
+): ResolvedLimits {
+  if (!row) {
+    return { perTx: defaults.perTx, daily: defaults.daily, customised: false };
+  }
+
+  const pick = (override: number | null, fallback: number): number =>
+    override === null || !Number.isFinite(override) || override <= 0
+      ? fallback
+      : Math.min(override, fallback);
+
+  return {
+    perTx: pick(row.per_tx_cap_usdc, defaults.perTx),
+    daily: pick(row.daily_cap_usdc, defaults.daily),
+    customised: true,
+  };
 }
 
 export async function checkSendLimits({
@@ -63,25 +152,28 @@ export async function checkSendLimits({
     return { ok: false, failure: { kind: "check_failed" } };
   }
 
-  const txCap = perTxCap();
-  if (requested > txCap) {
-    return { ok: false, failure: { kind: "over_per_tx", cap: txCap, requested } };
-  }
-
   if (!user.circle_wallet_id) {
     return { ok: false, failure: { kind: "no_usdc" } };
   }
 
   let usdc: SpendableUsdc | null;
   let alreadySent: number;
+  let limits: ResolvedLimits;
   try {
-    [usdc, alreadySent] = await Promise.all([
+    // Resolving the user's caps joins the existing pair rather than running
+    // before them, so per-user limits cost no extra round trip. The
+    // consequence is that the per-transaction check below now happens after
+    // this fetch instead of before it — one more query before an over-cap
+    // send is rejected, and the same answer.
+    [usdc, alreadySent, limits] = await Promise.all([
       resolveSpendableUsdc(user.circle_wallet_id),
       sumSentUsdcSince(user.id, DAILY_WINDOW_HOURS),
+      resolveLimits(user.id),
     ]);
   } catch (err) {
     // Fails CLOSED. If we can't establish that a send is within limits, we
-    // don't send. An unavailable balance API is not permission to spend.
+    // don't send. An unavailable balance API is not permission to spend, and
+    // neither is an unreadable limits row.
     console.error("[send-limits] check failed, refusing send", {
       userId: user.id,
       err,
@@ -89,15 +181,25 @@ export async function checkSendLimits({
     return { ok: false, failure: { kind: "check_failed" } };
   }
 
+  // Checked in this order deliberately: the per-transaction cap is about the
+  // amount alone, the daily cap adds history, and affordability adds the
+  // wallet. Each message is more specific than the last, so the first one
+  // that fails is the most useful thing to say.
+  if (requested > limits.perTx) {
+    return {
+      ok: false,
+      failure: { kind: "over_per_tx", cap: limits.perTx, requested },
+    };
+  }
+
   if (!usdc) {
     return { ok: false, failure: { kind: "no_usdc" } };
   }
 
-  const day = dailyCap();
-  if (alreadySent + requested > day) {
+  if (alreadySent + requested > limits.daily) {
     return {
       ok: false,
-      failure: { kind: "over_daily", cap: day, alreadySent, requested },
+      failure: { kind: "over_daily", cap: limits.daily, alreadySent, requested },
     };
   }
 

@@ -159,7 +159,27 @@ of a non-idempotent handler multiplies exactly the wrong thing.
 > `claimMessage` fails closed, so with the table absent every inbound message
 > is refused and the bot goes silent.
 
-### Environment added alongside 0007–0013
+### `0014_user_limits.sql` — apply BEFORE the code that uses it
+
+`tella_user_limits`: sparse per-user overrides for the spend caps that were
+previously identical for everyone.
+
+A separate table rather than columns on `tella_users`, so that NULL keeps
+meaning "whatever the deployment default is now". Backfilling defaults into
+every row would destroy the property `TELLA_MAX_SEND_USDC` and
+`TELLA_DAILY_SEND_LIMIT_USDC` exist for: tightening one knob mid-incident
+without a deploy. Most users will never have a row here, which is the
+intended shape.
+
+An override is only ever a user's own **lower** ceiling. `mergeLimits` takes
+the minimum of override and default, so a higher user value cannot escape a
+tightened deployment cap.
+
+`resolveLimits` throws rather than defaulting on a read error, and
+`checkSendLimits` already fails closed — "we could not read your limits" must
+not resolve to "so use the generous ones".
+
+### Environment added alongside 0007–0014
 
 ```
 CRON_SECRET=<random string>            # required by /api/cron/*; they refuse to run without it
