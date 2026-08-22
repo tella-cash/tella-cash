@@ -13,6 +13,7 @@ import { isFrozen } from "@/lib/users/wallet-gate";
 import { factorsPredating } from "@/lib/auth/factors";
 import { notifyUser } from "@/lib/messaging/notify";
 import { sendSecurityEmail } from "@/lib/email/client";
+import { adminCookieOptions, isAdminSub, issueAdminCookie } from "@/lib/admin/session";
 
 export const dynamic = "force-dynamic";
 
@@ -62,6 +63,31 @@ export async function GET(request: Request) {
 
   if (state.purpose === "link") {
     return handleLink(origin, state.token!, identity);
+  }
+
+  if (state.purpose === "admin") {
+    // Checked against the allowlist, not against a tella account. An admin
+    // need not be a wallet user, and a wallet user is emphatically not an
+    // admin — these are separate questions and conflating them is how a
+    // dashboard ends up reachable by anyone who linked Google.
+    if (!isAdminSub(identity.sub)) {
+      // The full sub, deliberately. It is not a secret — it is the value
+      // that has to go into ADMIN_GOOGLE_SUBS, and making an operator hunt
+      // for it is how people end up pasting an email address instead.
+      console.warn("[admin] rejected sign-in — add this sub to ADMIN_GOOGLE_SUBS if intended", {
+        sub: identity.sub,
+        email: identity.email,
+      });
+      return fail(origin, "That account doesn't have dashboard access.");
+    }
+
+    const response = NextResponse.redirect(`${origin}/admin`);
+    response.cookies.set({
+      ...adminCookieOptions(),
+      value: issueAdminCookie({ sub: identity.sub, email: identity.email }),
+    });
+    console.log("[admin] signed in", { email: identity.email });
+    return response;
   }
 
   // freeze and unfreeze both start from "who is this", answered only by the

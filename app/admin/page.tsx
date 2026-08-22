@@ -1,0 +1,32 @@
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { ADMIN_COOKIE_NAME, readAdminCookie } from "@/lib/admin/session";
+import { loadDashboard } from "@/lib/analytics/queries";
+import { Dashboard } from "./dashboard";
+
+export const dynamic = "force-dynamic";
+
+export const metadata = {
+  title: "tella admin",
+  robots: { index: false, follow: false, nocache: true },
+  other: { referrer: "no-referrer" },
+};
+
+/**
+ * Rendered on the server, so the numbers never travel as a JSON payload a
+ * browser extension or a stray script could read, and there is no loading
+ * state to design. The /api/admin/stats route exists alongside it for
+ * refreshing without a full reload.
+ *
+ * The cookie is verified here as well as in middleware. Middleware only
+ * checks presence — it runs on the edge without node:crypto — so this is
+ * where the signature, the expiry and the allowlist are actually enforced.
+ */
+export default async function AdminPage() {
+  const jar = await cookies();
+  const identity = readAdminCookie(jar.get(ADMIN_COOKIE_NAME)?.value);
+  if (!identity) redirect("/admin/login");
+
+  const data = await loadDashboard();
+  return <Dashboard data={data} email={identity.email} />;
+}

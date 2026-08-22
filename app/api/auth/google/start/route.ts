@@ -3,7 +3,7 @@ import { buildAuthUrl, type GooglePurpose } from "@/lib/google/oauth";
 
 export const dynamic = "force-dynamic";
 
-const PURPOSES: GooglePurpose[] = ["freeze", "unfreeze", "link"];
+const PURPOSES: GooglePurpose[] = ["freeze", "unfreeze", "link", "admin"];
 
 /**
  * GET /api/auth/google/start?purpose=freeze|unfreeze|link&token=...

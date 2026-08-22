@@ -21,7 +21,7 @@ const JWKS_URI = "https://www.googleapis.com/oauth2/v3/certs";
 const ISSUERS = ["https://accounts.google.com", "accounts.google.com"];
 
 /** What the sign-in is being used for. Decides what happens on return. */
-export type GooglePurpose = "freeze" | "unfreeze" | "link";
+export type GooglePurpose = "freeze" | "unfreeze" | "link" | "admin";
 
 function config() {
   const clientId = process.env.GOOGLE_CLIENT_ID;

@@ -325,6 +325,26 @@ the phone could reset the PIN (permitted while frozen, to avoid a deadlock)
 and then use the PIN they had just chosen to lift the freeze. Both steps are
 individually allowed; only the timestamps tell them apart.
 
+### `0020_admin_analytics.sql`
+
+Six `stable` SQL functions backing `/admin`. Read-only by construction —
+every one contains a single SELECT, and `stable` lets Postgres reject a write
+if one is ever added by mistake.
+
+SQL functions rather than queries assembled in TypeScript because PostgREST
+can't express a `GROUP BY`, a `date_trunc` or a correlated subquery through
+its filter syntax. The alternatives were pulling whole tables into the app to
+count them, or shipping raw SQL strings from the server — neither is a habit
+worth starting in a repository that moves money.
+
+Not `security definer`: they run as the service role, which could already
+read these tables, so definer would add privilege without adding capability.
+
+```sql
+select * from tella_admin_user_counts();
+select * from tella_admin_daily_activity() order by day desc limit 5;
+```
+
 ### Environment added alongside 0007–0018
 
 ```
