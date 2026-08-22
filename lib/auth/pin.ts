@@ -99,7 +99,11 @@ export async function setPinForUser({
   const supabase = getSupabaseAdmin();
   const { error } = await supabase
     .from("tella_users")
-    .update({ pin_hash })
+    // Stamped on every write, including a reset. Unfreezing requires a factor
+    // that predates the freeze, and without this a PIN chosen by whoever is
+    // holding the phone right now would be indistinguishable from one the
+    // owner set months ago. See migrations/0019_pin_set_at.sql.
+    .update({ pin_hash, pin_set_at: new Date().toISOString() })
     .eq("id", userId);
 
   if (error) throw new Error(`setPinForUser failed: ${error.message}`);

@@ -8,6 +8,7 @@ import { isFrozen } from "@/lib/users/wallet-gate";
 import { verifyAuthentication } from "@/lib/webauthn/server";
 import { consumeChallenge, listCredentials, updateCredentialCounter } from "@/lib/webauthn/repository";
 import { getGoogleLink } from "@/lib/google/oauth";
+import { factorsPredating } from "@/lib/auth/factors";
 import { notifyUser } from "@/lib/messaging/notify";
 import { sendSecurityEmail } from "@/lib/email/client";
 import type { AuthenticationResponseJSON } from "@simplewebauthn/server";
@@ -58,6 +59,25 @@ export async function POST(request: Request) {
     );
   }
 
+  // The rule the chat handler also applies, enforced here because that one is
+  // only a signpost — this route is what actually lifts the freeze, and it is
+  // reachable with any valid token.
+  //
+  // A factor set AFTER the freeze proves nothing: a frozen user may still
+  // complete a PIN reset (deliberately, to avoid a deadlock), so without this
+  // an attacker holding the phone could reset the PIN and use the one they
+  // just chose to undo the freeze.
+  const predating = await factorsPredating(ctx.user, ctx.user.frozen_at!);
+  if (!predating.any) {
+    return NextResponse.json(
+      {
+        error:
+          "This account has no PIN or passkey from before the freeze, so it can't be unfrozen here.",
+      },
+      { status: 409 },
+    );
+  }
+
   let proved = false;
 
   if (body.assertion) {
@@ -65,7 +85,7 @@ export async function POST(request: Request) {
     const credentials = challenge ? await listCredentials(ctx.user.id) : [];
     const credential = credentials.find((c) => c.credential_id === body.assertion!.id);
 
-    if (challenge && credential) {
+    if (challenge && credential && predating.passkey) {
       try {
         const verification = await verifyAuthentication(
           body.assertion,
@@ -84,7 +104,10 @@ export async function POST(request: Request) {
       }
     }
   } else if (body.pin) {
-    proved = ctx.user.pin_hash ? await verifyPin(body.pin, ctx.user.pin_hash) : false;
+    proved =
+      predating.pin && ctx.user.pin_hash
+        ? await verifyPin(body.pin, ctx.user.pin_hash)
+        : false;
   }
 
   if (!proved) {

@@ -14,6 +14,13 @@ export interface tellaUser {
   pin_hash: string | null;
   pin_salt: string | null;
   /**
+   * When the current PIN was set or last reset.
+   *
+   * Unfreezing requires a factor that predates the freeze, and without this
+   * a PIN could not prove that. See migrations/0019_pin_set_at.sql.
+   */
+  pin_set_at: string | null;
+  /**
    * Set when the account is frozen, cleared when it is lifted. Deliberately
    * NOT a wallet_status value — see migrations/0012_account_freeze.sql for
    * why, and lib/users/wallet-gate.ts for who is allowed to care.

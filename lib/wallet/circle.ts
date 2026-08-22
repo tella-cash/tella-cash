@@ -136,47 +136,104 @@ export function dedupeSameToken(balances: RawBalance[]): RawBalance[] {
 }
 
 /**
- * Fetches wallet token balances, merging entries that share a symbol into
- * one line. Circle's testnet lists what a user thinks of as "USDC" as more
- * than one balance entry (e.g. a bridged/native pair), which otherwise shows
- * up as a confusing duplicate "X USDC" / "Y USDC" pair in the balance reply
- * instead of one combined total.
+ * A user's balance, one line per symbol.
  *
- * This only ever sums DISTINCT tokens: fetchRawBalances has already dropped
- * repeats of a single token, which this function would otherwise add to
- * itself and report as double the money in the wallet.
+ * This used to SUM entries that shared a symbol, and that was wrong in a way
+ * that showed people twice their money.
  *
- * Merging is right for DISPLAY and wrong for SENDING — a single transfer
- * draws on one token, not the sum of two. Use resolveSpendableUsdc for
- * anything that decides whether a transfer can go through.
+ * On Arc, USDC is both the native gas token and an ERC-20 predeploy at
+ * 0x3600…0000, and Circle reports the same balance under both — different
+ * token ids, different decimals (18 native, 6 ERC-20), one pot of money:
+ *
+ *   amount=25.999543733  isNative=true   id=15dc2b5d…  decimals=18
+ *   amount=25.999543     isNative=false  id=ef87c8c3…  decimals=6
+ *
+ * No key made from ids or addresses can tell that those are the same money,
+ * which is why the previous dedupe (tokenId, falling back to
+ * symbol + tokenAddress) let both through and doubled the total.
+ *
+ * So this no longer sums anything. It picks ONE entry per symbol, by the
+ * same rule resolveSpendableUsdc uses to decide what a transfer draws on.
+ * That is the deeper reason summing was never right: a transfer spends from
+ * a single token entry, so a total spanning two of them is a number the user
+ * cannot actually spend. Balance and send limits now agree, which is the
+ * property that matters when someone is deciding whether they can afford
+ * something.
+ *
+ * If a chain ever genuinely holds two different same-symbol tokens, this
+ * under-reports rather than over-reports, and says so in the logs. That is
+ * the safe direction: quoting someone more than they can send produces a
+ * failed transfer and a support message.
  */
 export async function getWalletBalances(
   walletId: string,
 ): Promise<TokenBalance[]> {
-  return mergeBalancesBySymbol(await fetchRawBalances(walletId));
+  return collapseBySymbol(await fetchRawBalances(walletId));
 }
 
 /**
- * The symbol merge itself, split out from the fetch so it can be tested
- * against a fixed set of entries rather than a live wallet. Expects input
- * that has already been through dedupeSameToken.
+ * One entry per symbol: the largest, never the sum.
+ *
+ * Split out from the fetch so the rule can be tested against fixed input
+ * rather than a live wallet. Mirrors resolveSpendableUsdc's choice, so the
+ * number shown is the number that can be sent.
  */
-export function mergeBalancesBySymbol(balances: RawBalance[]): TokenBalance[] {
-  const merged = new Map<string, TokenBalance>();
+export function collapseBySymbol(balances: RawBalance[]): TokenBalance[] {
+  const bySymbol = new Map<string, RawBalance[]>();
   for (const b of balances) {
-    const existing = merged.get(b.symbol);
-    if (existing) {
-      existing.amount = String(parseFloat(existing.amount) + b.amount);
-    } else {
-      merged.set(b.symbol, {
-        symbol: b.symbol,
-        amount: String(b.amount),
-        tokenAddress: b.tokenAddress,
-      });
-    }
+    const list = bySymbol.get(b.symbol);
+    if (list) list.push(b);
+    else bySymbol.set(b.symbol, [b]);
   }
 
-  return [...merged.values()];
+  const out: TokenBalance[] = [];
+
+  for (const [symbol, entries] of bySymbol) {
+    const winner = entries.reduce((a, b) => (b.amount > a.amount ? b : a));
+
+    if (entries.length > 1) {
+      const smallest = entries.reduce((a, b) => (b.amount < a.amount ? b : a));
+      // Near-identical amounts are the native/ERC-20 pair described above.
+      // Materially different ones would mean genuinely separate holdings,
+      // which this collapses and should therefore be visible somewhere.
+      const sameMoney =
+        winner.amount === 0 ||
+        Math.abs(winner.amount - smallest.amount) / winner.amount < 0.01;
+
+      if (!sameMoney) {
+        console.warn("[circle] multiple distinct balances share a symbol", {
+          symbol,
+          kept: winner.amount,
+          dropped: smallest.amount,
+        });
+      }
+    }
+
+    out.push({
+      symbol,
+      amount: formatAmount(winner.amount),
+      tokenAddress: winner.tokenAddress,
+    });
+  }
+
+  return out;
+}
+
+/**
+ * Trims to the precision the asset actually has.
+ *
+ * The native entry carries 18 decimals, so picking it yields values like
+ * 25.999543733 where the explorer and every transfer show 25.999543. Six
+ * decimals is USDC's real precision; more is invented, and invented digits
+ * on a balance make people think they have been shortchanged somewhere.
+ */
+function formatAmount(amount: number): string {
+  if (!Number.isFinite(amount) || amount <= 0) return "0";
+  // Truncated, not rounded. toFixed(6) turns 25.999543733 into 25.999544,
+  // which is a fraction MORE than the wallet holds — and every rule here
+  // errs downward, because a balance quoted high produces a transfer that
+  // fails at Circle rather than a question the user can ask.
+  return String(Math.floor(amount * 1e6) / 1e6);
 }
 
 export interface SpendableUsdc {

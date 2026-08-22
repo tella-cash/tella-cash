@@ -1,5 +1,5 @@
 import type { tellaUser } from "@/lib/supabase/types";
-import { userHasCredential } from "@/lib/webauthn/repository";
+import { earliestCredentialAt, userHasCredential } from "@/lib/webauthn/repository";
 
 /**
  * One answer to "what can this account authenticate with".
@@ -52,4 +52,32 @@ export async function factorCount(user: tellaUser): Promise<number> {
  */
 export async function canEnrollFromConfirmLink(user: tellaUser): Promise<boolean> {
   return (await factorCount(user)) === 0;
+}
+
+/**
+ * Does this account hold a factor that existed BEFORE the given moment?
+ *
+ * The question unfreezing actually has to ask. "Do they know the PIN" is not
+ * enough on its own: a frozen user may still complete a PIN reset over
+ * WhatsApp (deliberately, to avoid a deadlock), so an attacker holding the
+ * phone could reset the PIN and then use it to lift the freeze. Both steps
+ * are permitted individually; only the timestamps tell them apart.
+ *
+ * Passkeys carry created_at. PINs carry pin_set_at as of migration 0019 —
+ * before that they carried nothing, which is exactly how this gap existed.
+ */
+export async function factorsPredating(
+  user: tellaUser,
+  since: string,
+): Promise<{ pin: boolean; passkey: boolean; any: boolean }> {
+  const cutoff = new Date(since).getTime();
+
+  const pin = Boolean(
+    user.pin_hash && user.pin_set_at && new Date(user.pin_set_at).getTime() < cutoff,
+  );
+
+  const earliest = await earliestCredentialAt(user.id);
+  const passkey = Boolean(earliest && new Date(earliest).getTime() < cutoff);
+
+  return { pin, passkey, any: pin || passkey };
 }

@@ -313,6 +313,18 @@ there is no settings surface yet, every piece of this is a single action, and
 a cookie on a custodial wallet is a strictly larger bearer credential than
 anything else this app issues.
 
+### `0019_pin_set_at.sql` — apply BEFORE the code that uses it
+
+`pin_set_at` on `tella_users`, backfilled to `created_at` for accounts that
+already have a PIN.
+
+Unfreezing requires a factor that existed **before** the freeze. That was
+enforceable for passkeys, which carry `created_at`, and silently
+unenforceable for PINs, which carried no timestamp — so an attacker holding
+the phone could reset the PIN (permitted while frozen, to avoid a deadlock)
+and then use the PIN they had just chosen to lift the freeze. Both steps are
+individually allowed; only the timestamps tell them apart.
+
 ### Environment added alongside 0007–0018
 
 ```

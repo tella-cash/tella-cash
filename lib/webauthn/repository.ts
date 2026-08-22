@@ -33,6 +33,28 @@ export async function listCredentials(
   return (data ?? []) as StoredCredential[];
 }
 
+/**
+ * When this user's oldest passkey was registered, or null if they have none.
+ *
+ * Kept separate from listCredentials rather than widening its select: that
+ * one feeds the authentication ceremony, and this is a question about the
+ * account's history. Only the earliest matters — a passkey added after a
+ * freeze proves nothing about who is asking.
+ */
+export async function earliestCredentialAt(userId: string): Promise<string | null> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("tella_webauthn_credentials")
+    .select("created_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw new Error(`earliestCredentialAt: ${error.message}`);
+  return (data as { created_at: string } | null)?.created_at ?? null;
+}
+
 export async function userHasCredential(userId: string): Promise<boolean> {
   const supabase = getSupabaseAdmin();
   const { count, error } = await supabase

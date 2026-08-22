@@ -10,7 +10,7 @@ import { loadResetContext, consumeResetToken, createResetToken } from "@/lib/sec
 import { findUserById } from "@/lib/users/repository";
 import { freezeAccount } from "@/lib/users/freeze";
 import { isFrozen } from "@/lib/users/wallet-gate";
-import { factorCount } from "@/lib/auth/factors";
+import { factorsPredating } from "@/lib/auth/factors";
 import { notifyUser } from "@/lib/messaging/notify";
 import { sendSecurityEmail } from "@/lib/email/client";
 
@@ -123,7 +123,7 @@ export async function GET(request: Request) {
     return done(origin, "not-frozen", "0");
   }
 
-  if ((await factorCount(user)) === 0) {
+  if (!(await factorsPredating(user, user.frozen_at!)).any) {
     // Nothing predates the freeze, so there is nothing to prove. Refusing
     // here is the honest answer: this needs a person, not a second click.
     return fail(

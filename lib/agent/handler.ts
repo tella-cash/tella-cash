@@ -29,10 +29,11 @@ import { getUsdToNgnRate, usdToNgn } from "@/lib/fx/naira";
 import { checkSendLimits, formatLimitFailure } from "@/lib/sends/limits";
 import { isResetRequest } from "@/lib/agent/detect-reset-request";
 import { isFreezeRequest } from "@/lib/agent/detect-freeze-request";
+import { isUnfreezeRequest } from "@/lib/agent/detect-unfreeze-request";
 import { gateSpend, gateWalletReady, isFrozen } from "@/lib/users/wallet-gate";
 import { freezeAccount } from "@/lib/users/freeze";
 import { cancelHeldSend, listHoldingForUser } from "@/lib/held_sends/repository";
-import { factorCount } from "@/lib/auth/factors";
+import { factorCount, factorsPredating } from "@/lib/auth/factors";
 import {
   createResetToken,
   buildResetUrl,
@@ -148,6 +149,8 @@ export async function handleIncomingMessage(
   // detect-freeze-request.ts gives: the kill switch cannot depend on a
   // network call to a service that may be the thing that is down.
   if (isFreezeRequest(text)) return handleFreezeRequest(user);
+
+  if (isUnfreezeRequest(text)) return handleUnfreezeRequest(user);
 
   if (isTelegramLinkRequest(text)) return handleTelegramLinkRequest(user);
 
@@ -878,6 +881,76 @@ async function startSendFlow({
   });
 
   return confirmResult(pending);
+}
+
+/**
+ * Lift a freeze, from the channel the user is already on.
+ *
+ * This was missing, and its absence locked a real user out: the freeze
+ * confirmation told them to reply "unfreeze" and nothing was listening. The
+ * only path that existed went through Google, which they had never linked.
+ *
+ * WHY THIS IS SAFE OVER WHATSAPP, given the freeze exists to survive someone
+ * holding the phone.
+ *
+ * It does not unfreeze anything on its own. It mints a single-use link to a
+ * page that demands a PIN or passkey — the same bar the send path already
+ * uses. An attacker who can satisfy it can already spend, so requiring it
+ * here adds no new exposure.
+ *
+ * The factor must PREDATE the freeze, which is the part that does the work. A
+ * frozen user may still reset their PIN (deliberately, to avoid a deadlock),
+ * so without that rule an attacker could reset the PIN and use the one they
+ * just chose to undo the freeze. Both steps are individually allowed; only
+ * the timestamps separate them. See migrations/0019_pin_set_at.sql.
+ */
+async function handleUnfreezeRequest(user: tellaUser): Promise<HandlerResult> {
+  const name = firstName(user);
+
+  if (!isFrozen(user)) {
+    return {
+      reply: `Your account isn't frozen, ${name} — nothing to lift.`,
+      interactive: "buttons",
+    };
+  }
+
+  const factors = await factorsPredating(user, user.frozen_at!);
+
+  if (!factors.any) {
+    // Honest rather than encouraging. There is nothing they can prove from
+    // here, and pretending otherwise wastes the time of someone who may be
+    // in the middle of a bad day.
+    return {
+      reply: [
+        `I can't safely unfreeze this account from here, ${name}.`,
+        "",
+        "Lifting a freeze needs a PIN or Face ID that was set up before it happened, and this account doesn't have one.",
+        "",
+        "Reply *help* and a human will sort it out with you.",
+      ].join("\n"),
+    };
+  }
+
+  const token = await createResetToken(user.id, "unfreeze");
+
+  return {
+    reply: [
+      `Let's get you back in, ${name}.`,
+      "",
+      buildUnfreezeUrl(token.id),
+      "",
+      factors.passkey
+        ? "Tap the link and confirm with Face ID or your fingerprint."
+        : "Tap the link and enter your PIN.",
+      "",
+      "It works once and expires in 10 minutes.",
+    ].join("\n"),
+  };
+}
+
+function buildUnfreezeUrl(token: string): string {
+  const base = process.env.APP_BASE_URL ?? "";
+  return `${base.replace(/\/$/, "")}/security/unfreeze/${token}`;
 }
 
 /**
