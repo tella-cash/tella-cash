@@ -151,6 +151,8 @@ export async function handleIncomingMessage(
 
   if (isTelegramLinkRequest(text)) return handleTelegramLinkRequest(user);
 
+  if (isGoogleLinkRequest(text)) return handleGoogleLinkRequest(user);
+
   const flowPending = await getActivePending(user.id);
   if (flowPending) {
     return handleFlowPendingResponse({ user, pending: flowPending, text });
@@ -1006,6 +1008,67 @@ async function cancelMostRecent(user: tellaUser): Promise<HandlerResult> {
   }
 
   return cancelMostRecentPendingSend(user);
+}
+
+const GOOGLE_LINK_PATTERNS: RegExp[] = [
+  /\b(link|connect|add|use)\b[^.!?]{0,16}\b(google|gmail|email)\b/i,
+  /\b(google|gmail)\b[^.!?]{0,16}\b(link|account|backup)\b/i,
+];
+
+function isGoogleLinkRequest(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed || trimmed.length > 80) return false;
+  return GOOGLE_LINK_PATTERNS.some((p) => p.test(trimmed));
+}
+
+/**
+ * Mint a link that attaches a Google account to this wallet.
+ *
+ * Gated on an existing factor, same as the Telegram link and for the same
+ * reason: this attaches a credential that can later freeze the account, and
+ * five minutes of phone access should not be enough to acquire one.
+ *
+ * Worth being clear about what the user is getting, because "sign in with
+ * Google" usually means something much larger than this does. It is a way
+ * back in when the phone is gone, and an address that a SIM swap does not
+ * reach. It cannot send money and it cannot unfreeze on its own.
+ */
+async function handleGoogleLinkRequest(user: tellaUser): Promise<HandlerResult> {
+  const name = firstName(user);
+
+  if (isFrozen(user)) {
+    return { reply: "Your account is frozen, so I can't link anything new to it right now." };
+  }
+
+  if ((await factorCount(user)) === 0) {
+    return {
+      reply: [
+        `Before I connect a Google account, ${name}, let's put a lock on this one.`,
+        "",
+        "Start a send and you'll be asked to set up Face ID or a PIN. Then say *link google* again.",
+      ].join("\n"),
+    };
+  }
+
+  const base = process.env.APP_BASE_URL;
+  if (!base) {
+    console.error("[google] APP_BASE_URL is not set");
+    return { reply: "That isn't set up yet on my side. Try again later." };
+  }
+
+  const token = await createResetToken(user.id, "link_google");
+
+  return {
+    reply: [
+      "Tap this to connect your Google account:",
+      "",
+      `${base.replace(/\/$/, "")}/api/auth/google/start?purpose=link&token=${token.id}`,
+      "",
+      "It works once and expires in 10 minutes.",
+      "",
+      "Once connected you can freeze your wallet from any device, even without this phone — and security alerts go to that email too. It can't send money.",
+    ].join("\n"),
+  };
 }
 
 /**

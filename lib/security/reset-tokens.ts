@@ -10,7 +10,11 @@ import type { tellaUser } from "@/lib/supabase/types";
  * blast radius is larger, so the window is smaller.
  */
 
-export type SecurityTokenKind = "pin_reset" | "link_telegram";
+export type SecurityTokenKind =
+  | "pin_reset"
+  | "link_telegram"
+  | "link_google"
+  | "unfreeze";
 
 const TTL_MINUTES = 10;
 
