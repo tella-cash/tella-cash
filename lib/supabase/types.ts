@@ -13,9 +13,27 @@ export interface tellaUser {
   wallet_status: WalletStatus;
   pin_hash: string | null;
   pin_salt: string | null;
+  /**
+   * Set when the account is frozen, cleared when it is lifted. Deliberately
+   * NOT a wallet_status value — see migrations/0012_account_freeze.sql for
+   * why, and lib/users/wallet-gate.ts for who is allowed to care.
+   */
+  frozen_at: string | null;
+  frozen_reason: string | null;
+  frozen_source: FreezeSource | null;
+  /** scrypt hash of the freeze-only panic code. Never authorizes anything. */
+  panic_code_hash: string | null;
   created_at: string;
   updated_at: string;
 }
+
+export type FreezeSource =
+  | "whatsapp"
+  | "telegram"
+  | "panic_code"
+  | "web"
+  | "operator"
+  | "auto";
 
 export type PendingActionKind = "flow";
 

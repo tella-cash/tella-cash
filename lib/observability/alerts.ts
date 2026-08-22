@@ -24,13 +24,26 @@ export type AlertKind =
   | "webhook_signature_failed"
   | "auth_locked_out"
   | "transfer_unknown"
-  | "wallet_provisioning_stuck";
+  | "wallet_provisioning_stuck"
+  | "account_frozen"
+  | "account_unfrozen";
 
 interface AlertPayload {
   kind: AlertKind;
   message: string;
   /** Must not contain PII — these go to a third-party chat channel. */
   context?: Record<string, string | number | boolean | null>;
+  /**
+   * Skip the per-kind suppression window.
+   *
+   * The window exists so a sustained attack produces one alert rather than a
+   * flood that gets muted, which is right for events that repeat by the
+   * hundred. It is wrong for events that are individually significant and
+   * rare: every account freeze is a distinct person having a bad day, and
+   * swallowing the second one because it landed within a minute of the first
+   * loses the only signal anyone gets.
+   */
+  force?: boolean;
 }
 
 // Rate limiting so a sustained attack produces an alert, not a flood that
@@ -41,7 +54,7 @@ const lastSent = new Map<AlertKind, number>();
 export function raiseAlert(payload: AlertPayload): void {
   const now = Date.now();
   const previous = lastSent.get(payload.kind) ?? 0;
-  const suppressed = now - previous < MIN_INTERVAL_MS;
+  const suppressed = !payload.force && now - previous < MIN_INTERVAL_MS;
 
   console.error(`[alert:${payload.kind}] ${payload.message}`, {
     ...payload.context,

@@ -96,6 +96,19 @@ export async function POST(request: Request) {
   await resetAuthAttempts(ctx.user.id, "webauthn_authenticate");
   await revokeResetTokens(ctx.user.id);
 
+  // DELIBERATELY does not clear frozen_at, and must never be changed to.
+  //
+  // A frozen user is allowed to reach this route at all — they may genuinely
+  // need a new PIN before lifting the freeze, and refusing here would build a
+  // deadlock out of the one feature that exists to help them. What makes that
+  // safe is precisely that a reset does not thaw the account: an attacker
+  // holding the phone can reset the PIN all they like and still cannot move
+  // money. Adding a "helpful" unfreeze here would hand them the account and
+  // reduce the kill switch to decoration.
+  //
+  // This is also why the freeze lives in its own column rather than in
+  // wallet_status — see migrations/0012_account_freeze.sql.
+
   console.log("[security] pin reset completed", {
     userId: ctx.user.id,
     removedPasskeys,
