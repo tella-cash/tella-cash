@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { loadConfirmContext } from "@/lib/confirm/context";
 import { readJson } from "@/lib/http/json";
 import { isValidPin, setPinForUser } from "@/lib/auth/pin";
+import { userHasCredential } from "@/lib/webauthn/repository";
 
 export const dynamic = "force-dynamic";
 
@@ -13,8 +14,17 @@ export const dynamic = "force-dynamic";
  * it's tied to an active confirm token so a leaked endpoint can't be
  * used to overwrite a PIN out-of-band.
  *
- * If the user already has a PIN we reject — they must verify the
- * existing one rather than silently rotate it.
+ * Refused once the account has ANY factor, not just a PIN. Holding a
+ * confirm link proves possession of the link, not of the account, so
+ * enrolling a factor may only double as authorization while the account
+ * has none — the same invariant the WebAuthn register routes state and
+ * enforce. This route used to check `pin_hash` alone, which left a
+ * passkey-only account open: anyone holding a live confirm link could
+ * plant a PIN with no factor proven, use it to authorize the pending
+ * send, and keep it as a permanent credential afterwards. A passkey
+ * holder who wants a PIN as well goes through the recovery flow, which
+ * is the only path allowed to write a PIN onto an account that already
+ * has a factor.
  */
 export async function POST(request: Request) {
   const parsed = await readJson<{ token?: string; pin?: string }>(request);
@@ -42,9 +52,9 @@ export async function POST(request: Request) {
     );
   }
 
-  if (ctx.user.pin_hash) {
+  if (ctx.user.pin_hash || (await userHasCredential(ctx.user.id))) {
     return NextResponse.json(
-      { error: "PIN already set" },
+      { error: "This account already has a confirmation method set up." },
       { status: 409 },
     );
   }
