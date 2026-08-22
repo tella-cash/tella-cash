@@ -166,6 +166,19 @@ export async function listUsersNeedingWallet(
   return (data as tellaUser[]) ?? [];
 }
 
+/** By primary key. Used by jobs that hold a user_id rather than a channel id. */
+export async function findUserById(userId: string): Promise<tellaUser | null> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("tella_users")
+    .select("*")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (error) throw new Error(`findUserById failed: ${error.message}`);
+  return (data as tellaUser | null) ?? null;
+}
+
 export async function findUserByWhatsApp(
   whatsappNumber: string,
 ): Promise<tellaUser | null> {

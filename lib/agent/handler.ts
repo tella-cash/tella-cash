@@ -31,6 +31,7 @@ import { isResetRequest } from "@/lib/agent/detect-reset-request";
 import { isFreezeRequest } from "@/lib/agent/detect-freeze-request";
 import { gateSpend, gateWalletReady, isFrozen } from "@/lib/users/wallet-gate";
 import { freezeAccount } from "@/lib/users/freeze";
+import { cancelHeldSend, listHoldingForUser } from "@/lib/held_sends/repository";
 import {
   createResetToken,
   buildResetUrl,
@@ -638,7 +639,7 @@ async function handleOnboardedUser({
     case "AFFIRM":
       return { reply: pickReply(REPLIES.affirm, { name }), interactive: "buttons" };
     case "CANCEL":
-      return cancelMostRecentPendingSend(user);
+      return cancelMostRecent(user);
     // No tella equivalent — wallets auto-provision on onboarding, and
     // there's no "list beneficiaries" feature yet.
     case "CREATE_WALLET":
@@ -913,8 +914,9 @@ async function handleFreezeRequest(user: tellaUser): Promise<HandlerResult> {
   }
 
   let cancelled = 0;
+  let cancelledHolds = 0;
   try {
-    ({ cancelledSends: cancelled } = await freezeAccount({
+    ({ cancelledSends: cancelled, cancelledHolds } = await freezeAccount({
       userId: user.id,
       source: "whatsapp",
       reason: "user requested via chat",
@@ -935,12 +937,16 @@ async function handleFreezeRequest(user: tellaUser): Promise<HandlerResult> {
   // The cancellation count is surfaced rather than swallowed: those were
   // real transfers the user had started, and money quietly disappearing from
   // a flow they began is not something to be terse about.
+  const stopped: string[] = [];
+  if (cancelled === 1) stopped.push("1 pending send");
+  else if (cancelled > 1) stopped.push(`${cancelled} pending sends`);
+  if (cancelledHolds === 1) stopped.push("1 queued transfer");
+  else if (cancelledHolds > 1) stopped.push(`${cancelledHolds} queued transfers`);
+
   const cancelledNote =
-    cancelled === 0
-      ? "You had no pending sends waiting."
-      : cancelled === 1
-        ? "I also cancelled the 1 pending send you had waiting."
-        : `I also cancelled the ${cancelled} pending sends you had waiting.`;
+    stopped.length === 0
+      ? "You had nothing waiting to go out."
+      : `I also stopped ${stopped.join(" and ")}.`;
 
   return {
     reply: [
@@ -953,6 +959,50 @@ async function handleFreezeRequest(user: tellaUser): Promise<HandlerResult> {
       "Reply *unfreeze* when you want it lifted.",
     ].join("\n"),
   };
+}
+
+/**
+ * "cancel" means the nearest thing the user could plausibly want to stop.
+ *
+ * A queued 24-hour transfer comes first. It is the larger amount by
+ * definition — that is why it was held — and it is the one the user cannot
+ * see in the thread, so it is the one they are most likely to be reaching
+ * for and the one it is worst to get wrong.
+ */
+async function cancelMostRecent(user: tellaUser): Promise<HandlerResult> {
+  const holds = await listHoldingForUser(user.id);
+
+  if (holds.length > 0) {
+    // Soonest to fire, since that is the one with least time left to act on.
+    const next = holds[0];
+    const stopped = await cancelHeldSend({ id: next.id, cancelledBy: "user" });
+
+    if (!stopped) {
+      // Lost the race with the release job, which had already claimed it.
+      // Saying "cancelled" here would be a lie about money.
+      return {
+        reply: [
+          `That transfer was already on its way, so I couldn't stop it.`,
+          "",
+          "Reply *freeze* if something is wrong and I'll stop everything else.",
+        ].join("\n"),
+        interactive: "buttons",
+      };
+    }
+
+    const remaining = holds.length - 1;
+    const note =
+      remaining > 0
+        ? ` You still have ${remaining} other queued transfer${remaining > 1 ? "s" : ""} — say "cancel" again to stop the next one.`
+        : "";
+
+    return {
+      reply: `Cancelled the queued send of ${next.payload.amount} USDC to ${next.payload.recipientName ?? next.payload.recipientAddress}.${note}`,
+      interactive: "buttons",
+    };
+  }
+
+  return cancelMostRecentPendingSend(user);
 }
 
 async function getBalanceReply(

@@ -179,7 +179,47 @@ tightened deployment cap.
 `checkSendLimits` already fails closed — "we could not read your limits" must
 not resolve to "so use the generous ones".
 
-### Environment added alongside 0007–0014
+### `0015_held_sends.sql` — apply BEFORE the code that uses it
+
+`tella_held_send`: sends that were authorized on a normal confirm link and
+then embargoed for 24 hours.
+
+**Not** an extension of `tella_pending_send`, for three reasons. That table's
+5-minute TTL is a security property (the row id IS a bearer confirm URL
+sitting in a chat thread); `listActivePendingSends`,
+`cancelMostRecentPendingSend` and `remindOtherPendingSends` all assume the
+rows are short-lived; and the cleanup cron would sweep a held row away about
+five minutes in.
+
+A held send is authorized, not unconfirmed. The user proved their factor as
+normal; only execution waits. That is what makes it safe for
+`/api/cron/release-holds` to carry it out later without a further gesture —
+and that job re-derives permission from scratch rather than trusting a
+day-old decision: freeze, limits, balance, then an atomic claim, with the
+held row's own id as Circle's idempotency key.
+
+Held amounts count as committed against **both** the daily allowance and the
+spendable balance (`sumHeldUsdc`). Without that, a queued transfer is
+invisible to every check and two large holds could each pass on their own,
+then both fail a day later.
+
+Operational queries:
+
+```sql
+-- what is queued
+select id, user_id, payload->>'amount' as amount, release_at
+  from tella_held_send where state = 'holding' order by release_at;
+
+-- stuck mid-execution: the job died between claiming and recording an
+-- outcome. Reconcile against Circle exactly like a pending_send marked
+-- 'unknown'. Should be empty.
+select * from tella_held_send where state in ('executing', 'unknown');
+```
+
+Adds a cron to `vercel.json` (`*/5 * * * *`), so `CRON_SECRET` must be set or
+the job refuses to run.
+
+### Environment added alongside 0007–0015
 
 ```
 CRON_SECRET=<random string>            # required by /api/cron/*; they refuse to run without it

@@ -74,6 +74,34 @@ export interface PendingSend {
   outcome: "sent" | "failed" | "unknown" | null;
 }
 
+export type HeldSendState =
+  | "holding"
+  | "executing"
+  | "sent"
+  | "failed"
+  | "unknown"
+  | "cancelled";
+
+/**
+ * A send that was authorized on a normal confirm link and then embargoed.
+ *
+ * Not an unconfirmed send: the user already proved their factor. Only
+ * execution is delayed, which is what makes it safe for a cron job to carry
+ * out later without a further gesture. See migrations/0015_held_sends.sql.
+ */
+export interface HeldSend {
+  id: string;
+  user_id: string;
+  payload: SendPayload;
+  authorized_at: string;
+  release_at: string;
+  state: HeldSendState;
+  cancelled_at: string | null;
+  cancelled_by: string | null;
+  circle_transaction_id: string | null;
+  created_at: string;
+}
+
 export interface SendPayload {
   /** The USDC amount the user typed and what's transferred on-chain. */
   amount: string;
