@@ -6,7 +6,7 @@ import { verifyPanicCode } from "@/lib/security/panic-code";
 import { freezeAccount } from "@/lib/users/freeze";
 import { isFrozen } from "@/lib/users/wallet-gate";
 import { recordAuthAttempt, formatRetryAfter } from "@/lib/auth/rate-limit";
-import { notifyUser } from "@/lib/whatsapp/notify";
+import { notifyUser } from "@/lib/messaging/notify";
 
 export const dynamic = "force-dynamic";
 

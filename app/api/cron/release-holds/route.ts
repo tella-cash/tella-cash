@@ -9,7 +9,7 @@ import { performTransfer, recipientLabelFor } from "@/lib/sends/execute";
 import { checkSendLimits, formatLimitFailure } from "@/lib/sends/limits";
 import { gateSpend } from "@/lib/users/wallet-gate";
 import { findUserById } from "@/lib/users/repository";
-import { notifyUser } from "@/lib/whatsapp/notify";
+import { notifyUser } from "@/lib/messaging/notify";
 import { recordTransaction } from "@/lib/transactions/repository";
 import { raiseAlert } from "@/lib/observability/alerts";
 import type { HeldSend } from "@/lib/supabase/types";

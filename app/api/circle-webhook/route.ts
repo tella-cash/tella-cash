@@ -1,6 +1,6 @@
 import { NextResponse, after } from "next/server";
 import { findUserByCircleWalletId, findUserByWalletAddress } from "@/lib/users/repository";
-import { notifyUser, notifyUserWithImage } from "@/lib/whatsapp/notify";
+import { notifyUser, notifyUserWithImage } from "@/lib/messaging/notify";
 import { recordTransaction, markOutboundComplete } from "@/lib/transactions/repository";
 import { getUsdToNgnRate, usdToNgn } from "@/lib/fx/naira";
 import { getTokenSymbol, getFormattedBalanceLines } from "@/lib/wallet/circle";

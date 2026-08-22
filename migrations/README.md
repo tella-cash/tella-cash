@@ -219,6 +219,68 @@ select * from tella_held_send where state in ('executing', 'unknown');
 Adds a cron to `vercel.json` (`*/5 * * * *`), so `CRON_SECRET` must be set or
 the job refuses to run.
 
+### `0016_user_channels.sql` — apply BEFORE the code that uses it
+
+`tella_user_channel`, backfilled one row per existing user. A tella user used
+to BE a phone number; this makes identity channel-plural.
+
+**Expand only. Nothing is dropped.** `tella_users.whatsapp_number` and
+`.whatsapp_channel` are still read by both token pages, `findUserByWhatsApp`,
+the beneficiary lookup and the follow-up path, so they stay and keep being
+written. The contract migration happens separately, once this table has been
+authoritative in production long enough to trust.
+
+The behaviour change that matters: `findOrCreateUser` no longer overwrites
+`whatsapp_channel` on every inbound message. It recorded "the channel last
+used" rather than "the channels available", which silently repointed every
+outbound notification at whichever provider delivered most recently. This also
+had to land before Telegram, since that column's CHECK from 0002 only permits
+`twilio` and `meta`.
+
+Fan-out policy, now explicit: security notices, receipts and inbound-payment
+alerts go to **every** verified channel via `Promise.allSettled`;
+conversational replies go to the primary only. A user whose phone was stolen
+should hear about a transfer on their laptop.
+
+Verify after applying — the three counts should match the user count:
+
+```sql
+select
+  (select count(*) from tella_users) as users,
+  (select count(*) from tella_user_channel) as channels,
+  (select count(*) from tella_user_channel where is_primary) as primaries;
+```
+
+### `0017_security_token_kinds.sql` — apply BEFORE the code that uses it
+
+Widens `tella_security_token.kind` to `('pin_reset', 'link_telegram')`, using
+the room 0010's comment left, and adds a `payload jsonb` column.
+
+**Ships together with the `revokeResetTokens` kind filter, not after it.**
+That function marked every unused token for a user as consumed, filtered only
+on `user_id`. Correct while one kind existed; the moment a second one did,
+completing a PIN reset would silently kill an in-flight Telegram link and the
+user would tap a deep link that did nothing.
+
+### Environment added alongside 0007–0017
+
+```
+TELEGRAM_BOT_TOKEN=       # from @BotFather
+TELEGRAM_BOT_USERNAME=    # without the @, used to build the t.me deep link
+TELEGRAM_WEBHOOK_SECRET=  # random string, also passed to setWebhook
+```
+
+Telegram does not sign request bodies. The secret above, echoed back in
+`X-Telegram-Bot-Api-Secret-Token`, is the only thing separating a real update
+from anyone who guesses the URL, and verification fails closed when it is
+unset. Register the webhook with:
+
+```
+curl -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
+  -d "url=$APP_BASE_URL/api/telegram" \
+  -d "secret_token=$TELEGRAM_WEBHOOK_SECRET"
+```
+
 ### Environment added alongside 0007–0015
 
 ```

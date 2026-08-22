@@ -8,7 +8,7 @@ import {
 import { isValidPin, replacePinForUser } from "@/lib/auth/pin";
 import { resetAuthAttempts } from "@/lib/auth/rate-limit";
 import { deleteCredentialsForUser } from "@/lib/webauthn/repository";
-import { notifyUser } from "@/lib/whatsapp/notify";
+import { notifyUser } from "@/lib/messaging/notify";
 
 export const dynamic = "force-dynamic";
 

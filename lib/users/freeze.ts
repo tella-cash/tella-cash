@@ -92,7 +92,12 @@ export async function freezeAccount({
   // user may legitimately need to set a new PIN before lifting the freeze,
   // and refusing that builds a deadlock. What stops the attacker is that
   // resetting a PIN does not clear frozen_at.
-  await revokeResetTokens(userId);
+  // Both kinds, explicitly. A freeze should also kill an in-flight channel
+  // link: an attacker halfway through attaching their own Telegram account to
+  // this wallet is exactly the scenario, and unlike a PIN reset there is no
+  // deadlock argument for letting it survive.
+  await revokeResetTokens(userId, "pin_reset");
+  await revokeResetTokens(userId, "link_telegram");
 
   // Mid-conversation flow state, so the account doesn't come back mid-way
   // through answering "save this recipient?". deletePending takes the row
