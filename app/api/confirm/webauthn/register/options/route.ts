@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { loadConfirmContext } from "@/lib/confirm/context";
+import { canEnrollFromConfirmLink } from "@/lib/auth/factors";
 import { readJson } from "@/lib/http/json";
 import { buildRegistrationOptions } from "@/lib/webauthn/server";
-import { saveChallenge, userHasCredential } from "@/lib/webauthn/repository";
+import { saveChallenge } from "@/lib/webauthn/repository";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +33,7 @@ export async function POST(request: Request) {
 
   // Same guard as register/verify, applied here so the ceremony never even
   // starts for an account that already has a factor.
-  if (ctx.user.pin_hash || (await userHasCredential(ctx.user.id))) {
+  if (!(await canEnrollFromConfirmLink(ctx.user))) {
     return NextResponse.json(
       { error: "This account already has a confirmation method set up." },
       { status: 409 },

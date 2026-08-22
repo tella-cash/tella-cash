@@ -11,6 +11,9 @@ import {
   releaseNotification,
 } from "@/lib/circle/processed-notifications";
 import { raiseAlert } from "@/lib/observability/alerts";
+import { factorCount } from "@/lib/auth/factors";
+import { hasPanicCode, issuePanicCode } from "@/lib/security/panic-code";
+import type { tellaUser } from "@/lib/supabase/types";
 
 /**
  * Subset of the Circle notification payload we care about. Circle sends
@@ -272,11 +275,70 @@ async function handleInboundTransaction(
     }
   }
 
+  await maybeOfferAccountSecurity(user);
+
   console.log("[circle-webhook] notified user of inbound", {
     userId: user.id,
     amount,
     token,
   });
+}
+
+/**
+ * Offer to secure the account, once, at the first moment the user has
+ * something to lose.
+ *
+ * This is the highest-value thing in the whole security effort and it is
+ * easy to mistake for a nicety. Every rule elsewhere — the freeze, recovery,
+ * step-up — is of the form "prove yourself with a factor you enrolled
+ * earlier", and none of them protect an account that never enrolled one.
+ * Most accounts have not: they were created by sending a WhatsApp message
+ * and have had no reason to care since.
+ *
+ * Fired on receipt rather than at signup because that is when caring starts.
+ * A brand new user asked to set up a PIN before they hold any money will
+ * skip it, and they are right to.
+ *
+ * Sent once. The panic code doubles as the marker: issuing one is the only
+ * thing that sets panic_code_hash, so an account that has one has already
+ * been asked. Re-asking periodically would need a column of its own and is
+ * the obvious next step, not something to fake with this.
+ */
+async function maybeOfferAccountSecurity(user: tellaUser): Promise<void> {
+  try {
+    if (hasPanicCode(user)) return;
+    if ((await factorCount(user)) > 0) return;
+
+    const code = await issuePanicCode(user.id);
+
+    await notifyUser({
+      user,
+      body: [
+        "🔐 One thing worth doing now you're holding money.",
+        "",
+        "Right now anyone with this WhatsApp account can send from your wallet. Next time you send, I'll ask you to set up Face ID or a PIN — that takes about ten seconds and it's worth doing.",
+        "",
+        "In the meantime, here's your panic code:",
+        "",
+        `*${code}*`,
+        "",
+        "Save it somewhere that isn't this phone. If your phone is ever lost or stolen, go to " +
+          `${(process.env.APP_BASE_URL ?? "").replace(/\/$/, "")}/panic` +
+          " from any device, enter your number and this code, and everything stops leaving your wallet.",
+        "",
+        "It can only freeze. It can't spend, and it can't unfreeze — so it's safe to write down.",
+      ].join("\n"),
+    });
+
+    console.log("[circle-webhook] offered account security", { userId: user.id });
+  } catch (err) {
+    // Never let this break a receipt notification. The money arriving is the
+    // important message; this is the useful one that can wait for next time.
+    console.error("[circle-webhook] security offer failed", {
+      userId: user.id,
+      err,
+    });
+  }
 }
 
 /**

@@ -10,7 +10,14 @@ import { raiseAlert } from "@/lib/observability/alerts";
  * read the same pre-increment count and slip through together.
  */
 
-export type AuthScope = "pin_verify" | "webauthn_authenticate" | "pin_reset";
+export type AuthScope =
+  | "pin_verify"
+  | "webauthn_authenticate"
+  | "pin_reset"
+  // The freeze door. Limited like the others so the code can't be ground
+  // down, but note the consequence of a lockout here is different: it means
+  // someone cannot freeze. Keep the ceiling generous relative to the others.
+  | "panic_code";
 
 export interface AttemptResult {
   allowed: boolean;
