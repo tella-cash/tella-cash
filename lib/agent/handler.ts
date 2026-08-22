@@ -48,6 +48,7 @@ import {
   type FollowUpSlots,
 } from "@/lib/sendam-ai/client";
 import { fastPathDecode } from "@/lib/agent/fast-path";
+import { checkConfidence, sanitizeModelReply } from "@/lib/agent/confidence";
 import {
   SAVE_BENEFICIARY_FLOW,
   FAUCET_ASSET_FLOW,
@@ -572,6 +573,26 @@ async function handleOnboardedUser({
     }
   }
 
+  // Confidence is finally consulted. Until now it was decoded, typed and
+  // ignored, so a SEND parsed at 0.4 minted a confirm link exactly as
+  // readily as one parsed at 0.99. Tier 0 returns 1 by construction, so this
+  // only ever constrains the tier that guesses.
+  const verdict = checkConfidence(decoded);
+  if (!verdict.ok) {
+    if (verdict.reason === "confirm_send") {
+      // Readable but not certain. Reading it back is far more useful than
+      // "I didn't understand", and no confirm link exists until they agree.
+      return {
+        reply: [
+          `Did you mean *send ${verdict.amount} USDC to ${verdict.recipient}*?`,
+          "",
+          "Send that again if so, and I'll set it up.",
+        ].join("\n"),
+      };
+    }
+    return { reply: pickReply(REPLIES.unknown, { name }), interactive: "buttons" };
+  }
+
   // A structured send carries real parameters (amount + recipient), so it
   // always wins over the general intent switch below.
   const sendIntent: ParsedSendIntent | null = mapDecodedSend(decoded);
@@ -592,7 +613,8 @@ async function handleOnboardedUser({
       // matching reply; fall back to our fixed template on older deploys
       // that don't send one yet.
       return {
-        reply: decoded.reply || pickReply(REPLIES.greeting, { name }),
+        reply:
+          sanitizeModelReply(decoded.reply) ?? pickReply(REPLIES.greeting, { name }),
         interactive: "buttons",
       };
     case "HELP":
