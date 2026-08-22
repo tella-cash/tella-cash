@@ -2,6 +2,7 @@ import type { tellaUser } from "@/lib/supabase/types";
 import { resolveSpendableUsdc, type SpendableUsdc } from "@/lib/wallet/circle";
 import { sumSentUsdcSince } from "@/lib/transactions/repository";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { sumHeldUsdc } from "@/lib/held_sends/repository";
 
 /**
  * Spending guards for the send path.
@@ -34,7 +35,7 @@ export type LimitFailure =
   | { kind: "check_failed" };
 
 export type LimitResult =
-  | { ok: true; usdc: SpendableUsdc }
+  | { ok: true; usdc: SpendableUsdc; limits: ResolvedLimits }
   | { ok: false; failure: LimitFailure };
 
 function numberFromEnv(name: string, fallback: number): number {
@@ -63,6 +64,8 @@ export function defaultDailyCap(): number {
 export interface ResolvedLimits {
   perTx: number;
   daily: number;
+  /** Above this, a send is held rather than executed. Null means derive it. */
+  holdThreshold: number | null;
   /** True when this user has an override row, for logging and settings UI. */
   customised: boolean;
 }
@@ -86,7 +89,7 @@ export async function resolveLimits(userId: string): Promise<ResolvedLimits> {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("tella_user_limits")
-    .select("per_tx_cap_usdc, daily_cap_usdc")
+    .select("per_tx_cap_usdc, daily_cap_usdc, hold_threshold_usdc")
     .eq("user_id", userId)
     .maybeSingle();
 
@@ -104,6 +107,7 @@ export async function resolveLimits(userId: string): Promise<ResolvedLimits> {
 export interface LimitOverrideRow {
   per_tx_cap_usdc: number | null;
   daily_cap_usdc: number | null;
+  hold_threshold_usdc?: number | null;
 }
 
 /**
@@ -125,7 +129,12 @@ export function mergeLimits(
   defaults: { perTx: number; daily: number },
 ): ResolvedLimits {
   if (!row) {
-    return { perTx: defaults.perTx, daily: defaults.daily, customised: false };
+    return {
+      perTx: defaults.perTx,
+      daily: defaults.daily,
+      holdThreshold: null,
+      customised: false,
+    };
   }
 
   const pick = (override: number | null, fallback: number): number =>
@@ -133,9 +142,20 @@ export function mergeLimits(
       ? fallback
       : Math.min(override, fallback);
 
+  const hold = row.hold_threshold_usdc;
+
   return {
     perTx: pick(row.per_tx_cap_usdc, defaults.perTx),
     daily: pick(row.daily_cap_usdc, defaults.daily),
+    // Unlike the caps, a user's hold threshold is taken as given rather than
+    // min'd against a default. A cap is a ceiling the deployment enforces; a
+    // hold threshold is the user saying how much they are comfortable moving
+    // without a day to think about it, and lowering it is the only direction
+    // that adds safety. There is no deployment-wide value to undercut.
+    holdThreshold:
+      hold === null || hold === undefined || !Number.isFinite(hold) || hold <= 0
+        ? null
+        : hold,
     customised: true,
   };
 }
@@ -159,16 +179,18 @@ export async function checkSendLimits({
   let usdc: SpendableUsdc | null;
   let alreadySent: number;
   let limits: ResolvedLimits;
+  let held: number;
   try {
     // Resolving the user's caps joins the existing pair rather than running
     // before them, so per-user limits cost no extra round trip. The
     // consequence is that the per-transaction check below now happens after
     // this fetch instead of before it — one more query before an over-cap
     // send is rejected, and the same answer.
-    [usdc, alreadySent, limits] = await Promise.all([
+    [usdc, alreadySent, limits, held] = await Promise.all([
       resolveSpendableUsdc(user.circle_wallet_id),
       sumSentUsdcSince(user.id, DAILY_WINDOW_HOURS),
       resolveLimits(user.id),
+      sumHeldUsdc(user.id),
     ]);
   } catch (err) {
     // Fails CLOSED. If we can't establish that a send is within limits, we
@@ -196,25 +218,44 @@ export async function checkSendLimits({
     return { ok: false, failure: { kind: "no_usdc" } };
   }
 
-  if (alreadySent + requested > limits.daily) {
-    return {
-      ok: false,
-      failure: { kind: "over_daily", cap: limits.daily, alreadySent, requested },
-    };
-  }
+  // Held sends are counted as already committed against BOTH the daily
+  // allowance and the balance. They have produced no tella_transactions row
+  // and Circle's balance knows nothing about them, so without this a queued
+  // transfer is invisible to every check — and two large holds could each
+  // pass on their own at authorization time, then both fail a day later with
+  // "insufficient balance". Fail-closed, but a baffling thing to receive
+  // twenty-four hours after the fact.
+  //
+  // A hold released across the boundary is briefly counted twice, once as
+  // reserved and once as sent. That double-count is conservative in the safe
+  // direction, so it is documented rather than papered over.
+  const committed = alreadySent + held;
 
-  if (requested > usdc.available) {
+  if (committed + requested > limits.daily) {
     return {
       ok: false,
       failure: {
-        kind: "insufficient",
-        available: usdc.available,
+        kind: "over_daily",
+        cap: limits.daily,
+        alreadySent: committed,
         requested,
       },
     };
   }
 
-  return { ok: true, usdc };
+  const spendable = usdc.available - held;
+  if (requested > spendable) {
+    return {
+      ok: false,
+      failure: {
+        kind: "insufficient",
+        available: Math.max(spendable, 0),
+        requested,
+      },
+    };
+  }
+
+  return { ok: true, usdc, limits };
 }
 
 /** Chat-facing explanation. Says what's wrong and what to do about it. */

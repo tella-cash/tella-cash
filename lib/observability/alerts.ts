@@ -26,7 +26,8 @@ export type AlertKind =
   | "transfer_unknown"
   | "wallet_provisioning_stuck"
   | "account_frozen"
-  | "account_unfrozen";
+  | "account_unfrozen"
+  | "hold_notification_failed";
 
 interface AlertPayload {
   kind: AlertKind;

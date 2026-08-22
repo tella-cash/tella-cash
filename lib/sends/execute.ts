@@ -1,4 +1,4 @@
-import type { tellaUser, PendingSend } from "@/lib/supabase/types";
+import type { tellaUser, PendingSend, SendPayload } from "@/lib/supabase/types";
 import {
   claimPendingSend,
   deletePendingSend,
@@ -7,6 +7,8 @@ import {
 import { sendUsdc } from "@/lib/wallet/circle";
 import { gateSpend } from "@/lib/users/wallet-gate";
 import { checkSendLimits, formatLimitFailure, type LimitFailure } from "./limits";
+import { tierFor } from "./tiers";
+import { createHeldSend } from "@/lib/held_sends/repository";
 import { raiseAlert } from "@/lib/observability/alerts";
 
 export type ExecuteSendResult =
@@ -28,7 +30,22 @@ export type ExecuteSendResult =
   // Distinct from transfer_failed: the request may have reached Circle. We
   // must not tell the user their balance is unchanged.
   | { ok: false; reason: "transfer_unknown" }
-  | { ok: false; reason: "limit"; failure: LimitFailure };
+  | { ok: false; reason: "limit"; failure: LimitFailure }
+  /**
+   * Authorized, but above the hold threshold, so it executes later.
+   *
+   * Not a failure. The user proved their factor and the transfer is queued;
+   * what has changed is when it happens, and that they now have a day in
+   * which to stop it.
+   */
+  | {
+      ok: false;
+      reason: "held";
+      heldSendId: string;
+      releaseAt: string;
+      amount: string;
+      recipientLabel: string;
+    };
 
 /**
  * Run a confirmed send. The caller owns whatever auth gate authorized it
@@ -87,62 +104,130 @@ export async function executePendingSend({
     return { ok: false, reason: "limit", failure: limits.failure };
   }
 
-  try {
-    const result = await sendUsdc({
-      // From the gate, not user.circle_wallet_id: the gate is what proved it
-      // non-null, so reading it back off the row would need a second check
-      // TypeScript can't tie to the first.
-      fromWalletId: gate.walletId,
-      toAddress: p.recipientAddress,
-      amount: p.amount,
-      tokenId: limits.usdc.tokenId,
-      // Keyed on the pending send, not random. A retry of THIS send is
-      // deduped by Circle instead of becoming a second transfer.
-      idempotencyKey: claimed.id,
-    });
+  // Above the threshold, authorization and execution come apart. The factor
+  // has been proven; only the transfer waits. See lib/sends/tiers.ts.
+  if (tierFor(Number.parseFloat(p.amount), limits.limits) === "hold") {
+    const held = await createHeldSend({ userId: user.id, payload: p });
 
+    // The confirm link is retired now rather than left to expire: it has done
+    // its job, and a live link for a send that is already queued would let a
+    // second tap queue it twice.
+    await markPendingSendOutcome(claimed.id, "sent");
+    await deletePendingSend(claimed.id);
+
+    return {
+      ok: false,
+      reason: "held",
+      heldSendId: held.id,
+      releaseAt: held.release_at,
+      amount: p.amount,
+      recipientLabel: recipientLabelFor(p),
+    };
+  }
+
+  const transfer = await performTransfer({
+    userId: user.id,
+    sendId: claimed.id,
+    fromWalletId: gate.walletId,
+    payload: p,
+    tokenId: limits.usdc.tokenId,
+  });
+
+  if (transfer.ok) {
     await markPendingSendOutcome(claimed.id, "sent");
     await deletePendingSend(claimed.id);
 
     return {
       ok: true,
-      transactionId: result.transactionId,
+      transactionId: transfer.transactionId,
       amount: p.amount,
       amountNgn: p.amountNgn,
       token: p.token,
-      recipientLabel:
-        p.recipientName ??
-        `${p.recipientAddress.slice(0, 6)}…${p.recipientAddress.slice(-4)}`,
+      recipientLabel: recipientLabelFor(p),
       recipientAddress: p.recipientAddress,
       recipientUserId: p.recipientUserId,
       recipientWhatsappNumber: p.recipientWhatsappNumber,
     };
+  }
+
+  if (transfer.reason === "unknown") {
+    // Row is deliberately NOT deleted — it's the record of a transfer
+    // whose fate we don't know, and the index in migration 0008 exists
+    // to find exactly these.
+    await markPendingSendOutcome(claimed.id, "unknown");
+    return { ok: false, reason: "transfer_unknown" };
+  }
+
+  await markPendingSendOutcome(claimed.id, "failed");
+  await deletePendingSend(claimed.id);
+  return { ok: false, reason: "transfer_failed" };
+}
+
+export function recipientLabelFor(p: SendPayload): string {
+  return (
+    p.recipientName ??
+    `${p.recipientAddress.slice(0, 6)}…${p.recipientAddress.slice(-4)}`
+  );
+}
+
+export type TransferOutcome =
+  | { ok: true; transactionId: string }
+  | { ok: false; reason: "failed" | "unknown" };
+
+/**
+ * Hand one transfer to Circle and classify what came back.
+ *
+ * Extracted so the hold-release job can reuse it rather than grow a second
+ * copy. That matters more than the usual do-not-repeat-yourself argument:
+ * isAmbiguousFailure below is the most safety-critical function in this
+ * repository, and a second, subtly divergent version of the handling around
+ * it is how a transfer whose fate is unknown gets reported to a user as
+ * definitely failed.
+ *
+ * Deliberately owns NO row lifecycle. Pending sends and held sends record
+ * their outcomes in different tables with different rules, so each caller
+ * keeps its own bookkeeping and shares only the part that must not diverge.
+ */
+export async function performTransfer({
+  userId,
+  sendId,
+  fromWalletId,
+  payload,
+  tokenId,
+}: {
+  userId: string;
+  /** Also the Circle idempotency key — must be stable across retries. */
+  sendId: string;
+  fromWalletId: string;
+  payload: SendPayload;
+  tokenId: string;
+}): Promise<TransferOutcome> {
+  try {
+    const result = await sendUsdc({
+      fromWalletId,
+      toAddress: payload.recipientAddress,
+      amount: payload.amount,
+      tokenId,
+      // Keyed on the send's own id, never random. A retry of THIS send is
+      // deduped by Circle instead of becoming a second transfer.
+      idempotencyKey: sendId,
+    });
+    return { ok: true, transactionId: result.transactionId };
   } catch (err) {
     const ambiguous = isAmbiguousFailure(err);
-    console.error("[send] transfer failed", {
-      userId: user.id,
-      pendingId: claimed.id,
-      ambiguous,
-      err,
-    });
+    console.error("[send] transfer failed", { userId, sendId, ambiguous, err });
 
     if (ambiguous) {
-      // Row is deliberately NOT deleted — it's the record of a transfer
-      // whose fate we don't know, and the index in migration 0008 exists
-      // to find exactly these.
-      await markPendingSendOutcome(claimed.id, "unknown");
       // Needs a person: only Circle's dashboard can say whether this moved.
       raiseAlert({
         kind: "transfer_unknown",
-        message: `A transfer's outcome is unknown and needs reconciling against Circle. Pending send ${claimed.id}.`,
-        context: { pendingSendId: claimed.id, amount: p.amount },
+        message: `A transfer's outcome is unknown and needs reconciling against Circle. Send ${sendId}.`,
+        context: { sendId, amount: payload.amount },
       });
-      return { ok: false, reason: "transfer_unknown" };
+      return { ok: false, reason: "unknown" };
     }
 
-    await markPendingSendOutcome(claimed.id, "failed");
-    await deletePendingSend(claimed.id);
-    return { ok: false, reason: "transfer_failed" };
+    return { ok: false, reason: "failed" };
   }
 }
 
@@ -185,6 +270,10 @@ export function sendFailureStatus(
       // Not 403: the request is well-formed and the caller is authorized.
       // The account's own state forbids it, which is what 409 is for.
       return 409;
+    case "held":
+      // 202: accepted, and it will happen. The confirm page reads this as a
+      // success with a different message, not as a rejection.
+      return 202;
     case "transfer_unknown":
     case "transfer_failed":
       return 502;
@@ -198,6 +287,14 @@ export function formatSendResultForChat(result: ExecuteSendResult): string {
         return "Your wallet isn't ready to send right now. Try again in a moment.";
       case "already_used":
         return "That send was already confirmed — I didn't send it twice.";
+      case "held":
+        return [
+          `⏳ Queued ${result.amount} USDC to ${result.recipientLabel}.`,
+          "",
+          `Sends this size wait 24 hours before they go out, so you've got time to stop it if this wasn't you.`,
+          "",
+          'Reply *cancel send* any time before then and nothing moves.',
+        ].join("\n");
       case "frozen":
         return [
           "Your account is frozen, so I didn't send that.",

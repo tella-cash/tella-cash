@@ -106,6 +106,22 @@ export async function GET(request: Request) {
     return data?.length ?? 0;
   });
 
+  // Held sends, terminal states only. 'holding' rows are the feature itself
+  // and 'executing' or 'unknown' rows are transfers whose fate needs a person
+  // — the same doctrine 0008 applies to unresolved pending sends. Deleting
+  // either would destroy the only record that something needs reconciling.
+  results.held_sends = await purge(async () => {
+    const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const { data, error } = await supabase
+      .from("tella_held_send")
+      .delete()
+      .in("state", ["sent", "failed", "cancelled"])
+      .lt("created_at", cutoff)
+      .select("id");
+    if (error) throw new Error(error.message);
+    return data?.length ?? 0;
+  });
+
   // Only rows whose window and lockout have both elapsed — deleting an
   // active counter would hand an attacker a free reset of their attempts.
   results.auth_attempts = await purge(async () => {

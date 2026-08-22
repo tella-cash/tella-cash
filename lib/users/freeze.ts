@@ -1,6 +1,7 @@
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { FreezeSource, PendingSend } from "@/lib/supabase/types";
 import { revokeResetTokens } from "@/lib/security/reset-tokens";
+import { cancelAllHeldSends } from "@/lib/held_sends/repository";
 import { deletePending, getActivePending } from "@/lib/pending_actions/repository";
 import { raiseAlert } from "@/lib/observability/alerts";
 
@@ -20,6 +21,8 @@ import { raiseAlert } from "@/lib/observability/alerts";
 export interface FreezeResult {
   /** Confirm links invalidated by this freeze. Surfaced to the user. */
   cancelledSends: number;
+  /** Queued 24h transfers stopped by this freeze. Also surfaced. */
+  cancelledHolds: number;
   /** False when the account was already frozen — the call is idempotent. */
   changed: boolean;
 }
@@ -64,6 +67,26 @@ export async function freezeAccount({
   // row would only destroy the record of a transfer whose outcome may still
   // be unknown (migrations/0008).
 
+  // Queued transfers. This is the least obvious thing a freeze has to stop
+  // and the easiest to forget: by the time someone freezes, a held send is
+  // invisible in the chat thread, and a freeze that let it fire the next
+  // morning would not be a freeze.
+  let cancelledHolds = 0;
+  try {
+    cancelledHolds = await cancelAllHeldSends({ userId, cancelledBy: "freeze" });
+  } catch (err) {
+    // Loud, and it does NOT fail the freeze — the flag and the confirm-link
+    // cascade are already in place, and the release job re-checks the freeze
+    // independently before sending anything.
+    console.error("[freeze] cancelling held sends failed", { userId, err });
+    raiseAlert({
+      kind: "account_frozen",
+      message: "Account frozen but queued transfers could not be cancelled. Check tella_held_send.",
+      context: { source },
+      force: true,
+    });
+  }
+
   // An outstanding reset link is a way back into the account, so it goes
   // too. Note this does NOT stop the user requesting a fresh one: a frozen
   // user may legitimately need to set a new PIN before lifting the freeze,
@@ -85,14 +108,20 @@ export async function freezeAccount({
   if (changed) {
     raiseAlert({
       kind: "account_frozen",
-      message: `An account was frozen via ${source}. ${cancelledSends} pending send(s) cancelled.`,
-      context: { source, cancelledSends },
+      message: `An account was frozen via ${source}. ${cancelledSends} pending send(s) and ${cancelledHolds} queued transfer(s) cancelled.`,
+      context: { source, cancelledSends, cancelledHolds },
       force: true,
     });
   }
 
-  console.log("[freeze] account frozen", { userId, source, changed, cancelledSends });
-  return { cancelledSends, changed };
+  console.log("[freeze] account frozen", {
+    userId,
+    source,
+    changed,
+    cancelledSends,
+    cancelledHolds,
+  });
+  return { cancelledSends, cancelledHolds, changed };
 }
 
 /**

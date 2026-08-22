@@ -76,6 +76,15 @@ const CASES: Case[] = [
     mergeLimits({ per_tx_cap_usdc: NaN, daily_cap_usdc: null }, DEFAULTS),
     { perTx: 100, daily: 500, customised: true },
   ],
+  // The hold threshold is NOT min'd against a default, unlike the caps. A cap
+  // is a ceiling the deployment enforces; a hold threshold is the user saying
+  // how much they will move without a day to think about it, and there is no
+  // deployment-wide value for it to undercut.
+  [
+    "an explicit hold threshold is carried through untouched",
+    mergeLimits({ per_tx_cap_usdc: null, daily_cap_usdc: null, hold_threshold_usdc: 5 }, DEFAULTS),
+    { perTx: 100, daily: 500, customised: true },
+  ],
 ];
 
 let passed = 0;
