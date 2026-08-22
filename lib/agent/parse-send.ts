@@ -7,5 +7,13 @@ export interface ParsedSendIntent {
   recipient:
     | { kind: "phone"; whatsappNumber: string }
     | { kind: "address"; address: string }
-    | { kind: "label"; label: string };
+    | { kind: "label"; label: string }
+    /**
+     * Looked like a phone number and wasn't a valid one. Distinct from
+     * `label` because the reply has to be different: telling someone
+     * "I don't have a beneficiary called +23480123" when they typed a
+     * number reports a decode problem as an address-book problem, and
+     * sends them looking in the wrong place.
+     */
+    | { kind: "invalid_phone"; typed: string };
 }

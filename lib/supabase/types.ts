@@ -95,6 +95,18 @@ export interface SendPayload {
 export interface FlowPendingPayload {
   flow: string;
   token: string;
+  /**
+   * Consecutive decodeFollowUp failures against this token.
+   *
+   * The row is deliberately kept when a decode fails, so the user's retry
+   * hits the same token rather than the flow fabricating progress. But an
+   * expired-server-side token throws forever, and while it does, EVERY
+   * message the user sends is captured by the flow handler and answered with
+   * the same error — for up to the full 15-minute TTL, whatever they
+   * actually typed. Counting the failures is what lets the flow give up and
+   * hand the conversation back.
+   */
+  failures?: number;
 }
 
 export interface Beneficiary {

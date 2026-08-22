@@ -91,6 +91,21 @@ export async function GET(request: Request) {
     return data?.length ?? 0;
   });
 
+  // Inbound message dedupe keys (migration 0013). Same reasoning and same
+  // window as the Circle notification keys above: providers stop retrying
+  // within minutes, so a week-old key can only match a delivery that will
+  // never arrive again.
+  results.processed_messages = await purge(async () => {
+    const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const { data, error } = await supabase
+      .from("tella_processed_message")
+      .delete()
+      .lt("processed_at", cutoff)
+      .select("key");
+    if (error) throw new Error(error.message);
+    return data?.length ?? 0;
+  });
+
   // Only rows whose window and lockout have both elapsed — deleting an
   // active counter would hand an attacker a free reset of their attempts.
   results.auth_attempts = await purge(async () => {
