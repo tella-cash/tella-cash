@@ -216,8 +216,12 @@ select id, user_id, payload->>'amount' as amount, release_at
 select * from tella_held_send where state in ('executing', 'unknown');
 ```
 
-Adds a cron to `vercel.json` (`*/5 * * * *`), so `CRON_SECRET` must be set or
-the job refuses to run.
+The release job runs on a schedule from `.github/workflows/cron.yml`, not
+from `vercel.json`. Vercel's Hobby plan permits cron jobs once per day only,
+and a sub-daily expression fails the build outright — which is what silently
+blocked every deployment until it was found. `CRON_SECRET` must be set both
+in Vercel (the route verifies it) and as a GitHub repository secret (the
+workflow sends it).
 
 ### `0016_user_channels.sql` — apply BEFORE the code that uses it
 

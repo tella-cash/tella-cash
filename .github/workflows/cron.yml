@@ -1,0 +1,114 @@
+# Scheduled jobs for tella.
+#
+# These lived in vercel.json until the account's Hobby plan turned out to
+# permit cron jobs once per day only — which failed the build outright, with
+# the error attached to a commit nobody was rebuilding. Every deployment
+# since had silently been a rebuild of an older commit that predated the
+# config. The jobs themselves are unchanged; only the thing pressing the
+# button moved.
+#
+# The routes were always designed to not care who calls them: each is a plain
+# GET gated by a bearer token (lib/cron/auth.ts), which fails closed when
+# CRON_SECRET is unset. Nothing about them assumed Vercel.
+#
+# Setup, once:
+#   gh secret set CRON_SECRET  --repo <owner>/<repo>   # same value as Vercel's
+#   gh secret set APP_BASE_URL --repo <owner>/<repo>   # https://www.tella.cash
+#
+# GitHub's scheduler is best-effort and can run late under load, especially
+# on the hour. That is fine for all three of these — see the notes on each —
+# but it is the reason none of them are scheduled at :00.
+
+name: Scheduled jobs
+
+on:
+  schedule:
+    # Releases held transfers whose 24 hours have elapsed. Every 10 minutes:
+    # the hold is a day long, so ten minutes of drift is immaterial, and the
+    # job is idempotent — it claims each row atomically and a second runner
+    # finds nothing to do.
+    - cron: "3,13,23,33,43,53 * * * *"
+
+    # Retries wallet provisioning that failed or stalled. Every 30 minutes;
+    # a user waiting on a wallet notices minutes, not seconds.
+    - cron: "7,37 * * * *"
+
+    # Deletes expired rows: pending sends, challenges, dedupe keys, old
+    # tokens. Daily at 03:17 UTC, matching what vercel.json did.
+    - cron: "17 3 * * *"
+
+  # So a job can be run by hand without waiting for its slot — useful when
+  # reconciling, and the only way to test a change to this file.
+  workflow_dispatch:
+    inputs:
+      job:
+        description: "Which job to run"
+        required: true
+        default: release-holds
+        type: choice
+        options:
+          - release-holds
+          - retry-wallets
+          - cleanup
+
+# Two runs of the same job overlapping would be harmless (every route claims
+# its work atomically) but there is no reason to pay for it.
+concurrency:
+  group: tella-cron-${{ github.event.schedule || inputs.job }}
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Work out which job this run is for
+        id: pick
+        run: |
+          case "${{ github.event.schedule }}" in
+            "3,13,23,33,43,53 * * * *") JOB=release-holds ;;
+            "7,37 * * * *")             JOB=retry-wallets ;;
+            "17 3 * * *")               JOB=cleanup ;;
+            *)                          JOB="${{ inputs.job }}" ;;
+          esac
+          echo "job=$JOB" >> "$GITHUB_OUTPUT"
+          echo "Running: $JOB"
+
+      - name: Call the endpoint
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${CRON_SECRET:-}" ] || [ -z "${APP_BASE_URL:-}" ]; then
+            echo "::error::CRON_SECRET and APP_BASE_URL must both be set as repository secrets."
+            exit 1
+          fi
+
+          URL="${APP_BASE_URL%/}/api/cron/${{ steps.pick.outputs.job }}"
+
+          # Body and status captured separately so a failure prints what the
+          # route actually said rather than just a number.
+          BODY_FILE=$(mktemp)
+          STATUS=$(curl -sS -o "$BODY_FILE" -w '%{http_code}' \
+            --max-time 300 --retry 2 --retry-delay 10 --retry-connrefused \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$URL")
+
+          echo "HTTP $STATUS"
+          cat "$BODY_FILE"
+          echo
+
+          if [ "$STATUS" != "200" ]; then
+            # 401 here almost always means the secret drifted from Vercel's.
+            echo "::error::${{ steps.pick.outputs.job }} returned HTTP $STATUS"
+            exit 1
+          fi
+
+          # The routes report per-table failures inside a 200 rather than
+          # failing the whole run, so a green tick would otherwise hide them.
+          if grep -q '"error' "$BODY_FILE"; then
+            echo "::warning::Response contains an error field — check the output above."
+          fi
