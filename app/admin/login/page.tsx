@@ -13,7 +13,8 @@ export default async function AdminLoginPage({
 }: {
   searchParams: Promise<{ r?: string; m?: string }>;
 }) {
-  const { m } = await searchParams;
+  const { r, m } = await searchParams;
+  const note = explain(r, m);
 
   return (
     <ConfirmShell>
@@ -24,9 +25,9 @@ export default async function AdminLoginPage({
           </div>
           <h1 className="mt-4 font-display text-3xl text-ink-900">Dashboard</h1>
 
-          {m && (
+          {note && (
             <p className="mt-4 text-sm text-red-600" role="alert">
-              {m}
+              {note}
             </p>
           )}
 
@@ -45,4 +46,23 @@ export default async function AdminLoginPage({
       </div>
     </ConfirmShell>
   );
+}
+
+/**
+ * Turn a redirect reason into something actionable.
+ *
+ * Every branch here exists because the alternative is a user clicking "sign
+ * in", being returned to this exact page, and having no idea whether they are
+ * unauthorized, expired, or looking at a bug.
+ */
+function explain(reason: string | undefined, message: string | undefined): string | null {
+  if (message) return message;
+  switch (reason) {
+    case "rejected":
+      return "That session isn't valid any more — it may have expired, or your access may have been removed. Sign in again.";
+    case "nocookie":
+      return null; // First visit. Nothing has gone wrong yet.
+    default:
+      return null;
+  }
 }

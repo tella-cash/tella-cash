@@ -79,7 +79,13 @@ export function proxy(request: NextRequest) {
       if (pathname.startsWith("/api/")) {
         return NextResponse.json({ error: "Not signed in" }, { status: 401 });
       }
-      return NextResponse.redirect(new URL("/admin/login", request.url));
+      // Carries a reason so a bounce is diagnosable. "Nothing happened" is
+      // the worst possible failure message, and it is what this looked like
+      // when the cookie was SameSite=Strict: signed in successfully, then
+      // silently returned to the login page.
+      const login = new URL("/admin/login", request.url);
+      login.searchParams.set("r", "nocookie");
+      return NextResponse.redirect(login);
     }
   }
 

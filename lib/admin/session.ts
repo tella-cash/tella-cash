@@ -125,31 +125,41 @@ export function readAdminCookie(value: string | undefined): AdminIdentity | null
 export { ADMIN_COOKIE_NAME };
 
 /**
- * Path is "/" and that is deliberate, despite the temptation to scope it.
+ * Path is "/" and SameSite is Lax, and both are deliberate.
  *
- * Scoping to /admin would stop the browser sending it to the money routes,
- * which sounds strictly better — but cookie paths are prefix matches, and
- * /api/admin is not under /admin, so the dashboard's own API would stop
- * receiving it. Two cookies to cover two prefixes is more moving parts than
- * the thing it protects against.
- *
- * So the browser does attach it to every same-origin request, and proxy.ts
- * strips it from the confirm, security, panic, webhook and cron paths before
- * any handler runs. That is a stronger guarantee than scoping anyway: a
- * scoped cookie protects the paths someone remembered to exclude, while
+ * PATH. Scoping to /admin would stop the browser sending the cookie to the
+ * money routes, which sounds strictly better — but cookie paths are prefix
+ * matches, and /api/admin is not under /admin, so the dashboard's own API
+ * would stop receiving it. Two cookies for two prefixes is more moving parts
+ * than the thing it protects against. proxy.ts strips the cookie from the
+ * confirm, security, panic, webhook and cron paths instead, which is a
+ * stronger guarantee anyway: scoping protects the paths someone remembered,
  * stripping protects every path on the list whether or not its handler ever
  * learns to read cookies.
  *
- * SameSite=Strict because no cross-site flow should ever carry it — the
- * OAuth return lands on a same-site redirect rather than setting it
- * cross-site.
+ * SAMESITE. This was Strict, and Strict broke sign-in completely.
+ *
+ * The OAuth return is a redirect chain that STARTS cross-site: the browser
+ * goes to accounts.google.com, Google redirects back to our callback, the
+ * callback sets the cookie and redirects on to /admin. A Strict cookie is
+ * withheld on every request in a chain that began off-site — so the browser
+ * accepted the cookie and then refused to send it on the very next hop.
+ * /admin saw no cookie, bounced to the login page, and the whole thing looked
+ * like nothing had happened.
+ *
+ * Lax is the correct setting for a session established by a redirect from
+ * another origin, and it gives up very little: it is sent on top-level GET
+ * navigations only, never on cross-site fetch, XHR, image or iframe loads.
+ * A hostile page cannot read /api/admin/stats with it — a subresource request
+ * carries no cookie, and a top-level navigation renders JSON into a tab that
+ * page cannot read across origins.
  */
 export function adminCookieOptions() {
   return {
     name: COOKIE,
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "strict" as const,
+    sameSite: "lax" as const,
     path: "/",
     maxAge: Math.floor(TTL_MS / 1000),
   };
