@@ -1,8 +1,8 @@
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type {
-  FlowPendingPayload,
   PendingAction,
   PendingActionKind,
+  PendingActionPayload,
 } from "@/lib/supabase/types";
 
 // Mirrors sendam-ai's own FLOW_TOKEN_TTL_MS default (15 min). This row's TTL
@@ -25,7 +25,7 @@ export async function createPending({
 }: {
   userId: string;
   kind: PendingActionKind;
-  payload: FlowPendingPayload;
+  payload: PendingActionPayload;
   ttlMinutes?: number;
 }): Promise<PendingAction> {
   const supabase = getSupabaseAdmin();

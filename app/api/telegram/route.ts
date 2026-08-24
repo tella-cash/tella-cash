@@ -1,9 +1,12 @@
 import { NextResponse, after } from "next/server";
-import { verifyTelegramSecret, sendTelegramMessage } from "@/lib/telegram/client";
-import { handleTelegramCommand } from "@/lib/telegram/handler";
-import { claimMessage, releaseMessage } from "@/lib/messaging/processed-messages";
-import { findChannel, upsertChannel } from "@/lib/messaging/channels";
-import { findUserById } from "@/lib/users/repository";
+import {
+  verifyTelegramSecret,
+  sendTelegramMessage,
+  answerTelegramCallback,
+} from "@/lib/telegram/client";
+import { handleInbound } from "@/lib/messaging/inbound";
+import { titleForChoiceId } from "@/lib/agent/menus";
+import { upsertChannel } from "@/lib/messaging/channels";
 import { loadResetContext, consumeResetToken } from "@/lib/security/reset-tokens";
 import { notifyUserPrimary } from "@/lib/messaging/notify";
 import { raiseAlert } from "@/lib/observability/alerts";
@@ -17,7 +20,8 @@ export const maxDuration = 60;
  * Same shape as both WhatsApp webhooks: verify, ack 200 immediately, do the
  * work in after(). Deliberately so — three inbound routes behaving three
  * different ways is how one of them ends up with a subtle difference nobody
- * remembers making.
+ * remembers making, which is exactly what happened here: this route used to
+ * call a bespoke read-only handler while the others called the agent.
  *
  * Telegram does NOT sign request bodies the way Twilio and Meta do. The only
  * thing separating a real update from anyone who guessed this URL is the
@@ -32,6 +36,13 @@ interface TelegramUpdate {
     text?: string;
     chat: { id: number; type: string };
     from?: { id: number; username?: string; first_name?: string };
+  };
+  /** A tapped inline-keyboard button. See lib/telegram/client.ts. */
+  callback_query?: {
+    id: string;
+    data?: string;
+    message?: { message_id: number; chat: { id: number; type: string } };
+    from?: { id: number; username?: string };
   };
 }
 
@@ -52,78 +63,107 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const message = update.message;
-  // Only plain text in private chats. A group chat containing a wallet bot is
-  // not something to serve balances into by accident.
-  if (!message?.text || message.chat.type !== "private") {
-    return NextResponse.json({ ok: true });
-  }
+  const inbound = extractInbound(update);
+  if (!inbound) return NextResponse.json({ ok: true });
 
-  const chatId = String(message.chat.id);
-  const text = message.text;
-  const updateId = String(update.update_id);
-
-  console.log("[telegram] incoming", { updateId, chars: text.length });
+  console.log("[telegram] incoming", {
+    id: inbound.messageId,
+    tapped: inbound.tapped,
+    chars: inbound.text.length,
+  });
 
   after(async () => {
-    const claimed = await claimMessage({ provider: "telegram", messageId: updateId });
-    if (!claimed) {
-      console.log("[telegram] duplicate delivery ignored", { updateId });
+    // Clears the button's spinner. Done first because Telegram gives it only
+    // a few seconds, and the agent can take longer than that.
+    if (inbound.callbackId) await answerTelegramCallback(inbound.callbackId);
+
+    if (inbound.startToken) {
+      await linkAccount({
+        chatId: inbound.chatId,
+        token: inbound.startToken,
+        username: inbound.username,
+      });
       return;
     }
 
     try {
-      await processUpdate({ chatId, text, username: message.from?.username ?? null });
+      await handleInbound({
+        provider: "telegram",
+        externalId: inbound.chatId,
+        text: inbound.text,
+        messageId: inbound.messageId,
+      });
     } catch (err) {
-      console.error("[telegram] processing error", err);
-      await releaseMessage({ provider: "telegram", messageId: updateId });
+      console.error("[telegram] inbound failed", { id: inbound.messageId, err });
     }
   });
 
   return NextResponse.json({ ok: true });
 }
 
-async function processUpdate({
-  chatId,
-  text,
-  username,
-}: {
+interface InboundUpdate {
   chatId: string;
   text: string;
+  messageId: string;
   username: string | null;
-}): Promise<void> {
-  const trimmed = text.trim();
+  tapped: boolean;
+  callbackId: string | null;
+  /** Set when this is the `/start <token>` linking handshake. */
+  startToken: string | null;
+}
 
-  // `/start <token>` is the linking handshake. The token was minted on an
-  // already-authenticated channel and is consumed HERE, on the Telegram side,
-  // which is what proves control of both ends at once.
+/**
+ * Flatten Telegram's two inbound shapes into one.
+ *
+ * A tapped inline button arrives as a callback_query carrying the choice's
+ * id, not its label. Resolving it back to the title here is what keeps the
+ * promise made in lib/agent/menus.ts: by the time anything downstream sees
+ * it, a tap is indistinguishable from the user having typed the button.
+ */
+function extractInbound(update: TelegramUpdate): InboundUpdate | null {
+  const cb = update.callback_query;
+  if (cb?.data && cb.message) {
+    const title = titleForChoiceId(cb.data);
+    // An id we no longer render — an old message tapped after a deploy that
+    // renamed it. Acknowledged rather than answered, since guessing what a
+    // retired button used to mean is exactly the wrong move on a wallet.
+    if (!title) {
+      console.warn("[telegram] unknown callback id", { data: cb.data });
+      return null;
+    }
+    return {
+      chatId: String(cb.message.chat.id),
+      text: title,
+      // Deduped on the callback id, not the message id: the same message can
+      // be tapped more than once and each tap is a real, separate intent.
+      messageId: `cb:${cb.id}`,
+      username: cb.from?.username ?? null,
+      tapped: true,
+      callbackId: cb.id,
+      startToken: null,
+    };
+  }
+
+  const message = update.message;
+  // Only plain text in private chats. A group chat containing a wallet bot is
+  // not something to serve balances into by accident.
+  if (!message?.text || message.chat.type !== "private") return null;
+
+  const trimmed = message.text.trim();
+
+  // `/start <token>` is the linking handshake, and the one thing that must
+  // run before the user is resolved — by definition there is no user yet.
   const startMatch = /^\/start\s+(\S+)$/.exec(trimmed);
-  if (startMatch) {
-    await linkAccount({ chatId, token: startMatch[1], username });
-    return;
-  }
 
-  const channel = await findChannel("telegram", chatId);
-  if (!channel || !channel.verified_at) {
-    await sendTelegramMessage({
-      to: chatId,
-      body: [
-        "This Telegram account isn't linked to a tella wallet yet.",
-        "",
-        'Message tella on WhatsApp and say "link telegram" — I\'ll send you a link that connects the two.',
-      ].join("\n"),
-    });
-    return;
-  }
-
-  const user = await findUserById(channel.user_id);
-  if (!user) {
-    await sendTelegramMessage({ to: chatId, body: "I couldn't find that account." });
-    return;
-  }
-
-  const reply = await handleTelegramCommand({ user, text: trimmed });
-  await sendTelegramMessage({ to: chatId, body: reply.text });
+  return {
+    chatId: String(message.chat.id),
+    text: trimmed,
+    messageId: String(update.update_id),
+    username: message.from?.username ?? null,
+    tapped: false,
+    callbackId: null,
+    startToken: startMatch ? startMatch[1] : null,
+  };
 }
 
 /**

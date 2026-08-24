@@ -42,7 +42,7 @@ export type FreezeSource =
   | "operator"
   | "auto";
 
-export type PendingActionKind = "flow";
+export type PendingActionKind = "flow" | "confirm";
 
 /**
  * Backend-initiated multi-turn conversation state — one active conversation
@@ -58,10 +58,28 @@ export interface PendingAction {
   id: string;
   user_id: string;
   kind: PendingActionKind;
-  payload: FlowPendingPayload;
+  payload: PendingActionPayload;
   expires_at: string;
   created_at: string;
 }
+
+/**
+ * A destructive action proposed in one message and carried out in the next.
+ *
+ * Shares the table with `flow` because it shares the property that matters:
+ * one per user, upserted, short TTL. It does NOT share the mechanism —
+ * nothing about resolving one of these touches sendam-ai, and that is the
+ * entire point. The freeze confirmation has to work when the decoder is the
+ * thing that is down. See lib/agent/confirm-action.ts.
+ */
+export interface ConfirmPendingPayload {
+  action: "freeze";
+  source: FreezeSource;
+  reason: string;
+}
+
+export type PendingActionPayload = FlowPendingPayload | ConfirmPendingPayload;
+
 
 /**
  * A pending send. No per-user uniqueness — a user can have several of

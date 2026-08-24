@@ -1,5 +1,6 @@
 import type { DecodedIntent } from "@/lib/sendam-ai/client";
 import { isEvmAddress, normalizePhone } from "@/lib/utils/phone";
+import { ALL_CHOICES } from "@/lib/agent/menus";
 
 /**
  * Tier 0: intents resolved without leaving this server.
@@ -40,24 +41,39 @@ function intent(
 }
 
 /**
- * Titles of the interactive buttons and list rows tella itself sends, exactly
- * as WhatsApp echoes them back on a tap.
+ * Titles of the tappable options tella itself sends, exactly as a channel
+ * echoes them back on a tap.
  *
- * These are authored in lib/meta/client.ts and mirrored in the Twilio content
- * templates (create-content-templates.ts). If a title changes there, it has
- * to change here, and the test file pins the pairs so a drift shows up as a
- * failure rather than as a mysterious rise in decoder cost.
+ * DERIVED, not mirrored. These used to be a hand-maintained copy of the
+ * titles hard-coded in lib/meta/client.ts, with a test pinning the pairs so
+ * that drift showed up as a failure rather than as a mysterious rise in
+ * decoder cost. Now lib/agent/menus.ts is the only definition and this reads
+ * it, so a renamed button cannot stop matching itself.
  */
-const TAPPED_TITLES: Record<string, DecodedIntent["intent"]> = {
+/**
+ * What each choice id means. The ids are stable; the titles are copy.
+ *
+ * Declared before TAPPED_TITLES because that one reads it at module load —
+ * a const referenced above its own declaration is a ReferenceError, not a
+ * hoisted undefined.
+ */
+const INTENT_FOR_CHOICE: Record<string, DecodedIntent["intent"] | undefined> = {
   balance: "BALANCE",
-  "my address": "ADDRESS",
+  address: "ADDRESS",
   send: "SEND",
-  "send usdc": "SEND",
   history: "HISTORY",
-  "how it works": "HOW_IT_WORKS",
-  "is it safe?": "SECURITY",
-  menu: "HELP",
+  how: "HOW_IT_WORKS",
+  safe: "SECURITY",
+  // "Freeze it" and "Not now" answer a confirmation prompt and are resolved
+  // by lib/agent/confirm-action.ts before any decoding happens. Absent on
+  // purpose: classifying "Not now" as an intent would be wrong.
 };
+
+const TAPPED_TITLES: Record<string, DecodedIntent["intent"]> = Object.fromEntries(
+  ALL_CHOICES.map((c) => [c.title.toLowerCase(), INTENT_FOR_CHOICE[c.id]]).filter(
+    ([, kind]) => kind !== undefined,
+  ),
+) as Record<string, DecodedIntent["intent"]>;
 
 /**
  * Typed shorthands. Generous on purpose: every one of these is a read, and
@@ -66,13 +82,29 @@ const TAPPED_TITLES: Record<string, DecodedIntent["intent"]> = {
 const TYPED: Array<[RegExp, DecodedIntent["intent"]]> = [
   [/^(balance|bal|my balance|whats my balance|what'?s my balance)$/i, "BALANCE"],
   [/^(address|my address|wallet address|my wallet address|receive)$/i, "ADDRESS"],
-  [/^(history|transactions|my transactions|recent)$/i, "HISTORY"],
+  [/^(history|transactions|my transactions|recent|pending)$/i, "HISTORY"],
   [/^(help|menu|options|commands|start)$/i, "HELP"],
   [/^(cancel|stop it|nevermind|never mind)$/i, "CANCEL"],
   [/^(hi|hey|hello|yo|good morning|good afternoon|good evening)$/i, "GREETING"],
   [/^(thanks|thank you|thx|ta)$/i, "THANKS"],
   [/^(bye|goodbye|later|see you)$/i, "GOODBYE"],
 ];
+
+/**
+ * Strip one leading slash, so /balance and balance are the same message.
+ *
+ * Slash commands are Telegram's native idiom and they arrived with the
+ * bespoke Telegram handler that no longer exists. Normalising here gives
+ * them to every channel at once rather than making them a Telegram feature —
+ * and gives the next social its command set for free.
+ *
+ * One slash, and only when a letter follows it. Bounded so this cannot
+ * quietly reinterpret anything else a user might type.
+ */
+function stripCommandPrefix(text: string): string {
+  // Telegram appends @botname when several bots share a group chat.
+  return text.replace(/^\/([a-z][a-z_]*)(@[\w]+)?/i, "$1");
+}
 
 /**
  * The one send shape tier 0 will accept.
@@ -87,13 +119,15 @@ const CANONICAL_SEND =
 const SINGLE_WORD_LABEL = /^[a-z][a-z'’-]{0,31}$/i;
 
 export function fastPathDecode(text: string): DecodedIntent | null {
-  const trimmed = text.trim();
-  if (!trimmed) return null;
+  const raw = text.trim();
+  if (!raw) return null;
 
-  const lowered = trimmed.toLowerCase();
-
-  const tapped = TAPPED_TITLES[lowered];
+  // Titles are matched before the slash is stripped: a button label is
+  // exactly what we wrote, and nothing about it should be reinterpreted.
+  const tapped = TAPPED_TITLES[raw.toLowerCase()];
   if (tapped) return intent(tapped);
+
+  const trimmed = stripCommandPrefix(raw);
 
   for (const [pattern, kind] of TYPED) {
     if (pattern.test(trimmed)) return intent(kind);

@@ -39,11 +39,11 @@ export const REPLIES = {
   ],
 
   about: [
-    "I'm *tella*, your money companion right here in WhatsApp 💚\n\nI hold a USDC wallet for you so you can send and receive money just by texting — no app to download, no seed phrases.",
-    "Great question, {name}! *tella* lets you send and receive *USDC* over WhatsApp.\n\nYou get a real wallet, but you talk to it in plain language — like \"send 5 to +234…\".",
+    "I'm *tella*, your money companion right here in your chats 💚\n\nI hold a USDC wallet for you so you can send and receive money just by texting — no app to download, no seed phrases.",
+    "Great question, {name}! *tella* lets you send and receive *USDC* by chat.\n\nYou get a real wallet, but you talk to it in plain language — like \"send 5 to +234…\".",
     "*tella* is a chat-native wallet 💸\n\nI manage a secure USDC wallet for you and handle the blockchain bits behind the scenes. You just message me.",
     "I'm tella — think of me as a friend who happens to hold your USDC 👛\n\nSend, receive, check your balance… all from this chat.",
-    "tella = money over WhatsApp, {name} 🚀\n\nNo app, no jargon. You get a USDC wallet and I handle the rest. Ask me \"how does this work?\" to learn more.",
+    "tella = money over chat, {name} 🚀\n\nNo app, no jargon. You get a USDC wallet and I handle the rest. Ask me \"how does this work?\" to learn more.",
   ],
 
   howItWorks: [
@@ -62,7 +62,7 @@ export const REPLIES = {
 
   security: [
     "Totally fair to ask, {name} 🔐\n\nEvery send needs *your* PIN confirmation in the browser — I can't move funds on my own. Nothing leaves your wallet without you approving it.",
-    "Your safety matters 💚\n\n• You approve every send with a PIN\n• Confirmations happen on a secure page, not in chat\n• I never ask for your full PIN over WhatsApp",
+    "Your safety matters 💚\n\n• You approve every send with a PIN\n• Confirmations happen on a secure page, not in chat\n• I never ask for your full PIN in chat",
     "Security first, {name}. No send goes through until you tap the confirm link and enter your PIN. A \"yes\" in chat alone never moves money.",
     "I take this seriously 🛡️\n\nMoney only moves after you confirm with your PIN on the secure page. If something ever looks off, just reply *no* to cancel.",
   ],

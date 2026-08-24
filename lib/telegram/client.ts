@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
+import type { Choice } from "@/lib/agent/menus";
 
 /**
  * Telegram Bot API client.
@@ -65,6 +66,31 @@ async function callTelegram(
   return String(data.result?.message_id ?? "");
 }
 
+/**
+ * Translate the app's neutral emphasis markup into something Telegram draws.
+ *
+ * The core composes one string for every channel and marks emphasis the
+ * WhatsApp way, with *asterisks*. Meta and Twilio render that natively;
+ * Telegram shows the asterisks literally unless told otherwise.
+ *
+ * HTML rather than MarkdownV2, deliberately. MarkdownV2 requires escaping
+ * eighteen characters, several of which appear in ordinary beneficiary
+ * names and wallet addresses, and a single missed one fails the entire
+ * send with a 400. HTML needs three, and they are escaped first so that a
+ * name containing "&" or "<" cannot break the message — which is exactly
+ * the class of bug the original "no parse_mode at all" comment was avoiding.
+ */
+export function toTelegramHtml(body: string): string {
+  const escaped = body
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+  return escaped
+    .replace(/`([^`\n]+)`/g, "<code>$1</code>")
+    .replace(/\*([^*\n]+)\*/g, "<b>$1</b>");
+}
+
 export async function sendTelegramMessage({
   to,
   body,
@@ -74,12 +100,84 @@ export async function sendTelegramMessage({
 }): Promise<string> {
   return callTelegram("sendMessage", {
     chat_id: to,
-    text: body,
-    // The bot writes its own copy, so parsing is not needed and Markdown
-    // would turn an unescaped underscore in a beneficiary name into a
-    // formatting error that fails the whole send.
+    text: toTelegramHtml(body),
+    parse_mode: "HTML",
     disable_web_page_preview: true,
   });
+}
+
+/**
+ * Tap-to-choose options, as an inline keyboard.
+ *
+ * Inline rather than a reply keyboard on purpose: a reply keyboard replaces
+ * the user's compose bar until dismissed, which is an intrusive thing to do
+ * to someone who might want to type "send 5 to chidi" next.
+ *
+ * The tap arrives back as a callback_query carrying `id`, and the route
+ * resolves it to the choice's title before handing it to the core — so by
+ * the time anything downstream sees it, a tap is indistinguishable from the
+ * user having typed the button's label. That is the contract in
+ * lib/agent/menus.ts, honoured here.
+ */
+export async function sendTelegramChoices({
+  to,
+  body,
+  choices,
+}: {
+  to: string;
+  body: string;
+  choices: Choice[];
+}): Promise<string> {
+  return callTelegram("sendMessage", {
+    chat_id: to,
+    text: toTelegramHtml(body),
+    parse_mode: "HTML",
+    disable_web_page_preview: true,
+    reply_markup: {
+      // One per row: these are sentences, not icons, and Telegram truncates
+      // side-by-side buttons hard on narrow screens.
+      inline_keyboard: choices.map((c) => [
+        { text: c.title, callback_data: c.id },
+      ]),
+    },
+  });
+}
+
+/** A single tap-to-open URL button. */
+export async function sendTelegramLink({
+  to,
+  body,
+  label,
+  url,
+}: {
+  to: string;
+  body: string;
+  label: string;
+  url: string;
+}): Promise<string> {
+  return callTelegram("sendMessage", {
+    chat_id: to,
+    text: toTelegramHtml(body),
+    parse_mode: "HTML",
+    disable_web_page_preview: true,
+    reply_markup: { inline_keyboard: [[{ text: label, url }]] },
+  });
+}
+
+/**
+ * Acknowledge a tapped inline button.
+ *
+ * Not optional politeness: Telegram spins a loading indicator on the button
+ * until this is called, and leaves it spinning for a while if it never is.
+ */
+export async function answerTelegramCallback(callbackId: string): Promise<void> {
+  try {
+    await callTelegram("answerCallbackQuery", { callback_query_id: callbackId });
+  } catch (err) {
+    // The tap has already been recorded; failing to clear the spinner is
+    // cosmetic and must not abort handling the message it produced.
+    console.error("[telegram] answerCallbackQuery failed", err);
+  }
 }
 
 export async function sendTelegramImage({
@@ -94,7 +192,7 @@ export async function sendTelegramImage({
   return callTelegram("sendPhoto", {
     chat_id: to,
     photo: imageUrl,
-    ...(caption ? { caption } : {}),
+    ...(caption ? { caption: toTelegramHtml(caption), parse_mode: "HTML" } : {}),
   });
 }
 

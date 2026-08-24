@@ -1,16 +1,6 @@
 import { NextResponse, after } from "next/server";
 import crypto from "node:crypto";
-import { claimMessage, releaseMessage } from "@/lib/messaging/processed-messages";
-import {
-  sendWhatsAppMessage,
-  sendWhatsAppButtons,
-  sendWhatsAppList,
-  sendWhatsAppConfirm,
-} from "@/lib/meta/client";
-import { handleIncomingMessage } from "@/lib/agent/handler";
-import { findOrCreateUser } from "@/lib/users/repository";
-import { provisionWalletForUser } from "@/lib/wallet/provision";
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { handleInbound } from "@/lib/messaging/inbound";
 import { allowUnsignedWebhooks, redactNumber } from "@/lib/whatsapp/signature-policy";
 
 // The reply is composed inside after(), past the 200 the provider already
@@ -89,23 +79,28 @@ export async function POST(request: Request) {
   }
 
   after(async () => {
-    // Claimed per message, not per request: one delivery can carry several,
-    // and a redelivery can carry a different subset of the same ones.
+    // One delivery can carry several messages, and a redelivery can carry a
+    // different subset of the same ones — so each is claimed on its own,
+    // inside handleInbound.
     for (const msg of messages) {
-      const claimed = await claimMessage({
-        provider: "meta",
-        messageId: msg.messageId,
+      // Redacted for the same reason the Twilio route redacts: the message
+      // id is enough to find this message in Meta's console, and the phone
+      // number, profile name and body are not things that belong in stdout.
+      console.log("[meta] incoming", {
+        id: msg.messageId,
+        from: redactNumber(msg.fromE164),
+        chars: msg.text.length,
       });
-      if (!claimed) {
-        console.log("[meta] duplicate delivery ignored", { id: msg.messageId });
-        continue;
-      }
 
       try {
-        await processIncoming(msg);
+        await handleInbound({
+          provider: "meta",
+          externalId: msg.fromE164,
+          text: msg.text,
+          messageId: msg.messageId,
+        });
       } catch (err) {
-        console.error("[meta] processing error", err);
-        await releaseMessage({ provider: "meta", messageId: msg.messageId });
+        console.error("[meta] inbound failed", { id: msg.messageId, err });
       }
     }
   });
@@ -197,110 +192,4 @@ function extractTextMessages(payload: MetaWebhookPayload): IncomingMessage[] {
     }
   }
   return out;
-}
-
-const FALLBACK_MESSAGE =
-  "⚠️ I'm having a bit of trouble on my end right now. Please try again in a moment — your funds are safe.";
-
-async function processIncoming(msg: IncomingMessage) {
-  // Existing users are stored with Twilio-style `whatsapp:+E164`. Normalize
-  // here so the same user row matches whether they came in via Twilio or Meta.
-  const normalizedNumber = `whatsapp:+${msg.fromE164}`;
-
-  // Same redaction as the Twilio route: the message ID is enough to find
-  // this message in Meta's console, and the phone number, profile name and
-  // message text are not things that belong in stdout.
-  console.log("[meta] incoming", {
-    id: msg.messageId,
-    from: redactNumber(normalizedNumber),
-    chars: msg.text.length,
-  });
-
-  // Unlike the Twilio webhook (app/api/whatsapp/route.ts), this handler had
-  // no fallback-message path: an exception anywhere below used to be
-  // swallowed by the caller's bare `console.error` with nothing sent back
-  // to the user — total silence from their side. Mirror Twilio's pattern:
-  // any failure up through getting a reply back sends a "something's
-  // wrong" message instead of nothing.
-  let result: Awaited<ReturnType<typeof handleIncomingMessage>>;
-  try {
-    const { user, isNew } = await findOrCreateUser({
-      whatsappNumber: normalizedNumber,
-      channel: "meta",
-    });
-
-    result = await handleIncomingMessage({ user, text: msg.text, isNew });
-  } catch (err) {
-    console.error("[meta] processing error", err);
-    try {
-      await sendWhatsAppMessage({ to: normalizedNumber, body: FALLBACK_MESSAGE });
-    } catch (sendErr) {
-      console.error("[meta] fallback send failed", sendErr);
-    }
-    return;
-  }
-
-  const { reply, interactive, confirm, followUp, sideEffect } = result;
-
-  try {
-    if (confirm) {
-      await sendWhatsAppConfirm({ to: normalizedNumber, body: reply, token: confirm.token });
-    } else if (interactive === "buttons") {
-      await sendWhatsAppButtons({ to: normalizedNumber, body: reply });
-    } else if (interactive === "list") {
-      await sendWhatsAppList({ to: normalizedNumber, body: reply });
-    } else {
-      await sendWhatsAppMessage({ to: normalizedNumber, body: reply });
-    }
-
-    // Sent as its own plain message — nothing else in the bubble — so a
-    // long-press → Copy on WhatsApp grabs exactly this and nothing mixed in
-    // from the reply above (e.g. a wallet address).
-    if (followUp) {
-      await sendWhatsAppMessage({ to: normalizedNumber, body: followUp });
-    }
-  } catch (err) {
-    // Meta itself is unreachable — nothing left to do but log.
-    console.error("[meta] send reply failed", err);
-    return;
-  }
-
-  // Post-reply side effects are best-effort: the user already has their
-  // reply, so a failure here is logged but not surfaced again.
-  if (sideEffect?.kind === "provision_wallet") {
-    try {
-      const success = await provisionWalletForUser(sideEffect.userId);
-
-      if (success) {
-        const supabase = getSupabaseAdmin();
-        const { data } = await supabase
-          .from("tella_users")
-          .select("wallet_address")
-          .eq("id", sideEffect.userId)
-          .single();
-
-        const address = (data as { wallet_address: string } | null)
-          ?.wallet_address;
-        if (address) {
-          await sendWhatsAppButtons({
-            to: normalizedNumber,
-            body: [
-              "✅ Your wallet is ready!",
-              "",
-              `Address: \`${address}\``,
-              "",
-              "Send USDC to this address on Arc to fund your account, then tap below to get started.",
-            ].join("\n"),
-          });
-        }
-      } else {
-        await sendWhatsAppMessage({
-          to: normalizedNumber,
-          body: "I couldn't set up your wallet just now — I'll retry automatically. You can keep using tella in the meantime.",
-        });
-      }
-    } catch (err) {
-      console.error("[meta] provisionWallet failed", err);
-    }
-  }
 }

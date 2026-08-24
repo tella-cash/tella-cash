@@ -86,12 +86,19 @@ export function ConfirmClient({
   // passkey-only account on a browser that can't do WebAuthn there is no
   // path at all from here, so say so plainly and point at recovery rather
   // than dead-ending on a form.
+  //
+  // The "open it in your browser" line leads, because the most common way to
+  // reach this state is not an old device: it is an in-app browser. Links
+  // tapped inside WhatsApp and Telegram open in one, and several of those
+  // cannot do WebAuthn at all — so the user is being told their passkey is
+  // unusable while holding the exact phone that has it. Copying the link out
+  // into Safari or Chrome fixes it in one step.
   const fallbackStage: Stage = canUsePin
     ? pinStage
     : {
         kind: "error",
         message:
-          "This account confirms with a passkey, and this browser can't use one. Open this link on the device where you set it up, or reply \"reset\" on WhatsApp to set a new confirmation method.",
+          "This account confirms with a passkey, and this browser can't use one. If you tapped the link inside a chat app, open it in your phone's browser instead — that usually fixes it. Otherwise open it on the device where you set the passkey up, or reply \"reset\" in chat to set a new confirmation method.",
       };
 
   // If the browser can't do WebAuthn (or biometric isn't on offer), the

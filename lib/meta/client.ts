@@ -1,4 +1,4 @@
-import { buildConfirmUrl } from "@/lib/confirm/url";
+import type { Choice } from "@/lib/agent/menus";
 
 const GRAPH_API_VERSION = "v21.0";
 
@@ -97,16 +97,18 @@ export async function sendWhatsAppImage({
 }
 
 /**
- * Quick-reply buttons (max 3): the fast triage menu.
+ * Quick-reply buttons: Meta's widget for a small option set.
  *
- * Titles/ids mirror the Twilio `twilio/quick-reply` template
- * (see create-content-templates.ts) so a tap routes through the same
- * intent classifier as typed text.
+ * Capped at three by the Cloud API, which is why lib/messaging/render.ts
+ * routes anything larger to the list picker instead. The titles come from
+ * lib/agent/menus.ts, so a tap comes back as `title` and resolves through
+ * the same tier-0 classifier as typed text — see fast-path.ts.
  */
 export async function sendWhatsAppButtons({
   to,
   body,
-}: SendWhatsAppMessageArgs): Promise<string> {
+  choices,
+}: SendWhatsAppMessageArgs & { choices: Choice[] }): Promise<string> {
   return postToGraph(
     normalizeRecipient(to),
     {
@@ -115,11 +117,12 @@ export async function sendWhatsAppButtons({
         type: "button",
         body: { text: body },
         action: {
-          buttons: [
-            { type: "reply", reply: { id: "balance", title: "Balance" } },
-            { type: "reply", reply: { id: "address", title: "My address" } },
-            { type: "reply", reply: { id: "send", title: "Send" } },
-          ],
+          buttons: choices.slice(0, 3).map((c) => ({
+            type: "reply",
+            // Meta rejects titles over 20 characters with a 400 that names
+            // no field, so truncating here is worth more than it costs.
+            reply: { id: c.id, title: c.title.slice(0, 20) },
+          })),
         },
       },
     },
@@ -127,14 +130,12 @@ export async function sendWhatsAppButtons({
   );
 }
 
-/**
- * List picker: the fuller menu with more options + descriptions. Mirrors
- * the Twilio `twilio/list-picker` template.
- */
+/** List picker: the fuller menu, with descriptions. */
 export async function sendWhatsAppList({
   to,
   body,
-}: SendWhatsAppMessageArgs): Promise<string> {
+  choices,
+}: SendWhatsAppMessageArgs & { choices: Choice[] }): Promise<string> {
   return postToGraph(
     normalizeRecipient(to),
     {
@@ -147,14 +148,11 @@ export async function sendWhatsAppList({
           sections: [
             {
               title: "Options",
-              rows: [
-                { id: "balance", title: "Balance", description: "Check your USDC balance" },
-                { id: "address", title: "My address", description: "Get your wallet address" },
-                { id: "send", title: "Send USDC", description: "Send to a number, address, or saved name" },
-                { id: "history", title: "History", description: "See your recent transactions" },
-                { id: "how", title: "How it works", description: "Learn how tella works" },
-                { id: "safe", title: "Is it safe?", description: "How your money is protected" },
-              ],
+              rows: choices.slice(0, 10).map((c) => ({
+                id: c.id,
+                title: c.title.slice(0, 24),
+                ...(c.description ? { description: c.description } : {}),
+              })),
             },
           ],
         },
@@ -165,15 +163,17 @@ export async function sendWhatsAppList({
 }
 
 /**
- * Send a confirm-send message with a tap-to-open "Confirm send" URL button,
- * via Meta's `cta_url` interactive type. Mirrors Twilio's confirm CTA
- * template — same destination (the /confirm/{token} page), one tap away.
+ * A message with one tap-to-open URL button, via Meta's `cta_url` type.
+ *
+ * Generalised from the confirm-send special case it started as: the core no
+ * longer names a token, it names a label and a URL, and this draws it.
  */
-export async function sendWhatsAppConfirm({
+export async function sendWhatsAppLink({
   to,
   body,
-  token,
-}: SendWhatsAppMessageArgs & { token: string }): Promise<string> {
+  label,
+  url,
+}: SendWhatsAppMessageArgs & { label: string; url: string }): Promise<string> {
   return postToGraph(
     normalizeRecipient(to),
     {
@@ -183,13 +183,10 @@ export async function sendWhatsAppConfirm({
         body: { text: body },
         action: {
           name: "cta_url",
-          parameters: {
-            display_text: "Confirm send",
-            url: buildConfirmUrl(token),
-          },
+          parameters: { display_text: label, url },
         },
       },
     },
-    "confirm cta",
+    "link cta",
   );
 }

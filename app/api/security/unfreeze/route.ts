@@ -140,7 +140,7 @@ export async function POST(request: Request) {
           lines: [
             "The freeze on your tella wallet has been lifted, and it can send money again.",
             "",
-            "If this wasn't you, message tella on WhatsApp immediately and say freeze.",
+            "If this wasn't you, message tella immediately and say freeze — any channel works.",
           ],
         })
       : Promise.resolve(false),

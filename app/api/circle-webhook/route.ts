@@ -316,7 +316,7 @@ async function maybeOfferAccountSecurity(user: tellaUser): Promise<void> {
       body: [
         "🔐 One thing worth doing now you're holding money.",
         "",
-        "Right now anyone with this WhatsApp account can send from your wallet. Next time you send, I'll ask you to set up Face ID or a PIN — that takes about ten seconds and it's worth doing.",
+        "Right now anyone with access to your chat can send from your wallet. Next time you send, I'll ask you to set up Face ID or a PIN — that takes about ten seconds and it's worth doing.",
         "",
         "In the meantime, here's your panic code:",
         "",

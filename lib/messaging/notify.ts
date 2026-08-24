@@ -1,15 +1,7 @@
 import type { tellaUser } from "@/lib/supabase/types";
-import {
-  sendWhatsAppMessage as sendViaTwilio,
-  sendWhatsAppImage as sendImageViaTwilio,
-} from "@/lib/twilio/client";
-import {
-  sendWhatsAppMessage as sendViaMeta,
-  sendWhatsAppImage as sendImageViaMeta,
-} from "@/lib/meta/client";
-import { sendTelegramMessage, sendTelegramImage, TelegramBlockedError } from "@/lib/telegram/client";
+import { TelegramBlockedError } from "@/lib/telegram/client";
 import { listChannels, markChannelUnverified, type UserChannel } from "./channels";
-import type { MessageProvider } from "./processed-messages";
+import { PROVIDERS } from "./providers";
 
 /**
  * Outbound messaging, across however many channels a user has linked.
@@ -34,45 +26,12 @@ import type { MessageProvider } from "./processed-messages";
  * Conversational replies go to the primary only, because answering "balance"
  * on three devices is noise, not safety.
  *
- * Interactive messages (buttons, list pickers, confirm CTAs) are deliberately
- * NOT here. That is the one place the providers genuinely diverge — Twilio
- * needs pre-provisioned Content Template SIDs and silently degrades to plain
- * text, Meta builds JSON inline, Telegram has its own keyboard shape — and
- * flattening that into a shared interface would mean the lowest common
- * denominator everywhere. The inbound webhook routes keep composing those
- * themselves.
+ * Notifications are text only, and that is a policy rather than a limit.
+ * The providers can all draw options and links now — see providers.ts — but
+ * an unsolicited message with buttons on it, fanned out to three devices, is
+ * a prompt nobody asked for. Tappable widgets belong on replies to something
+ * the user just sent, which go through lib/messaging/render.ts instead.
  */
-
-interface TextArgs {
-  to: string;
-  body: string;
-}
-
-interface ImageArgs {
-  to: string;
-  imageUrl: string;
-  caption?: string;
-}
-
-interface ChannelClient {
-  sendText(args: TextArgs): Promise<string>;
-  sendImage(args: ImageArgs): Promise<string>;
-}
-
-const CLIENTS: Record<MessageProvider, ChannelClient> = {
-  twilio: {
-    sendText: ({ to, body }) => sendViaTwilio({ to, body }),
-    sendImage: ({ to, imageUrl, caption }) => sendImageViaTwilio({ to, imageUrl, caption }),
-  },
-  meta: {
-    sendText: ({ to, body }) => sendViaMeta({ to, body }),
-    sendImage: ({ to, imageUrl, caption }) => sendImageViaMeta({ to, imageUrl, caption }),
-  },
-  telegram: {
-    sendText: ({ to, body }) => sendTelegramMessage({ to, body }),
-    sendImage: ({ to, imageUrl, caption }) => sendTelegramImage({ to, imageUrl, caption }),
-  },
-};
 
 /**
  * Channels to deliver to, with a fallback for users who predate the channel
@@ -144,7 +103,7 @@ export async function notifyUser({
 
   const results = await Promise.allSettled(
     targets.map((channel) =>
-      CLIENTS[channel.provider].sendText({ to: channel.external_id, body }),
+      PROVIDERS[channel.provider].sendText({ to: channel.external_id, body }),
     ),
   );
 
@@ -163,7 +122,7 @@ export async function notifyUserPrimary({
 
   const results = await Promise.allSettled(
     targets.map((channel) =>
-      CLIENTS[channel.provider].sendText({ to: channel.external_id, body }),
+      PROVIDERS[channel.provider].sendText({ to: channel.external_id, body }),
     ),
   );
 
@@ -183,7 +142,7 @@ export async function notifyUserWithImage({
 
   const results = await Promise.allSettled(
     targets.map((channel) =>
-      CLIENTS[channel.provider].sendImage({ to: channel.external_id, imageUrl, caption }),
+      PROVIDERS[channel.provider].sendImage({ to: channel.external_id, imageUrl, caption }),
     ),
   );
 

@@ -1,5 +1,6 @@
 import twilio from "twilio";
 import { buildConfirmUrl } from "@/lib/confirm/url";
+import { QUICK_CHOICES, MENU_CHOICES, type Choice } from "@/lib/agent/menus";
 
 let _client: ReturnType<typeof twilio> | null = null;
 
@@ -102,60 +103,61 @@ async function sendContentTemplate(
   return message.sid;
 }
 
-/** Quick-reply buttons (max 3): the fast triage menu. */
-export function sendWhatsAppButtons({
+/**
+ * Twilio can only draw the option sets it has Content Templates provisioned
+ * for, and provisioning one is a manual step outside this repo. So this
+ * returns null — "I cannot render this" — rather than pretending, and
+ * lib/messaging/render.ts falls back to plain text with the options listed.
+ *
+ * That null is the honest shape of the constraint. Twilio serves 2 users
+ * against Meta's 63, and the standing decision is that no new Content SIDs
+ * get provisioned for it; a channel that cannot draw a widget should say so
+ * once, here, rather than have every caller remember.
+ */
+export async function sendWhatsAppChoices({
   to,
   body,
-}: SendWhatsAppMessageArgs): Promise<string> {
-  return sendContentTemplate(
-    to,
-    body,
-    process.env.TWILIO_MENU_CONTENT_SID,
-    "buttons",
-  );
-}
+  choices,
+}: SendWhatsAppMessageArgs & { choices: Choice[] }): Promise<string | null> {
+  const ids = choices.map((c) => c.id).join(",");
 
-/** List picker: the fuller menu with more options + descriptions. */
-export function sendWhatsAppList({
-  to,
-  body,
-}: SendWhatsAppMessageArgs): Promise<string> {
-  return sendContentTemplate(
-    to,
-    body,
-    process.env.TWILIO_LIST_CONTENT_SID,
-    "list",
-  );
+  const sid =
+    ids === QUICK_CHOICES.map((c) => c.id).join(",")
+      ? process.env.TWILIO_MENU_CONTENT_SID
+      : ids === MENU_CHOICES.map((c) => c.id).join(",")
+        ? process.env.TWILIO_LIST_CONTENT_SID
+        : undefined;
+
+  if (!sid) return null;
+
+  return sendContentTemplate(to, body, sid, "choices");
 }
 
 /**
- * Send a confirm-send message with a tap-to-open "Confirm send" URL button
- * (WhatsApp call-to-action), so the user lands on the confirm page in one
- * tap instead of fishing a raw link out of the text.
+ * A tap-to-open URL button.
  *
- * The CTA template bakes in the base URL and takes the token as a variable:
- *   body  → {{1}}
- *   url   → <APP_BASE_URL>/confirm/{{2}}
+ * The provisioned CTA template bakes APP_BASE_URL in and takes only the
+ * confirm token as a variable, so it can address exactly one destination:
+ *   body → {{1}},  url → <APP_BASE_URL>/confirm/{{2}}
  *
- * If TWILIO_CONFIRM_CONTENT_SID isn't provisioned yet, fall back to a plain
- * text message with the full link appended — same destination, less polish.
+ * Anything else returns null and degrades to a plain message with the link
+ * appended. Same destination, less polish, no lying about what the template
+ * can point at.
  */
-export async function sendWhatsAppConfirm({
+export async function sendWhatsAppLink({
   to,
   body,
-  token,
-}: SendWhatsAppMessageArgs & { token: string }): Promise<string> {
+  url,
+}: SendWhatsAppMessageArgs & { label: string; url: string }): Promise<string | null> {
+  const contentSid = process.env.TWILIO_CONFIRM_CONTENT_SID;
+  if (!contentSid) return null;
+
+  const token = confirmToken(url);
+  if (!token) return null;
+
   const from = process.env.TWILIO_WHATSAPP_FROM;
   if (!from) {
     throw new Error("Missing TWILIO_WHATSAPP_FROM environment variable");
-  }
-
-  const contentSid = process.env.TWILIO_CONFIRM_CONTENT_SID;
-  if (!contentSid) {
-    return sendWhatsAppMessage({
-      to,
-      body: `${body}\n\n${buildConfirmUrl(token)}`,
-    });
   }
 
   const message = await getClient().messages.create({
@@ -164,6 +166,14 @@ export async function sendWhatsAppConfirm({
     contentSid,
     contentVariables: JSON.stringify({ "1": body, "2": token }),
   });
-  console.log("[twilio] sent confirm cta", { sid: message.sid, to });
+  console.log("[twilio] sent link cta", { sid: message.sid, to });
   return message.sid;
+}
+
+/** The token, if this URL is one the CTA template can actually address. */
+function confirmToken(url: string): string | null {
+  const prefix = buildConfirmUrl("");
+  if (!url.startsWith(prefix)) return null;
+  const token = url.slice(prefix.length);
+  return token.length > 0 && !token.includes("/") ? token : null;
 }

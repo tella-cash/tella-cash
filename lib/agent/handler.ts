@@ -1,4 +1,9 @@
-import type { tellaUser, PendingAction, PendingSend } from "@/lib/supabase/types";
+import type {
+  tellaUser,
+  PendingAction,
+  PendingSend,
+  FreezeSource,
+} from "@/lib/supabase/types";
 import {
   completeOnboarding,
   findUserByWhatsApp,
@@ -6,6 +11,7 @@ import {
 import {
   getActivePending,
   deletePending,
+  createPending,
   createPendingFlow,
 } from "@/lib/pending_actions/repository";
 import {
@@ -59,33 +65,57 @@ import {
   nextQuestionFor,
 } from "@/lib/sendam-ai/flows";
 import { REPLIES, pickReply } from "@/lib/agent/replies";
+import {
+  QUICK_CHOICES,
+  MENU_CHOICES,
+  FREEZE_CHOICES,
+  type Choice,
+} from "@/lib/agent/menus";
+import { isAffirmation, isDeclination, isConfirmPayload } from "@/lib/agent/confirm-action";
+import { buildConfirmUrl } from "@/lib/confirm/url";
 
 interface IncomingMessage {
   user: tellaUser;
   text: string;
   isNew: boolean;
+  /**
+   * Which channel this arrived on, for the audit trail only.
+   *
+   * Nothing here branches on it — that is the whole point of
+   * lib/messaging/providers.ts. It exists so a freeze records where it came
+   * from, which is the first thing anyone asks afterwards. Defaults to
+   * WhatsApp so existing callers and tests need no change.
+   */
+  source?: FreezeSource;
 }
 
 export interface HandlerResult {
   reply: string;
   /**
-   * When set, the reply is delivered as a WhatsApp interactive message
-   * (the `reply` text becomes the message body). Falls back to plain text
-   * if the matching Content Template isn't provisioned.
+   * Tap-to-choose options.
+   *
+   * Deliberately NOT a widget name. This used to be
+   * `interactive: "buttons" | "list"`, which named two Meta message types
+   * and meant every other channel either implemented Meta's vocabulary or
+   * got nothing. Each provider now draws these however it can — quick
+   * replies, a list picker, an inline keyboard, or a line of plain text —
+   * and lib/messaging/render.ts owns the fallback.
+   *
+   * The contract that makes it work: a tap must arrive back as inbound text
+   * equal to the choice's `title`, so nothing downstream can tell a tap from
+   * typing. See lib/agent/menus.ts.
    */
-  interactive?: "buttons" | "list";
+  choices?: Choice[];
   /**
-   * When set, the reply is a confirm-send prompt and is delivered with a
-   * tap-to-open "Confirm send" URL button (the token points at the confirm
-   * page). Falls back to plain text + link if the CTA template isn't
-   * provisioned.
+   * A single call-to-action link. Rendered as a tappable button where the
+   * channel has one, and appended to the message where it does not.
    */
-  confirm?: { token: string };
+  link?: { label: string; url: string };
   /**
    * A second plain-text message sent immediately after `reply`, for
    * content that should stand alone in its own bubble — a wallet address,
-   * so a long-press → Copy on WhatsApp grabs exactly that and nothing
-   * else mixed in from surrounding sentence text.
+   * so a long-press → Copy grabs exactly that and nothing else mixed in
+   * from surrounding sentence text.
    */
   followUp?: string;
   sideEffect?: { kind: "provision_wallet"; userId: string };
@@ -115,14 +145,14 @@ function isValidBeneficiaryLabel(input: string): boolean {
 export async function handleIncomingMessage(
   message: IncomingMessage,
 ): Promise<HandlerResult> {
-  const { user, text, isNew } = message;
+  const { user, text, isNew, source = "whatsapp" } = message;
 
   if (isNew) {
     return {
       reply: [
         "👋 Welcome to tella!",
         "",
-        "Send and receive USDC right here in WhatsApp — no exchange, no app, no seed phrase to lose. I'll set your wallet up in about 30 seconds.",
+        "Send and receive USDC right here in chat — no exchange, no app, no seed phrase to lose. I'll set your wallet up in about 30 seconds.",
         "",
         "What should I call you?",
         "",
@@ -142,13 +172,28 @@ export async function handleIncomingMessage(
   // outstanding must start a fresh one rather than being swallowed by an
   // old prompt (see handleOnboardedUser, which checks for a structured send
   // before anything pending-send-related).
+  const pending = await getActivePending(user.id);
+
+  // A proposed destructive action outranks everything, including a fresh
+  // freeze request: someone who typed "freeze", read the prompt and typed
+  // "freeze" again means yes, not start over. Resolved with no decoder call
+  // at all — see lib/agent/confirm-action.ts for why that is not an
+  // optimisation but a requirement.
+  if (pending?.kind === "confirm") {
+    const resolution = await resolvePendingConfirmation({ user, pending, text });
+    if (resolution) return resolution;
+    // Fell through: the message was not an answer. The row is gone and the
+    // message gets handled normally below, rather than being scolded for
+    // arriving at the wrong moment.
+  }
+
   // Checked before the pending-flow interception below, not after. A user
   // halfway through "save this recipient?" whose phone has just been stolen
   // must not have "freeze" swallowed as an answer to a beneficiary prompt.
   // This is also matched before any decoder runs, for the reason
   // detect-freeze-request.ts gives: the kill switch cannot depend on a
   // network call to a service that may be the thing that is down.
-  if (isFreezeRequest(text)) return handleFreezeRequest(user);
+  if (isFreezeRequest(text)) return startFreezeConfirmation(user, source);
 
   if (isUnfreezeRequest(text)) return handleUnfreezeRequest(user);
 
@@ -156,9 +201,8 @@ export async function handleIncomingMessage(
 
   if (isGoogleLinkRequest(text)) return handleGoogleLinkRequest(user);
 
-  const flowPending = await getActivePending(user.id);
-  if (flowPending) {
-    return handleFlowPendingResponse({ user, pending: flowPending, text });
+  if (pending?.kind === "flow") {
+    return handleFlowPendingResponse({ user, pending, text });
   }
 
   return handleOnboardedUser({ user, text });
@@ -222,9 +266,18 @@ async function handleFlowPendingResponse({
   pending: PendingAction;
   text: string;
 }): Promise<HandlerResult> {
+  const name = firstName(user);
+
+  if (isConfirmPayload(pending.payload)) {
+    // Unreachable via the dispatcher, which routes on `kind`. Guarded anyway
+    // so a row whose kind and payload disagree cannot be read as a flow.
+    console.error("[flow] confirm payload on a flow row", { id: pending.id });
+    await deletePending(pending.id);
+    return { reply: pickReply(REPLIES.unknown, { name }), choices: QUICK_CHOICES };
+  }
+
   const { flow, token } = pending.payload;
   const failures = pending.payload.failures ?? 0;
-  const name = firstName(user);
 
   let result: Awaited<ReturnType<typeof decodeFollowUp>>;
   try {
@@ -256,7 +309,7 @@ async function handleFlowPendingResponse({
           "",
           "Let's start over — what would you like to do?",
         ].join("\n"),
-        interactive: "buttons",
+        choices: QUICK_CHOICES,
       };
     }
 
@@ -293,7 +346,7 @@ async function handleFlowPendingResponse({
   }
 
   await deletePending(pending.id);
-  return { reply: pickReply(REPLIES.unknown, { name }), interactive: "buttons" };
+  return { reply: pickReply(REPLIES.unknown, { name }), choices: QUICK_CHOICES };
 }
 
 async function completeSaveBeneficiaryFlow({
@@ -508,9 +561,12 @@ async function sendFaucetTokens({
   }
 }
 
-/** A confirm-send prompt + the CTA token that opens the confirm page. */
+/** A confirm-send prompt + the link that opens the confirm page. */
 function confirmResult(pending: PendingSend): HandlerResult {
-  return { reply: buildConfirmBody(pending), confirm: { token: pending.id } };
+  return {
+    reply: buildConfirmBody(pending),
+    link: { label: "Confirm send", url: buildConfirmUrl(pending.id) },
+  };
 }
 
 function buildConfirmBody(pending: PendingSend): string {
@@ -540,7 +596,7 @@ async function handleOnboardedUser({
   const trimmed = text.trim();
 
   if (!trimmed)
-    return { reply: pickReply(REPLIES.empty, { name }), interactive: "buttons" };
+    return { reply: pickReply(REPLIES.empty, { name }), choices: QUICK_CHOICES };
 
   // Debug health-check stays deterministic.
   if (trimmed.toLowerCase() === "ping") return { reply: "pong ✓" };
@@ -574,11 +630,11 @@ async function handleOnboardedUser({
             "",
             "Try again in a minute. Balance, address and history still work, and you can always reply *freeze* if something's wrong.",
           ].join("\n"),
-          interactive: "buttons",
+          choices: QUICK_CHOICES,
         };
       }
 
-      return { reply: pickReply(REPLIES.unknown, { name }), interactive: "buttons" };
+      return { reply: pickReply(REPLIES.unknown, { name }), choices: QUICK_CHOICES };
     }
   }
 
@@ -599,7 +655,7 @@ async function handleOnboardedUser({
         ].join("\n"),
       };
     }
-    return { reply: pickReply(REPLIES.unknown, { name }), interactive: "buttons" };
+    return { reply: pickReply(REPLIES.unknown, { name }), choices: QUICK_CHOICES };
   }
 
   // A structured send carries real parameters (amount + recipient), so it
@@ -609,14 +665,14 @@ async function handleOnboardedUser({
 
   switch (decoded.intent) {
     case "BALANCE":
-      return { ...(await getBalanceReply(user)), interactive: "buttons" };
+      return { ...(await getBalanceReply(user)), choices: QUICK_CHOICES };
     case "ADDRESS":
-      return { ...addressReply(user), interactive: "buttons" };
+      return { ...addressReply(user), choices: QUICK_CHOICES };
     case "HISTORY":
-      return { reply: await getHistoryReply(user), interactive: "buttons" };
+      return { reply: await getHistoryReply(user), choices: QUICK_CHOICES };
     case "SEND":
       // Send-ish but not parseable — show them the format plus quick taps.
-      return { reply: pickReply(REPLIES.sendHelp, { name }), interactive: "buttons" };
+      return { reply: pickReply(REPLIES.sendHelp, { name }), choices: QUICK_CHOICES };
     case "GREETING":
       // sendam-ai reads the tone of the user's own greeting and composes a
       // matching reply; fall back to our fixed template on older deploys
@@ -624,28 +680,28 @@ async function handleOnboardedUser({
       return {
         reply:
           sanitizeModelReply(decoded.reply) ?? pickReply(REPLIES.greeting, { name }),
-        interactive: "buttons",
+        choices: QUICK_CHOICES,
       };
     case "HELP":
       // Fuller menu with descriptions.
-      return { reply: pickReply(REPLIES.help, { name }), interactive: "list" };
+      return { reply: pickReply(REPLIES.help, { name }), choices: MENU_CHOICES };
     case "ABOUT":
-      return { reply: pickReply(REPLIES.about, { name }), interactive: "buttons" };
+      return { reply: pickReply(REPLIES.about, { name }), choices: QUICK_CHOICES };
     case "HOW_IT_WORKS":
-      return { reply: pickReply(REPLIES.howItWorks, { name }), interactive: "buttons" };
+      return { reply: pickReply(REPLIES.howItWorks, { name }), choices: QUICK_CHOICES };
     case "FEES":
-      return { reply: pickReply(REPLIES.fees, { name }), interactive: "buttons" };
+      return { reply: pickReply(REPLIES.fees, { name }), choices: QUICK_CHOICES };
     case "SECURITY":
-      return { reply: pickReply(REPLIES.security, { name }), interactive: "buttons" };
+      return { reply: pickReply(REPLIES.security, { name }), choices: QUICK_CHOICES };
     case "FAUCET":
       return handleFaucetIntent({ user, asset: decoded.asset });
     case "THANKS":
-      return { reply: pickReply(REPLIES.thanks, { name }), interactive: "buttons" };
+      return { reply: pickReply(REPLIES.thanks, { name }), choices: QUICK_CHOICES };
     case "GOODBYE":
       // No menu on a sign-off — let the conversation rest.
       return { reply: pickReply(REPLIES.goodbye, { name }) };
     case "AFFIRM":
-      return { reply: pickReply(REPLIES.affirm, { name }), interactive: "buttons" };
+      return { reply: pickReply(REPLIES.affirm, { name }), choices: QUICK_CHOICES };
     case "CANCEL":
       return cancelMostRecent(user);
     // No tella equivalent — wallets auto-provision on onboarding, and
@@ -655,14 +711,15 @@ async function handleOnboardedUser({
     case "UNKNOWN":
     default:
       // Help them recover with the quick menu.
-      return { reply: pickReply(REPLIES.unknown, { name }), interactive: "buttons" };
+      return { reply: pickReply(REPLIES.unknown, { name }), choices: QUICK_CHOICES };
   }
 }
 
 /**
- * Issue a recovery link over WhatsApp.
+ * Issue a recovery link.
  *
- * Possession of this WhatsApp account is the authenticating factor — the
+ * Possession of the account this arrived on is the authenticating factor —
+ * the
  * same basis the confirm links already run on. What keeps that acceptable
  * is that the link is single-use, expires in ten minutes, and issuing one
  * is rate-limited: without the limit, anyone who could reach the bot could
@@ -720,7 +777,7 @@ async function cancelMostRecentPendingSend(user: tellaUser): Promise<HandlerResu
   const pendingSends = await listActivePendingSends(user.id);
 
   if (pendingSends.length === 0) {
-    return { reply: pickReply(REPLIES.cancelNothing, { name }), interactive: "buttons" };
+    return { reply: pickReply(REPLIES.cancelNothing, { name }), choices: QUICK_CHOICES };
   }
 
   const latest = pendingSends[0];
@@ -736,7 +793,7 @@ async function cancelMostRecentPendingSend(user: tellaUser): Promise<HandlerResu
 
   return {
     reply: `Cancelled your pending send of ${p.amount} USDC to ${recipientLabel}.${remainingNote}`,
-    interactive: "buttons",
+    choices: QUICK_CHOICES,
   };
 }
 
@@ -861,7 +918,7 @@ async function startSendFlow({
   // than being told now. executePendingSend re-checks authoritatively.
   const limits = await checkSendLimits({ user, amount: intent.amount });
   if (!limits.ok) {
-    return { reply: formatLimitFailure(limits.failure), interactive: "buttons" };
+    return { reply: formatLimitFailure(limits.failure), choices: QUICK_CHOICES };
   }
 
   const rate = await getUsdToNgnRate();
@@ -910,7 +967,7 @@ async function handleUnfreezeRequest(user: tellaUser): Promise<HandlerResult> {
   if (!isFrozen(user)) {
     return {
       reply: `Your account isn't frozen, ${name} — nothing to lift.`,
-      interactive: "buttons",
+      choices: QUICK_CHOICES,
     };
   }
 
@@ -971,14 +1028,30 @@ function frozenReply(name: string): HandlerResult {
 }
 
 /**
- * Turn outbound money off, now.
+ * Propose a freeze, and wait for one word.
  *
- * Requires no factor and no confirmation on purpose. Someone whose phone has
- * just been taken has seconds, not minutes, and an attacker who freezes an
- * account has achieved nothing an attacker wants. The asymmetry is the whole
- * design: see migrations/0012_account_freeze.sql.
+ * WHY THIS IS TWO MESSAGES NOW, since the previous version froze on sight
+ * and argued at length that it should.
+ *
+ * That argument was right about the direction of the risk: an attacker who
+ * freezes an account gains nothing, and someone whose phone has just been
+ * taken has seconds. What it underweighted is how loose
+ * detect-freeze-request.ts has to be to catch "someone took my phone" —
+ * loose enough that it also catches people merely describing a problem.
+ * Every one of those costs an unfreeze, which needs a factor predating the
+ * freeze, which is exactly what most accounts here do not have. So the
+ * accidental freeze was not a mild inconvenience; it was a lockout.
+ *
+ * The price is real and is not hedged: a freeze now takes two messages, and
+ * if the phone is taken between them, nothing freezes. That is why the
+ * panic code (/api/panic) keeps its no-confirmation path — a pre-registered
+ * secret typed on purpose IS the confirmation — and why the copy below says
+ * nothing has changed yet, in those words. See migration 0021.
  */
-async function handleFreezeRequest(user: tellaUser): Promise<HandlerResult> {
+async function startFreezeConfirmation(
+  user: tellaUser,
+  source: FreezeSource,
+): Promise<HandlerResult> {
   const name = firstName(user);
 
   if (isFrozen(user)) {
@@ -991,13 +1064,119 @@ async function handleFreezeRequest(user: tellaUser): Promise<HandlerResult> {
     };
   }
 
+  try {
+    // Upserts on user_id, so this displaces an in-flight beneficiary flow.
+    // That is the right priority — someone reaching for the kill switch is
+    // not still thinking about what to nickname a recipient — but it does
+    // mean the flow is gone rather than resumed afterwards.
+    await createPending({
+      userId: user.id,
+      kind: "confirm",
+      payload: {
+        action: "freeze",
+        source,
+        reason: "user requested via chat",
+      },
+      ttlMinutes: 10,
+    });
+  } catch (err) {
+    // Cannot record the intent, so cannot honour an answer to it. Better to
+    // say so than to prompt for a confirmation that will not resolve.
+    console.error("[freeze] could not start confirmation", { userId: user.id, err });
+    return {
+      reply: [
+        "I couldn't set that up just then, and I don't want to leave you unsure.",
+        "",
+        "Try again right now — reply *freeze*.",
+      ].join("\n"),
+    };
+  }
+
+  return {
+    reply: [
+      `Do you want me to freeze your account, ${name}?`,
+      "",
+      "Nothing will be able to leave your wallet until you lift it, and I'll cancel anything waiting to go out. You'll still be able to receive money.",
+      "",
+      "Reply *FREEZE* to confirm. *Nothing has changed yet.*",
+    ].join("\n"),
+    choices: FREEZE_CHOICES,
+  };
+}
+
+/**
+ * Answer a proposed action.
+ *
+ * Returns null when the message was not an answer at all, and the caller
+ * then handles it normally. Someone who replies "balance" to a freeze prompt
+ * gets their balance — being told "please answer yes or no" by a wallet
+ * during what might be an emergency is the wrong instinct in both directions.
+ */
+async function resolvePendingConfirmation({
+  user,
+  pending,
+  text,
+}: {
+  user: tellaUser;
+  pending: PendingAction;
+  text: string;
+}): Promise<HandlerResult | null> {
+  if (!isConfirmPayload(pending.payload)) {
+    // Kind and payload disagree. Drop it rather than act on a shape we
+    // cannot read.
+    console.error("[confirm] malformed payload", { userId: user.id, id: pending.id });
+    await deletePending(pending.id);
+    return null;
+  }
+
+  const affirmed = isAffirmation(text);
+  const declined = isDeclination(text);
+
+  if (!affirmed && !declined) {
+    await deletePending(pending.id);
+    return null;
+  }
+
+  // Cleared before acting, not after. A freeze that throws must not leave a
+  // row that turns the user's next message into a second freeze attempt.
+  await deletePending(pending.id);
+
+  if (declined) {
+    return {
+      reply: [
+        "Left as it is — nothing has changed.",
+        "",
+        "Reply *freeze* any time if you change your mind.",
+      ].join("\n"),
+      choices: QUICK_CHOICES,
+    };
+  }
+
+  return executeFreeze(user, pending.payload.source, pending.payload.reason);
+}
+
+/**
+ * Turn outbound money off.
+ *
+ * Requires no factor, and that part has not changed: an attacker who freezes
+ * an account has achieved nothing an attacker wants, so demanding proof here
+ * would only lock out the people this exists for. See
+ * migrations/0012_account_freeze.sql.
+ */
+async function executeFreeze(
+  user: tellaUser,
+  source: FreezeSource,
+  reason: string,
+): Promise<HandlerResult> {
+  const name = firstName(user);
+
   let cancelled = 0;
   let cancelledHolds = 0;
   try {
     ({ cancelledSends: cancelled, cancelledHolds } = await freezeAccount({
       userId: user.id,
-      source: "whatsapp",
-      reason: "user requested via chat",
+      source,
+      reason,
     }));
   } catch (err) {
     // Say so plainly. Telling someone their money is safe when the freeze
@@ -1064,7 +1243,7 @@ async function cancelMostRecent(user: tellaUser): Promise<HandlerResult> {
           "",
           "Reply *freeze* if something is wrong and I'll stop everything else.",
         ].join("\n"),
-        interactive: "buttons",
+        choices: QUICK_CHOICES,
       };
     }
 
@@ -1076,7 +1255,7 @@ async function cancelMostRecent(user: tellaUser): Promise<HandlerResult> {
 
     return {
       reply: `Cancelled the queued send of ${next.payload.amount} USDC to ${next.payload.recipientName ?? next.payload.recipientAddress}.${note}`,
-      interactive: "buttons",
+      choices: QUICK_CHOICES,
     };
   }
 
