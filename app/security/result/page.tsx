@@ -73,7 +73,7 @@ function describe(result: string | undefined, stopped: number, message: string |
                   : `${stopped} transfers that were waiting have been stopped.`,
               ]
             : []),
-          "When you have your phone back, message tella on WhatsApp to lift the freeze.",
+          "When you have your phone back, message tella to lift the freeze — WhatsApp, Telegram, or wherever you already talk to it.",
         ],
         retry: false,
       };

@@ -3,6 +3,7 @@ import { listFactors } from "@/lib/auth/factors";
 import { ConfirmShell } from "@/app/confirm/[token]/confirm-shell";
 import { InvalidLinkCard } from "@/app/security/[token]/invalid-link-card";
 import { UnfreezeClient } from "./unfreeze-client";
+import { returnTarget, asProvider } from "@/lib/messaging/return-link";
 
 export const dynamic = "force-dynamic";
 
@@ -49,7 +50,12 @@ export default async function UnfreezePage({
 
   return (
     <ConfirmShell>
-      <UnfreezeClient token={token} hasPin={factors.pin} hasPasskey={factors.passkey} />
+      <UnfreezeClient
+        token={token}
+        hasPin={factors.pin}
+        hasPasskey={factors.passkey}
+        returnTo={returnTarget(ctx.user, asProvider(ctx.token.payload?.origin))}
+      />
     </ConfirmShell>
   );
 }

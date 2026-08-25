@@ -65,6 +65,8 @@ import {
   nextQuestionFor,
 } from "@/lib/sendam-ai/flows";
 import { REPLIES, pickReply } from "@/lib/agent/replies";
+import { PROVIDERS } from "@/lib/messaging/providers";
+import type { MessageProvider } from "@/lib/messaging/processed-messages";
 import {
   QUICK_CHOICES,
   MENU_CHOICES,
@@ -79,14 +81,15 @@ interface IncomingMessage {
   text: string;
   isNew: boolean;
   /**
-   * Which channel this arrived on, for the audit trail only.
+   * Which channel this arrived on.
    *
    * Nothing here branches on it — that is the whole point of
-   * lib/messaging/providers.ts. It exists so a freeze records where it came
-   * from, which is the first thing anyone asks afterwards. Defaults to
-   * WhatsApp so existing callers and tests need no change.
+   * lib/messaging/providers.ts. It is carried, not consulted: recorded on a
+   * freeze so the audit trail says where the kill switch was pulled, and on
+   * a pending send so the confirm page can return the user to the chat they
+   * started in rather than to WhatsApp by default.
    */
-  source?: FreezeSource;
+  origin?: MessageProvider;
 }
 
 export interface HandlerResult {
@@ -145,7 +148,10 @@ function isValidBeneficiaryLabel(input: string): boolean {
 export async function handleIncomingMessage(
   message: IncomingMessage,
 ): Promise<HandlerResult> {
-  const { user, text, isNew, source = "whatsapp" } = message;
+  const { user, text, isNew } = message;
+  // Falls back to the channel recorded on the user row, which is the right
+  // default for a caller that does not say: it is where they were last seen.
+  const origin: MessageProvider = message.origin ?? user.whatsapp_channel;
 
   if (isNew) {
     return {
@@ -193,19 +199,19 @@ export async function handleIncomingMessage(
   // This is also matched before any decoder runs, for the reason
   // detect-freeze-request.ts gives: the kill switch cannot depend on a
   // network call to a service that may be the thing that is down.
-  if (isFreezeRequest(text)) return startFreezeConfirmation(user, source);
+  if (isFreezeRequest(text)) return startFreezeConfirmation(user, origin);
 
-  if (isUnfreezeRequest(text)) return handleUnfreezeRequest(user);
+  if (isUnfreezeRequest(text)) return handleUnfreezeRequest(user, origin);
 
-  if (isTelegramLinkRequest(text)) return handleTelegramLinkRequest(user);
+  if (isTelegramLinkRequest(text)) return handleTelegramLinkRequest(user, origin);
 
-  if (isGoogleLinkRequest(text)) return handleGoogleLinkRequest(user);
+  if (isGoogleLinkRequest(text)) return handleGoogleLinkRequest(user, origin);
 
   if (pending?.kind === "flow") {
     return handleFlowPendingResponse({ user, pending, text });
   }
 
-  return handleOnboardedUser({ user, text });
+  return handleOnboardedUser({ user, text, origin });
 }
 
 async function handleNameEntry({
@@ -588,9 +594,11 @@ function firstName(user: tellaUser): string {
 async function handleOnboardedUser({
   user,
   text,
+  origin,
 }: {
   user: tellaUser;
   text: string;
+  origin: MessageProvider;
 }): Promise<HandlerResult> {
   const name = firstName(user);
   const trimmed = text.trim();
@@ -603,7 +611,7 @@ async function handleOnboardedUser({
 
   // Matched before decode() on purpose — see detect-reset-request.ts. A
   // locked-out user must get the recovery link even when sendam-ai is down.
-  if (isResetRequest(trimmed)) return startPinReset(user);
+  if (isResetRequest(trimmed)) return startPinReset(user, origin);
 
   // Tier 0. Taps on our own buttons and the handful of unambiguous typed
   // commands never leave this server: no latency, no cost, and no dependency
@@ -661,7 +669,7 @@ async function handleOnboardedUser({
   // A structured send carries real parameters (amount + recipient), so it
   // always wins over the general intent switch below.
   const sendIntent: ParsedSendIntent | null = mapDecodedSend(decoded);
-  if (sendIntent) return startSendFlow({ user, intent: sendIntent });
+  if (sendIntent) return startSendFlow({ user, intent: sendIntent, origin });
 
   switch (decoded.intent) {
     case "BALANCE":
@@ -729,7 +737,10 @@ async function handleOnboardedUser({
  * passkey. That is a fact about someone's security setup and the reply goes
  * to whoever holds the phone.
  */
-async function startPinReset(user: tellaUser): Promise<HandlerResult> {
+async function startPinReset(
+  user: tellaUser,
+  origin: MessageProvider,
+): Promise<HandlerResult> {
   const name = firstName(user);
 
   const attempt = await recordAuthAttempt(user.id, "pin_reset");
@@ -745,7 +756,7 @@ async function startPinReset(user: tellaUser): Promise<HandlerResult> {
 
   let url: string;
   try {
-    const token = await createResetToken(user.id);
+    const token = await createResetToken(user.id, "pin_reset", origin);
     url = buildResetUrl(token.id);
   } catch (err) {
     console.error("[security] reset token creation failed", {
@@ -817,9 +828,11 @@ function addressReply(user: tellaUser): Pick<HandlerResult, "reply" | "followUp"
 async function startSendFlow({
   user,
   intent,
+  origin,
 }: {
   user: tellaUser;
   intent: ParsedSendIntent | null;
+  origin: MessageProvider;
 }): Promise<HandlerResult> {
   if (!intent)
     return {
@@ -934,6 +947,7 @@ async function startSendFlow({
       recipientName,
       recipientAddress,
       recipientWhatsappNumber,
+      origin,
     },
   });
 
@@ -961,7 +975,10 @@ async function startSendFlow({
  * just chose to undo the freeze. Both steps are individually allowed; only
  * the timestamps separate them. See migrations/0019_pin_set_at.sql.
  */
-async function handleUnfreezeRequest(user: tellaUser): Promise<HandlerResult> {
+async function handleUnfreezeRequest(
+  user: tellaUser,
+  origin: MessageProvider,
+): Promise<HandlerResult> {
   const name = firstName(user);
 
   if (!isFrozen(user)) {
@@ -988,7 +1005,7 @@ async function handleUnfreezeRequest(user: tellaUser): Promise<HandlerResult> {
     };
   }
 
-  const token = await createResetToken(user.id, "unfreeze");
+  const token = await createResetToken(user.id, "unfreeze", origin);
 
   return {
     reply: [
@@ -1050,7 +1067,7 @@ function frozenReply(name: string): HandlerResult {
  */
 async function startFreezeConfirmation(
   user: tellaUser,
-  source: FreezeSource,
+  origin: MessageProvider,
 ): Promise<HandlerResult> {
   const name = firstName(user);
 
@@ -1074,7 +1091,7 @@ async function startFreezeConfirmation(
       kind: "confirm",
       payload: {
         action: "freeze",
-        source,
+        source: PROVIDERS[origin].freezeSource,
         reason: "user requested via chat",
       },
       ttlMinutes: 10,
@@ -1285,7 +1302,10 @@ function isGoogleLinkRequest(text: string): boolean {
  * back in when the phone is gone, and an address that a SIM swap does not
  * reach. It cannot send money and it cannot unfreeze on its own.
  */
-async function handleGoogleLinkRequest(user: tellaUser): Promise<HandlerResult> {
+async function handleGoogleLinkRequest(
+  user: tellaUser,
+  origin: MessageProvider,
+): Promise<HandlerResult> {
   const name = firstName(user);
 
   if (isFrozen(user)) {
@@ -1308,7 +1328,7 @@ async function handleGoogleLinkRequest(user: tellaUser): Promise<HandlerResult> 
     return { reply: "That isn't set up yet on my side. Try again later." };
   }
 
-  const token = await createResetToken(user.id, "link_google");
+  const token = await createResetToken(user.id, "link_google", origin);
 
   return {
     reply: [
@@ -1351,7 +1371,10 @@ function isTelegramLinkRequest(text: string): boolean {
  * A user with no factor yet is pointed at setting one up first, which is the
  * same funnel the enrollment prompt uses rather than a dead end.
  */
-async function handleTelegramLinkRequest(user: tellaUser): Promise<HandlerResult> {
+async function handleTelegramLinkRequest(
+  user: tellaUser,
+  origin: MessageProvider,
+): Promise<HandlerResult> {
   const name = firstName(user);
 
   if (isFrozen(user)) {
@@ -1385,7 +1408,7 @@ async function handleTelegramLinkRequest(user: tellaUser): Promise<HandlerResult
     return { reply: "Telegram isn't set up yet on my side. Try again later." };
   }
 
-  const token = await createResetToken(user.id, "link_telegram");
+  const token = await createResetToken(user.id, "link_telegram", origin);
 
   return {
     reply: [

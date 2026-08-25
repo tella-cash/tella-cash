@@ -1,3 +1,5 @@
+import type { MessageProvider } from "@/lib/messaging/processed-messages";
+
 export type OnboardingStep = "awaiting_name" | "completed";
 export type WalletStatus = "none" | "pending" | "active" | "failed";
 export type WhatsAppChannel = "twilio" | "meta";
@@ -140,6 +142,18 @@ export interface SendPayload {
   recipientName: string | null;
   recipientAddress: string;
   recipientWhatsappNumber: string | null;
+  /**
+   * Which channel this send was started from.
+   *
+   * Recorded so the confirm page can return the user to the chat they came
+   * from. Without it the page falls back to `user.whatsapp_channel`, which
+   * is where a Telegram sender used to be thrown — into an app that may hold
+   * no tella conversation at all, with the receipt sitting somewhere else.
+   *
+   * Optional because rows created before this existed do not have it, and
+   * a five-minute TTL means "before this existed" stops mattering quickly.
+   */
+  origin?: MessageProvider;
 }
 
 /** Payload for a pending flow conversation: the flow name (backend-defined,

@@ -94,7 +94,7 @@ async function process(message: InboundMessage): Promise<void> {
       user,
       text: message.text,
       isNew,
-      source: provider.freezeSource,
+      origin: provider.id,
     });
   } catch (err) {
     console.error("[inbound] agent error", { provider: provider.id, userId: user.id, err });

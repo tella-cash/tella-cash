@@ -25,7 +25,8 @@ export function InvalidLinkCard() {
       </div>
       <h1 className="mt-5 font-display text-3xl text-ink-900">Link expired</h1>
       <p className="mt-3 text-sm leading-relaxed text-ink-500">
-        This reset link is no longer valid. Head back to WhatsApp and send{" "}
+        This reset link is no longer valid. Head back to your tella chat and
+        send{" "}
         <span className="font-medium text-ink-900">reset pin</span> to get a
         fresh one.
       </p>

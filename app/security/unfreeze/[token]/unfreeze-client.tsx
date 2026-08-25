@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReturnTarget } from "@/lib/messaging/return-link";
 import { useState } from "react";
 import { startAuthentication, browserSupportsWebAuthn } from "@simplewebauthn/browser";
 
@@ -21,10 +22,12 @@ export function UnfreezeClient({
   token,
   hasPin,
   hasPasskey,
+  returnTo,
 }: {
   token: string;
   hasPin: boolean;
   hasPasskey: boolean;
+  returnTo: ReturnTarget;
 }) {
   const [stage, setStage] = useState<Stage>({ kind: "form" });
   const [pin, setPin] = useState("");
@@ -89,7 +92,20 @@ export function UnfreezeClient({
               ✅ Your account is active again. You can send money as normal.
             </p>
             <p className="text-sm leading-relaxed text-ink-500">
-              Head back to WhatsApp to carry on.
+              {returnTo.url ? (
+                <>
+                  Head back to{" "}
+                  <a
+                    href={returnTo.url}
+                    className="font-medium text-accent-600 underline underline-offset-4"
+                  >
+                    {returnTo.label}
+                  </a>{" "}
+                  to carry on.
+                </>
+              ) : (
+                "Head back to your tella chat to carry on."
+              )}
             </p>
           </>
         ) : (
@@ -139,7 +155,8 @@ export function UnfreezeClient({
             {!hasPin && !hasPasskey && (
               <p className="text-sm leading-relaxed text-ink-500">
                 This account has no PIN or passkey set, so it can&apos;t be
-                unfrozen from here. Message tella on WhatsApp.
+                unfrozen from here. Message tella on any channel you have
+                linked and a human will sort it out with you.
               </p>
             )}
           </>

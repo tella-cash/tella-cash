@@ -1,7 +1,6 @@
 import { loadResetContext } from "@/lib/security/reset-tokens";
 import { userHasCredential } from "@/lib/webauthn/repository";
-import type { WhatsAppChannel } from "@/lib/supabase/types";
-import { SITE } from "@/lib/data/site";
+import { returnTarget, asProvider } from "@/lib/messaging/return-link";
 import { ConfirmShell } from "@/app/confirm/[token]/confirm-shell";
 import { SecurityClient } from "./security-client";
 import { InvalidLinkCard } from "./invalid-link-card";
@@ -50,18 +49,10 @@ export default async function SecurityPage({
       <SecurityClient
         token={token}
         hasPasskey={hasPasskey}
-        returnUrl={whatsappReturnUrl(ctx.user.whatsapp_channel)}
+        returnTo={returnTarget(ctx.user, asProvider(ctx.token.payload?.origin))}
       />
     </ConfirmShell>
   );
 }
 
-/** Mirrors the confirm page's deep link back to whichever number they use. */
-function whatsappReturnUrl(channel: WhatsAppChannel): string {
-  const raw =
-    channel === "meta"
-      ? (process.env.META_WHATSAPP_DISPLAY_NUMBER ?? SITE.whatsappNumber)
-      : (process.env.TWILIO_WHATSAPP_FROM ?? "");
-  const digits = raw.replace(/\D/g, "");
-  return digits ? `https://wa.me/${digits}` : "https://wa.me/";
-}
+

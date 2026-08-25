@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx lib/agent/map-decoded-send.test.ts && tsx lib/agent/normalize-faucet-asset.test.ts && tsx lib/circle/verify-webhook.test.ts && tsx lib/sends/execute.test.ts && tsx lib/agent/detect-reset-request.test.ts && tsx lib/wallet/balances.test.ts && tsx lib/agent/detect-freeze-request.test.ts && tsx lib/agent/detect-unfreeze-request.test.ts && tsx lib/security/panic-code.test.ts && tsx lib/agent/fast-path.test.ts && tsx lib/agent/confidence.test.ts && tsx lib/sends/limits.test.ts && tsx lib/sends/tiers.test.ts && tsx lib/agent/confirm-action.test.ts && tsx lib/messaging/render.test.ts"
+    "test": "tsx lib/agent/map-decoded-send.test.ts && tsx lib/agent/normalize-faucet-asset.test.ts && tsx lib/circle/verify-webhook.test.ts && tsx lib/sends/execute.test.ts && tsx lib/agent/detect-reset-request.test.ts && tsx lib/wallet/balances.test.ts && tsx lib/agent/detect-freeze-request.test.ts && tsx lib/agent/detect-unfreeze-request.test.ts && tsx lib/security/panic-code.test.ts && tsx lib/agent/fast-path.test.ts && tsx lib/agent/confidence.test.ts && tsx lib/sends/limits.test.ts && tsx lib/sends/tiers.test.ts && tsx lib/agent/confirm-action.test.ts && tsx lib/messaging/render.test.ts && tsx lib/messaging/return-link.test.ts"
   },
   "dependencies": {
     "@circle-fin/developer-controlled-wallets": "^10.3.1",

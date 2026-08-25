@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import type { ReturnTarget } from "@/lib/messaging/return-link";
 import {
   startRegistration,
   startAuthentication,
@@ -45,20 +46,20 @@ function useWebAuthnReady(): boolean {
  * synced passkeys) is the primary path, with a PIN fallback for devices or
  * browsers that can't do WebAuthn. Every path ends in the same place: the
  * verify route executes the send, DMs the receipt, and we bounce the user
- * straight back to WhatsApp.
+ * back to the chat they started in — see lib/messaging/return-link.ts.
  */
 export function ConfirmClient({
   token,
   summary,
   hasPin,
   hasPasskey,
-  returnUrl,
+  returnTo,
 }: {
   token: string;
   summary: SendSummary;
   hasPin: boolean;
   hasPasskey: boolean;
-  returnUrl: string;
+  returnTo: ReturnTarget;
 }) {
   const [stage, setStage] = useState<Stage>({ kind: "choose" });
   const webauthnReady = useWebAuthnReady();
@@ -218,7 +219,7 @@ export function ConfirmClient({
             {effectiveStage.kind === "success" && (
               <SuccessView
                 reference={effectiveStage.reference}
-                returnUrl={returnUrl}
+                returnTo={returnTo}
               />
             )}
 
@@ -490,20 +491,27 @@ function WorkingView({
 
 function SuccessView({
   reference,
-  returnUrl,
+  returnTo,
 }: {
   reference: string;
-  returnUrl: string;
+  returnTo: ReturnTarget;
 }) {
-  // Bounce back to WhatsApp automatically once the send is confirmed; the
-  // button below is the manual fallback for browsers that block the
-  // programmatic navigation (or desktop where the deep link is slower).
+  const { url, label } = returnTo;
+
+  // Bounce back to the chat this send was started from — not to WhatsApp by
+  // default, which used to throw a Telegram sender into a different app
+  // entirely, away from the receipt that was about to arrive.
+  //
+  // Only when there is somewhere to go: a channel with no configured deep
+  // link leaves the user on this page, which tells them the send succeeded,
+  // rather than navigating them to a URL that opens nothing.
   useEffect(() => {
+    if (!url) return;
     const t = window.setTimeout(() => {
-      window.location.href = returnUrl;
+      window.location.href = url;
     }, 1600);
     return () => window.clearTimeout(t);
-  }, [returnUrl]);
+  }, [url]);
 
   return (
     <div className="py-2 text-center">
@@ -520,17 +528,21 @@ function SuccessView({
         Reference{" "}
         <code className="font-mono text-ink-700">{reference}</code>
       </p>
-      <div className="mt-6 flex items-center justify-center gap-2 text-xs text-ink-400">
-        <Spinner small />
-        Taking you back to WhatsApp…
-      </div>
-      <a
-        href={returnUrl}
-        className="mt-5 inline-flex items-center justify-center gap-2 rounded-2xl bg-ink-900 px-6 py-3 text-sm font-medium text-surface-50 transition-transform active:scale-[0.98]"
-      >
-        Back to WhatsApp
-        <ArrowIcon className="h-4 w-4" />
-      </a>
+      {url && (
+        <div className="mt-6 flex items-center justify-center gap-2 text-xs text-ink-400">
+          <Spinner small />
+          Taking you back to {label}…
+        </div>
+      )}
+      {url && (
+        <a
+          href={url}
+          className="mt-5 inline-flex items-center justify-center gap-2 rounded-2xl bg-ink-900 px-6 py-3 text-sm font-medium text-surface-50 transition-transform active:scale-[0.98]"
+        >
+          Back to {label}
+          <ArrowIcon className="h-4 w-4" />
+        </a>
+      )}
       <p className="mt-4 text-xs text-ink-400">
         Your receipt is in the chat. You can close this tab.
       </p>

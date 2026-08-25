@@ -1,7 +1,6 @@
 import { loadConfirmContext } from "@/lib/confirm/context";
 import { userHasCredential } from "@/lib/webauthn/repository";
-import type { WhatsAppChannel } from "@/lib/supabase/types";
-import { SITE } from "@/lib/data/site";
+import { returnTarget } from "@/lib/messaging/return-link";
 import { ConfirmClient } from "./confirm-client";
 import { ConfirmShell } from "./confirm-shell";
 import { ExpiredCard } from "./expired-card";
@@ -68,30 +67,10 @@ export default async function ConfirmPage({
         }}
         hasPin={hasPin}
         hasPasskey={hasPasskey}
-        returnUrl={whatsappReturnUrl(ctx.user.whatsapp_channel)}
+        returnTo={returnTarget(ctx.user, ctx.pending.payload.origin)}
       />
     </ConfirmShell>
   );
-}
-
-/**
- * Deep link back to the bot's WhatsApp chat, used to auto-return the user
- * after a successful confirm. Points at whichever number the user actually
- * messages tella on — Meta's Cloud API number for `meta` users, the Twilio
- * sender for `twilio` users — so the "back to chat" link doesn't dead-end
- * on a different provider's number. Falls back to a bare wa.me which still
- * reopens WhatsApp.
- */
-function whatsappReturnUrl(channel: WhatsAppChannel): string {
-  // The Meta branch used to fall back to a hardcoded +2349043580863. A
-  // number baked into a page is one that keeps working right up until it
-  // doesn't, and then silently sends every user to the wrong chat.
-  const raw =
-    channel === "meta"
-      ? (process.env.META_WHATSAPP_DISPLAY_NUMBER ?? SITE.whatsappNumber)
-      : (process.env.TWILIO_WHATSAPP_FROM ?? "");
-  const digits = raw.replace(/\D/g, "");
-  return digits ? `https://wa.me/${digits}` : "https://wa.me/";
 }
 
 function formatAddress(address: string): string {

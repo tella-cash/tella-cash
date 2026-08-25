@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { tellaUser } from "@/lib/supabase/types";
+import type { MessageProvider } from "@/lib/messaging/processed-messages";
 
 /**
  * Single-use recovery tokens (migrations/0010_security_tokens.sql).
@@ -25,6 +26,15 @@ export interface SecurityToken {
   expires_at: string;
   used_at: string | null;
   created_at: string;
+  /**
+   * Anything the minting side needs the consuming page to know.
+   *
+   * Today that is only `origin`: which channel asked for this link, so the
+   * page can send the user back to the chat they came from instead of
+   * assuming WhatsApp. Nullable, because rows minted before this existed
+   * have no payload and a ten-minute TTL makes that brief.
+   */
+  payload: { origin?: MessageProvider } | null;
 }
 
 export interface ResetContext {
@@ -35,13 +45,19 @@ export interface ResetContext {
 export async function createResetToken(
   userId: string,
   kind: SecurityTokenKind = "pin_reset",
+  origin?: MessageProvider,
 ): Promise<SecurityToken> {
   const supabase = getSupabaseAdmin();
   const expiresAt = new Date(Date.now() + TTL_MINUTES * 60 * 1000).toISOString();
 
   const { data, error } = await supabase
     .from("tella_security_token")
-    .insert({ user_id: userId, kind, expires_at: expiresAt })
+    .insert({
+      user_id: userId,
+      kind,
+      expires_at: expiresAt,
+      ...(origin ? { payload: { origin } } : {}),
+    })
     .select()
     .single();
 

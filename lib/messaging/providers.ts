@@ -1,6 +1,7 @@
 import type { Choice } from "@/lib/agent/menus";
 import type { MessageProvider } from "./processed-messages";
 import type { FreezeSource } from "@/lib/supabase/types";
+import { SITE } from "@/lib/data/site";
 import {
   sendWhatsAppMessage as twilioText,
   sendWhatsAppImage as twilioImage,
@@ -97,6 +98,18 @@ export interface Provider {
   freezeSource: FreezeSource;
   /** Wire identifier → the form stored in tella_user_channel.external_id. */
   normalizeId(raw: string): string;
+  /**
+   * Deep link back into this channel's chat with the bot.
+   *
+   * Used by the confirm and recovery pages to return someone to where they
+   * started. Getting this wrong is not cosmetic: a Telegram user who taps
+   * "confirm" and is then thrown into WhatsApp has been sent to an app that
+   * may hold no tella conversation at all, and their receipt is not there.
+   *
+   * Returns null when the channel has nothing configured to link to, and
+   * the page then simply omits the button rather than guessing.
+   */
+  returnUrl(): string | null;
   sendText(args: TextArgs): Promise<string>;
   sendImage(args: ImageArgs): Promise<string>;
   /**
@@ -119,6 +132,7 @@ export const PROVIDERS: Record<MessageProvider, Provider> = {
     // always stored, so it is the canonical one and everything else
     // normalizes towards it.
     normalizeId: (raw) => (raw.startsWith("whatsapp:") ? raw : `whatsapp:${raw}`),
+    returnUrl: () => waLink(process.env.TWILIO_WHATSAPP_FROM),
     sendText: twilioText,
     sendImage: twilioImage,
     sendChoices: twilioChoices,
@@ -135,6 +149,8 @@ export const PROVIDERS: Record<MessageProvider, Provider> = {
       const bare = raw.replace(/^whatsapp:/, "").replace(/^\+/, "");
       return `whatsapp:+${bare}`;
     },
+    returnUrl: () =>
+      waLink(process.env.META_WHATSAPP_DISPLAY_NUMBER ?? SITE.whatsappNumber),
     sendText: metaText,
     sendImage: metaImage,
     // Three is the Cloud API's hard cap on quick replies; more than that
@@ -152,6 +168,16 @@ export const PROVIDERS: Record<MessageProvider, Provider> = {
     selfEnrolling: false,
     freezeSource: "telegram",
     normalizeId: (raw) => raw,
+    returnUrl: () => {
+      // Same normalisation as the link deep-link in handler.ts: env tends to
+      // hold "@cashtellaBot" because that is what Telegram shows, but
+      // https://t.me/@name is a dead link.
+      const name = (process.env.TELEGRAM_BOT_USERNAME ?? "")
+        .trim()
+        .replace(/^@/, "")
+        .replace(/^https?:\/\/t\.me\//i, "");
+      return name ? `https://t.me/${name}` : null;
+    },
     sendText: sendTelegramMessage,
     sendImage: sendTelegramImage,
     sendChoices: sendTelegramChoices,
@@ -161,4 +187,15 @@ export const PROVIDERS: Record<MessageProvider, Provider> = {
 
 export function providerFor(id: MessageProvider): Provider {
   return PROVIDERS[id];
+}
+
+/**
+ * A wa.me link, or null.
+ *
+ * Null rather than a bare "https://wa.me/" fallback: that opens WhatsApp
+ * with no conversation, which looks like a working button and is not one.
+ */
+function waLink(raw: string | undefined): string | null {
+  const digits = (raw ?? "").replace(/\D/g, "");
+  return digits ? `https://wa.me/${digits}` : null;
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReturnTarget } from "@/lib/messaging/return-link";
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -21,11 +22,11 @@ type Stage =
 export function SecurityClient({
   token,
   hasPasskey,
-  returnUrl,
+  returnTo,
 }: {
   token: string;
   hasPasskey: boolean;
-  returnUrl: string;
+  returnTo: ReturnTarget;
 }) {
   const [stage, setStage] = useState<Stage>({ kind: "form" });
 
@@ -66,7 +67,7 @@ export function SecurityClient({
             {stage.kind === "done" && (
               <DoneView
                 removedPasskeys={stage.removedPasskeys}
-                returnUrl={returnUrl}
+                returnTo={returnTo}
               />
             )}
             {stage.kind === "error" && (
@@ -225,18 +226,22 @@ function WorkingView() {
 
 function DoneView({
   removedPasskeys,
-  returnUrl,
+  returnTo,
 }: {
   removedPasskeys: number;
-  returnUrl: string;
+  returnTo: ReturnTarget;
 }) {
-  // Matches the confirm page's auto-return so the flow ends where it began.
+  // Matches the confirm page's auto-return so the flow ends where it began —
+  // the chat that asked for the reset, not WhatsApp by assumption. Skipped
+  // when the channel has no deep link, rather than navigating nowhere.
+  const returnHref = returnTo.url;
   useEffect(() => {
+    if (!returnHref) return;
     const t = window.setTimeout(() => {
-      window.location.href = returnUrl;
+      window.location.href = returnHref;
     }, 2200);
     return () => window.clearTimeout(t);
-  }, [returnUrl]);
+  }, [returnHref]);
 
   return (
     <div className="space-y-4 py-2 text-center">
@@ -251,12 +256,14 @@ function DoneView({
             : "Use your new PIN the next time you confirm a send."}
         </p>
       </div>
-      <a
-        href={returnUrl}
-        className="inline-block text-sm font-medium text-accent-600 underline underline-offset-4"
-      >
-        Back to WhatsApp
-      </a>
+      {returnTo.url && (
+        <a
+          href={returnTo.url}
+          className="inline-block text-sm font-medium text-accent-600 underline underline-offset-4"
+        >
+          Back to {returnTo.label}
+        </a>
+      )}
     </div>
   );
 }
