@@ -1,6 +1,9 @@
 import Link from "next/link";
+import Image from "next/image";
 import { BrandMark } from "@/components/ui/brand-mark";
 import { SITE } from "@/lib/data/site";
+import whatsappIcon from "@/public/icons/whatsapp.svg";
+import telegramIcon from "@/public/icons/telegram.svg";
 
 export function Footer() {
   return (
@@ -14,6 +17,33 @@ export function Footer() {
           <p className="text-base text-surface-50/50">
             Tella is a service operated by {SITE.legalName}.
           </p>
+
+          <div className="flex flex-col gap-3 pt-2 text-base text-surface-50/70">
+            <a
+              href={SITE.whatsappLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2.5 transition-colors hover:text-surface-50"
+            >
+              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent-500">
+                <Image src={whatsappIcon} alt="" width={13} height={13} />
+              </span>
+              WhatsApp
+            </a>
+            {SITE.telegramLink && (
+              <a
+                href={SITE.telegramLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2.5 transition-colors hover:text-surface-50"
+              >
+                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-surface-50/10">
+                  <Image src={telegramIcon} alt="" width={13} height={13} />
+                </span>
+                Telegram
+              </a>
+            )}
+          </div>
         </div>
 
         <nav aria-label="Footer">

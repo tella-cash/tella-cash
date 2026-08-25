@@ -47,7 +47,7 @@ const newsreader = Newsreader({
 
 const title = "Tella - Stablecoin payments, by message";
 const description =
-  "A messaging-based payment interface. Send and manage USDC straight from a WhatsApp chat - no app to install, no menus to learn. Just write.";
+  "A messaging-based payment interface. Send and manage USDC straight from WhatsApp or Telegram - no app to install, no menus to learn. Just write.";
 
 export const metadata: Metadata = {
   metadataBase: process.env.APP_BASE_URL

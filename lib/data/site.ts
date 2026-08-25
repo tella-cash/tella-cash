@@ -13,12 +13,24 @@
  */
 const PLACEHOLDER_EMAIL = "privacy@example.com";
 
+// The bot username also drives the server-side Telegram deep link in
+// lib/agent/handler.ts (TELEGRAM_BOT_USERNAME), but that var isn't visible
+// to client components — anything read here needs the NEXT_PUBLIC_ prefix
+// to make it into the browser bundle. Until it's set, telegramLink is null
+// and callers skip rendering the Telegram CTA rather than link to nothing.
+const TELEGRAM_BOT_USERNAME = (
+  process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME ?? ""
+).replace(/^@/, "");
+
 export const SITE = {
   brandName: "tella",
   legalName: "TELLA CORE LTD",
   whatsappNumber: "2349043580863",
   whatsappLink:
     "https://wa.me/2349043580863?text=" + encodeURIComponent("Hi tella"),
+  telegramLink: TELEGRAM_BOT_USERNAME
+    ? `https://t.me/${TELEGRAM_BOT_USERNAME}`
+    : (null as string | null),
 
   // TODO: replace with the real inbox before launch.
   privacyEmail: PLACEHOLDER_EMAIL,

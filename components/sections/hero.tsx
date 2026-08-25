@@ -14,6 +14,7 @@ import lightIcon from "@/public/icons/lightening.svg";
 import coinIcon from "@/public/icons/coin.svg";
 import lockIcon from "@/public/icons/lock.svg";
 import whatsappIcon from "@/public/icons/whatsapp.svg";
+import telegramIcon from "@/public/icons/telegram.svg";
 
 export function Hero() {
   const ref = useRef<HTMLDivElement | null>(null);
@@ -68,7 +69,7 @@ export function Hero() {
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-75" />
               <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
             </span>
-            Live on WhatsApp — settles on Arc in ~1s
+            Live on WhatsApp and Telegram, settles on Arc in ~1s
           </motion.div>
 
           <MaskReveal
@@ -84,8 +85,8 @@ export function Hero() {
             variants={fadeUp(0.55)}
             className="mt-7 max-w-xl text-base md:text-xl leading-relaxed text-ink-700"
           >
-            Send, receive, and manage stablecoins directly in WhatsApp. No apps.
-            No learning curve. Just type.
+            Send, receive, and manage stablecoins directly in WhatsApp or
+            Telegram. No apps. No learning curve. Just type.
           </motion.p>
 
           <motion.div
@@ -104,8 +105,24 @@ export function Hero() {
                 className="pointer-events-none absolute inset-0 -z-10 -translate-x-full bg-gradient-to-r from-transparent via-white/30 to-transparent transition-transform duration-700 ease-out group-hover:translate-x-full"
               />
               <Image src={whatsappIcon} alt="" width={20} height={20} />
-              <span className="text-white">Start on WhatsApp</span>
+              <span className="text-white">Chat on WhatsApp</span>
             </MagneticCta>
+
+            {SITE.telegramLink && (
+              <MagneticCta
+                href={SITE.telegramLink}
+                target="_blank"
+                rel="noopener"
+                className="group relative isolate overflow-hidden flex items-center gap-2.5 !bg-ink-900 text-base md:text-lg md:!px-8 md:!py-4 transition-transform duration-300 hover:-translate-y-0.5"
+              >
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute inset-0 -z-10 -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-700 ease-out group-hover:translate-x-full"
+                />
+                <Image src={telegramIcon} alt="" width={19} height={19} />
+                <span className="text-white">Chat on Telegram</span>
+              </MagneticCta>
+            )}
 
             <a
               href="#features"
@@ -130,6 +147,15 @@ export function Hero() {
               </span>
             </a>
           </motion.div>
+
+          {SITE.telegramLink && (
+            <motion.p
+              variants={fadeUp(0.75)}
+              className="mt-4 text-sm text-ink-500"
+            >
+              Same wallet either way, nothing to reconnect.
+            </motion.p>
+          )}
 
           {/* Trust strip — staggered, desktop */}
           <motion.div

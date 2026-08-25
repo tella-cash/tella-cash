@@ -7,6 +7,7 @@ import { MaskReveal } from "@/components/interactive/mask-reveal";
 import { Reveal } from "@/components/interactive/reveal";
 import { SITE } from "@/lib/data/site";
 import Image from "next/image";
+import telegramIcon from "@/public/icons/telegram.svg";
 
 export function ClosingCta() {
   const ref = useRef<HTMLDivElement | null>(null);
@@ -23,7 +24,7 @@ export function ClosingCta() {
         <motion.div style={{ scale }} className="flex flex-col items-center">
           <MaskReveal
             as="h2"
-            text="Open WhatsApp. Send a message. That's it."
+            text="Open a chat. Send a message. That's it."
             accent="Send a message."
             className="max-w-[820px] justify-center text-center text-[40px] sm:text-[60px] lg:text-[80px] font-semibold leading-[1.02] tracking-[-0.02em] text-ink-900"
           />
@@ -31,7 +32,8 @@ export function ClosingCta() {
           <Reveal delay={0.15}>
             <p className="mt-6 max-w-lg mx-auto text-lg md:text-xl leading-relaxed text-center text-ink-700">
               No download. No signup form. No menus to memorize. Your wallet
-              comes online the moment you say hello.
+              comes online the moment you say hello, on whichever app you
+              already have open.
             </p>
           </Reveal>
 
@@ -56,8 +58,24 @@ export function ClosingCta() {
                   aria-hidden
                   className="pointer-events-none absolute inset-0 -z-10 -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-700 ease-out group-hover:translate-x-full"
                 />
-                Start now
+                Start on WhatsApp
               </MagneticCta>
+
+              {SITE.telegramLink && (
+                <MagneticCta
+                  href={SITE.telegramLink}
+                  target="_blank"
+                  rel="noopener"
+                  className="group relative isolate overflow-hidden flex items-center gap-2.5 rounded-full text-base md:text-lg md:!px-9 md:!py-4 shadow-accent transition-transform duration-300 hover:-translate-y-0.5"
+                >
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute inset-0 -z-10 -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-700 ease-out group-hover:translate-x-full"
+                  />
+                  <Image src={telegramIcon} alt="" width={18} height={18} />
+                  Start on Telegram
+                </MagneticCta>
+              )}
             </div>
           </Reveal>
         </motion.div>

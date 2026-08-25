@@ -35,8 +35,8 @@ export default function HomePage() {
               <Reveal delay={0.15}>
                 <p className="mt-4 max-w-[680px] text-base leading-relaxed text-ink-700 md:text-xl">
                   From message to money in seconds. Send, receive, and track
-                  stablecoins directly from WhatsApp using simple natural
-                  language.
+                  stablecoins directly from WhatsApp or Telegram using simple
+                  natural language.
                 </p>
               </Reveal>
             </div>

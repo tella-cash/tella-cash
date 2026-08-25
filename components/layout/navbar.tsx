@@ -2,10 +2,12 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { motion, AnimatePresence, useScroll, useTransform } from "framer-motion";
 import { BrandMark } from "@/components/ui/brand-mark";
 import { MagneticCta } from "@/components/ui/magnetic-cta";
 import { NAV_LINKS, SITE } from "@/lib/data/site";
+import telegramIcon from "@/public/icons/telegram.svg";
 
 export function Navbar() {
   const { scrollY } = useScroll();
@@ -70,7 +72,19 @@ export function Navbar() {
           </ul>
         </nav>
 
-        <div className="hidden md:block">
+        <div className="hidden items-center gap-3 md:flex">
+          {SITE.telegramLink && (
+            <a
+              href={SITE.telegramLink}
+              target="_blank"
+              rel="noopener"
+              aria-label="Chat on Telegram"
+              data-cursor="grow"
+              className="grid h-10 w-10 place-items-center rounded-full bg-ink-900 transition-transform duration-300 hover:-translate-y-0.5"
+            >
+              <Image src={telegramIcon} alt="" width={17} height={17} />
+            </a>
+          )}
           <MagneticCta
             href={SITE.whatsappLink}
             target="_blank"
@@ -145,6 +159,18 @@ export function Navbar() {
                     Try it now
                   </MagneticCta>
                 </li>
+                {SITE.telegramLink && (
+                  <li className="pt-3">
+                    <MagneticCta
+                      href={SITE.telegramLink}
+                      target="_blank"
+                      rel="noopener"
+                      className="!bg-ink-900"
+                    >
+                      Chat on Telegram
+                    </MagneticCta>
+                  </li>
+                )}
               </ul>
             </nav>
           </motion.div>

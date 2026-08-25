@@ -10,7 +10,7 @@ const PILLARS = [
     id: "encryption",
     title: "End-to-end encrypted",
     body:
-      "Every message between you and tella rides WhatsApp's encrypted channel. Nobody in the middle - not us, not your carrier - can read what you send.",
+      "Every message between you and tella rides your app's own encrypted channel, WhatsApp's or Telegram's. Nobody in the middle - not us, not your carrier - can read what you send.",
     illustration: <EncryptionGlyph />,
   },
   {
@@ -68,8 +68,9 @@ export function SecuritySection() {
           />
           <Reveal delay={0.15}>
             <p className="mx-auto mt-6 max-w-2xl text-base md:text-xl leading-relaxed text-surface-50/60">
-              Two billion people use WhatsApp every day. tella layers payment
-              logic on top — without changing what makes that channel feel safe.
+              Billions of people already trust WhatsApp and Telegram every day.
+              tella layers payment logic on top, without changing what makes
+              either channel feel safe.
             </p>
           </Reveal>
         </div>
@@ -93,6 +94,22 @@ export function SecuritySection() {
             </Reveal>
           ))}
         </div>
+
+        <Reveal delay={0.45}>
+          <div className="mx-auto mt-6 flex max-w-[1296px] flex-col items-start gap-3 rounded-2xl border border-accent-500/35 bg-accent-500/10 p-6 sm:flex-row sm:items-center sm:justify-between md:mt-8">
+            <p className="text-base leading-relaxed text-surface-50/85 md:text-lg">
+              <strong className="font-medium text-surface-50">Lost your phone?</strong>{" "}
+              Sign in from any other device and freeze your account in two
+              taps. All activity pauses immediately.
+            </p>
+            <a
+              href="#faqs"
+              className="shrink-0 text-base font-medium text-accent-300 transition-colors hover:text-accent-100"
+            >
+              See how it works &rsaquo;
+            </a>
+          </div>
+        </Reveal>
       </div>
     </motion.section>
   );

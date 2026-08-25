@@ -12,6 +12,12 @@ import logo from "@/public/logo.svg";
  * instead of being reapplied in three near-identical implementations.
  */
 
+/** Which chat app the mockup is dressed as — WhatsApp's dark header and
+ *  green sent-bubble tint, or Telegram's light header and blue gradient
+ *  bubble. Everything else (bezel, status bar, receipt card) is shared
+ *  chrome, since that's the phone, not the app. */
+export type Channel = "whatsapp" | "telegram";
+
 interface ChatHeaderProps {
   /** "full" shows back-arrow + video/voice buttons (hero, feature illustrations).
    *  "compact" shows just avatar + name + status (use-cases phone). */
@@ -19,16 +25,26 @@ interface ChatHeaderProps {
   /** Subtitle under "Tella" — defaults to "Online", but use-cases swaps in
    *  the active persona label (e.g. "Freelancers"). */
   subtitle?: string;
+  channel?: Channel;
 }
 
-export function ChatHeader({ variant = "full", subtitle = "Online" }: ChatHeaderProps) {
+export function ChatHeader({ variant = "full", subtitle = "Online", channel = "whatsapp" }: ChatHeaderProps) {
+  const isTelegram = channel === "telegram";
+
   return (
-    <div className="flex items-center gap-2 bg-[#1F2C34] px-2.5 pb-2.5 pt-12 text-white">
+    <div
+      className={cn(
+        "flex items-center gap-2 px-2.5 pb-2.5 pt-12",
+        isTelegram
+          ? "border-b border-ink-200/60 bg-white text-ink-900"
+          : "bg-[#1F2C34] text-white",
+      )}
+    >
       {variant === "full" && (
         <button
           type="button"
           aria-label="Back"
-          className="flex items-center gap-0.5 text-white"
+          className="flex items-center gap-0.5"
         >
           <svg viewBox="0 0 24 24" className="h-5 w-5">
             <path
@@ -44,14 +60,19 @@ export function ChatHeader({ variant = "full", subtitle = "Online" }: ChatHeader
         </button>
       )}
 
-      <div className="grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-full bg-white">
+      <div
+        className={cn(
+          "grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-full bg-white",
+          isTelegram && "ring-1 ring-ink-200",
+        )}
+      >
         <Image src={logo} alt="Tella" width={20} height={20} />
       </div>
 
       <div className="min-w-0 flex-1 leading-tight">
         <div className="flex items-center gap-1">
           <p className="text-[14px] font-semibold">Tella</p>
-          {variant === "full" ? (
+          {variant === "full" && !isTelegram && (
             <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0">
               <circle cx="12" cy="12" r="10" fill="#22C55E" />
               <path
@@ -63,11 +84,14 @@ export function ChatHeader({ variant = "full", subtitle = "Online" }: ChatHeader
                 fill="none"
               />
             </svg>
-          ) : (
+          )}
+          {variant === "compact" && (
             <span className="h-3 w-3 rounded-full bg-emerald-500" />
           )}
         </div>
-        <p className="text-[10px] text-white/60">{subtitle}</p>
+        <p className={cn("text-[10px]", isTelegram ? "text-[#3390EC] font-medium" : "text-white/60")}>
+          {subtitle}
+        </p>
       </div>
 
       {variant === "full" && (
@@ -75,7 +99,7 @@ export function ChatHeader({ variant = "full", subtitle = "Online" }: ChatHeader
           <button
             type="button"
             aria-label="Video call"
-            className="grid h-9 w-9 shrink-0 place-items-center text-white"
+            className="grid h-9 w-9 shrink-0 place-items-center"
           >
             <svg viewBox="0 0 24 24" className="h-5 w-5">
               <rect
@@ -95,7 +119,7 @@ export function ChatHeader({ variant = "full", subtitle = "Online" }: ChatHeader
           <button
             type="button"
             aria-label="Voice call"
-            className="grid h-9 w-9 shrink-0 place-items-center text-white"
+            className="grid h-9 w-9 shrink-0 place-items-center"
           >
             <svg viewBox="0 0 24 24" className="h-5 w-5">
               <path
@@ -118,6 +142,7 @@ interface ChatScreenProps {
   children: ReactNode;
   variant?: "full" | "compact";
   subtitle?: string;
+  channel?: Channel;
   /** "justify-end" (default) bottom-anchors short scripted threads;
    *  feature illustrations that fill the frame from the top use "justify-start". */
   align?: "start" | "end";
@@ -127,16 +152,29 @@ export function ChatScreen({
   children,
   variant = "full",
   subtitle,
+  channel = "whatsapp",
   align = "start",
 }: ChatScreenProps) {
+  const isTelegram = channel === "telegram";
   return (
     <div className="flex h-full flex-col">
-      <ChatHeader variant={variant} subtitle={subtitle} />
+      <ChatHeader variant={variant} subtitle={subtitle} channel={channel} />
       <div
         className={cn(
-          "flex flex-1 flex-col gap-2 overflow-hidden bg-[url('/whatsapp-bg.png')] bg-cover bg-center p-3",
+          "flex flex-1 flex-col gap-2 overflow-hidden bg-cover bg-center p-3",
+          !isTelegram && "bg-[url('/whatsapp-bg.png')]",
           align === "end" && "justify-end",
         )}
+        style={
+          isTelegram
+            ? {
+                backgroundColor: "#DCEAF5",
+                backgroundImage:
+                  "radial-gradient(rgba(51,144,236,0.14) 1px, transparent 1px)",
+                backgroundSize: "14px 14px",
+              }
+            : undefined
+        }
       >
         {children}
       </div>
@@ -147,20 +185,26 @@ export function ChatScreen({
 interface BubbleProps {
   side: "in" | "out";
   time: string;
+  channel?: Channel;
   children: ReactNode;
 }
 
 /** Plain, non-animated bubble — used by the static feature illustrations. */
-export function StaticBubble({ side, time, children }: BubbleProps) {
+export function StaticBubble({ side, time, channel = "whatsapp", children }: BubbleProps) {
   const isOut = side === "out";
+  const isTelegram = channel === "telegram";
   return (
     <div className={`flex ${isOut ? "justify-end" : "justify-start"}`}>
       <div
-        className={`max-w-[78%] rounded-2xl px-3 py-2 text-[12px] leading-snug ${
+        className={cn(
+          "max-w-[78%] rounded-2xl px-3 py-2 text-[12px] leading-snug",
           isOut
-            ? "rounded-br-md bg-accent-500 text-white"
-            : "rounded-bl-md bg-white text-ink-900"
-        }`}
+            ? cn(
+                "rounded-br-md text-white",
+                isTelegram ? "bg-gradient-to-br from-[#5cb2f3] to-[#2AABEE]" : "bg-accent-500",
+              )
+            : "rounded-bl-md bg-white text-ink-900",
+        )}
       >
         <div>{children}</div>
         <div
@@ -185,21 +229,27 @@ export function StaticBubble({ side, time, children }: BubbleProps) {
 export function AnimatedBubble({
   side,
   time,
+  channel = "whatsapp",
   children,
   ...motionProps
 }: BubbleProps & HTMLMotionProps<"div">) {
   const isOut = side === "out";
+  const isTelegram = channel === "telegram";
   return (
     <motion.div
       {...motionProps}
       className={`flex ${isOut ? "justify-end" : "justify-start"}`}
     >
       <div
-        className={`max-w-[78%] rounded-2xl px-3 py-2 text-[12px] leading-snug ${
+        className={cn(
+          "max-w-[78%] rounded-2xl px-3 py-2 text-[12px] leading-snug",
           isOut
-            ? "rounded-br-md bg-accent-500 text-white"
-            : "rounded-bl-md bg-white text-ink-900"
-        }`}
+            ? cn(
+                "rounded-br-md text-white",
+                isTelegram ? "bg-gradient-to-br from-[#5cb2f3] to-[#2AABEE]" : "bg-accent-500",
+              )
+            : "rounded-bl-md bg-white text-ink-900",
+        )}
       >
         <div>{children}</div>
         <div

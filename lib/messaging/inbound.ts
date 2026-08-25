@@ -8,6 +8,7 @@ import { renderResult } from "./render";
 import { provisionWalletForUser } from "@/lib/wallet/provision";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { QUICK_CHOICES } from "@/lib/agent/menus";
+import { SITE } from "@/lib/data/site";
 
 /**
  * The inbound pipeline, once.
@@ -145,11 +146,27 @@ async function resolveUser(
   return { user, isNew: false };
 }
 
+/**
+ * The reply for someone the app has never seen, on a channel that cannot
+ * create accounts.
+ *
+ * It carries the WhatsApp link rather than just naming WhatsApp, because
+ * this is no longer only reached by people mid-setup: the landing page now
+ * advertises a "Chat on Telegram" button, so a complete stranger can arrive
+ * here first. Telling them to go find another app and type a phrase is a
+ * dead end at the top of the funnel; a tappable link is one step.
+ *
+ * They still have to start on WhatsApp. That is the phone-rooted identity
+ * model described in providers.ts, not a preference — and it is the reason
+ * this message exists at all rather than an onboarding flow.
+ */
 function unlinkedMessage(provider: Provider): string {
   return [
     `This ${provider.label} account isn't connected to a tella wallet yet.`,
     "",
-    `Message tella on WhatsApp and say "link ${provider.id}" — I'll send you a link that connects the two.`,
+    `Start on WhatsApp — ${SITE.whatsappLink}`,
+    "",
+    `Once you're set up, say "link ${provider.id}" there and I'll send you a link that connects the two.`,
   ].join("\n");
 }
 

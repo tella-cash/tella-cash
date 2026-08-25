@@ -48,8 +48,8 @@ export function BalanceIllustration() {
   return (
     <div className="relative mx-auto w-fit">
       <PhoneFrame>
-        <ChatScreen>
-          <StaticBubble side="out" time="14:40">
+        <ChatScreen channel="telegram" subtitle="via Telegram">
+          <StaticBubble side="out" time="14:40" channel="telegram">
             what&apos;s my balance?
           </StaticBubble>
           <div className="flex justify-start">
@@ -102,8 +102,8 @@ export function ContextIllustration() {
   return (
     <div className="relative mx-auto w-fit">
       <PhoneFrame>
-        <ChatScreen>
-          <StaticBubble side="out" time="Mon">
+        <ChatScreen channel="telegram" subtitle="via Telegram">
+          <StaticBubble side="out" time="Mon" channel="telegram">
             cash out 5k to gtbank
           </StaticBubble>
           <StaticBubble side="in" time="Mon">
@@ -114,7 +114,7 @@ export function ContextIllustration() {
             today
             <span className="h-px flex-1 bg-ink-200" />
           </div>
-          <StaticBubble side="out" time="13:20">
+          <StaticBubble side="out" time="13:20" channel="telegram">
             cash out the same again
           </StaticBubble>
           <StaticBubble side="in" time="13:20">
