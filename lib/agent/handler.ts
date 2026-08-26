@@ -74,6 +74,7 @@ import {
   type Choice,
 } from "@/lib/agent/menus";
 import { isAffirmation, isDeclination, isConfirmPayload } from "@/lib/agent/confirm-action";
+import { hasCommandKeyword } from "@/lib/agent/detect-command-keyword";
 import { buildConfirmUrl } from "@/lib/confirm/url";
 
 interface IncomingMessage {
@@ -208,7 +209,7 @@ export async function handleIncomingMessage(
   if (isGoogleLinkRequest(text)) return handleGoogleLinkRequest(user, origin);
 
   if (pending?.kind === "flow") {
-    return handleFlowPendingResponse({ user, pending, text });
+    return handleFlowPendingResponse({ user, pending, text, origin });
   }
 
   return handleOnboardedUser({ user, text, origin });
@@ -267,10 +268,12 @@ async function handleFlowPendingResponse({
   user,
   pending,
   text,
+  origin,
 }: {
   user: tellaUser;
   pending: PendingAction;
   text: string;
+  origin: MessageProvider;
 }): Promise<HandlerResult> {
   const name = firstName(user);
 
@@ -284,6 +287,25 @@ async function handleFlowPendingResponse({
 
   const { flow, token } = pending.payload;
   const failures = pending.payload.failures ?? 0;
+
+  // The beneficiary prompt is a courtesy question, not an interrogation. If
+  // the next message is plainly a new request — "balance", "send 5 to
+  // chidi" — it is not an answer, and feeding it to the flow decoder to be
+  // told what it means about beneficiaries is both wrong and slow. Drop the
+  // prompt, say so, and do the thing they actually asked for.
+  //
+  // Deliberately before decodeFollowUp: no round-trip, and it still works
+  // when sendam-ai is down. Scoped to this flow — the faucet flow's single
+  // question is part of an action the user just asked for, so it keeps
+  // capturing replies as before.
+  if (flow === SAVE_BENEFICIARY_FLOW && hasCommandKeyword(text)) {
+    await deletePending(pending.id);
+    const next = await handleOnboardedUser({ user, text, origin });
+    return {
+      ...next,
+      reply: `Dropping the beneficiary save for now.\n\n${next.reply}`,
+    };
+  }
 
   let result: Awaited<ReturnType<typeof decodeFollowUp>>;
   try {
@@ -339,6 +361,16 @@ async function handleFlowPendingResponse({
   }
 
   if (result.status === "IN_PROGRESS") {
+    // Still at the yes/no step, and the decoder could not read the reply as
+    // either. The keyword check above already ruled out a new request, so
+    // the most likely thing the user just typed is the name they want the
+    // recipient saved under — they answered the question they thought we
+    // asked. Offer that reading back rather than repeating ourselves.
+    if (flow === SAVE_BENEFICIARY_FLOW && result.slots["confirmed"] == null) {
+      const candidate = await proposeCandidateLabel({ user, result, text });
+      if (candidate) return candidate;
+    }
+
     await createPendingFlow({ userId: user.id, flow: result.flow, token: result.token });
     return { reply: nextQuestionFor(result.flow, result.slots) ?? "Sorry, could you say that again?" };
   }
@@ -413,6 +445,70 @@ async function completeSaveBeneficiaryFlow({
       `✓ Saved as *${label}*.`,
       "",
       `Next time just say "send 5 usdc to ${label}".`,
+    ].join("\n"),
+  };
+}
+
+/**
+ * Reads an unrecognised reply to "save this recipient?" as the name the
+ * user wants them saved under, and asks them to confirm just that.
+ *
+ * Mints a fresh token whose only open slot is `confirmed`, carrying the
+ * proposed name in the slots — so a "yes" comes back COMPLETE with
+ * beneficiaryName already resolved and completeSaveBeneficiaryFlow saves it
+ * (still through isValidBeneficiaryLabel), and a "no" is caught by the
+ * decline check above. No new completion path needed.
+ *
+ * Returns null when it cannot make the offer, and the caller falls back to
+ * plainly re-asking for a yes or a no.
+ */
+async function proposeCandidateLabel({
+  user,
+  result,
+  text,
+}: {
+  user: tellaUser;
+  result: Extract<Awaited<ReturnType<typeof decodeFollowUp>>, { status: "IN_PROGRESS" }>;
+  text: string;
+}): Promise<HandlerResult | null> {
+  const candidate = text.trim();
+
+  // Someone typing a paragraph is not proposing a name, and quoting it back
+  // in full would be nonsense. isValidBeneficiaryLabel caps at 30; this is
+  // looser on purpose so a slightly-too-long name still gets the offer and
+  // the specific "that doesn't look like a name I can save" reply.
+  if (!candidate || candidate.length > 60) return null;
+
+  // The address lives in the slots we seeded at flow start. If it did not
+  // come back, there is nothing to save the name against.
+  const recipientAddress = result.slots["recipientAddress"];
+  if (typeof recipientAddress !== "string" || !recipientAddress) return null;
+
+  try {
+    const { token } = await flowStart(
+      SAVE_BENEFICIARY_FLOW,
+      { ...result.slots, beneficiaryName: candidate },
+      [
+        {
+          slot: "confirmed",
+          type: "CONFIRMATION",
+          description: "save this recipient under that name?",
+        },
+      ],
+    );
+    await createPendingFlow({ userId: user.id, flow: SAVE_BENEFICIARY_FLOW, token });
+  } catch (err) {
+    // Same reason reissueNamePrompt swallows this: an uncaught throw here is
+    // total silence on the Meta channel, which has no fallback message.
+    console.error("[agent] flowStart failed", { userId: user.id, flow: SAVE_BENEFICIARY_FLOW, err });
+    return null;
+  }
+
+  return {
+    reply: [
+      `Did you mean to save them as *${candidate}*?`,
+      "",
+      "Reply *yes* to save it, or *no* to skip.",
     ].join("\n"),
   };
 }
