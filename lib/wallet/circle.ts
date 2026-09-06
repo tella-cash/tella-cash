@@ -1,3 +1,4 @@
+import { raiseAlert } from "@/lib/observability/alerts";
 import {
   initiateDeveloperControlledWalletsClient,
   ForbiddenError,
@@ -264,19 +265,69 @@ export interface SpendableUsdc {
 export async function resolveSpendableUsdc(
   walletId: string,
 ): Promise<SpendableUsdc | null> {
-  const raw = await fetchRawBalances(walletId);
-  const usdc = raw.filter((b) => b.symbol === "USDC" && b.tokenId);
+  const decision = pickSpendableUsdc(
+    await fetchRawBalances(walletId),
+    process.env.CIRCLE_USDC_TOKEN_ID,
+  );
 
-  const pinned = process.env.CIRCLE_USDC_TOKEN_ID;
-  if (pinned) {
-    const match = usdc.find((b) => b.tokenId === pinned);
-    return { tokenId: pinned, available: match?.amount ?? 0 };
+  if (decision.pinMissed) {
+    console.error("[circle] CIRCLE_USDC_TOKEN_ID matches no token in this wallet", {
+      pinned: process.env.CIRCLE_USDC_TOKEN_ID,
+    });
+    raiseAlert({
+      kind: "config_invalid",
+      message:
+        "CIRCLE_USDC_TOKEN_ID does not match any USDC token these wallets hold, so every send is being refused as insufficient balance.",
+      context: { pinned: process.env.CIRCLE_USDC_TOKEN_ID ?? null },
+    });
   }
 
-  if (usdc.length === 0) return null;
+  return decision.usdc;
+}
+
+export interface SpendableDecision {
+  usdc: SpendableUsdc | null;
+  /**
+   * The pin named a token this wallet does not hold, WHILE holding USDC under
+   * other ids — so the setting is wrong rather than the wallet being empty.
+   * Distinguished because only one of those is worth waking anyone for.
+   */
+  pinMissed: boolean;
+}
+
+/**
+ * The choice itself, without the network.
+ *
+ * Split out for the reason collapseBySymbol is: the rule that decides which
+ * token a transfer draws on should be testable against fixed input rather than
+ * a live wallet. The pinned branch in particular had a failure nobody could
+ * see — a pin naming a token the wallet does not hold returns a balance of
+ * zero, so every send is refused with "you don't have enough USDC", which is a
+ * statement about the user's money for what is actually a typo in an env var.
+ */
+export function pickSpendableUsdc(
+  raw: RawBalance[],
+  pinned: string | undefined,
+): SpendableDecision {
+  const usdc = raw.filter((b) => b.symbol === "USDC" && b.tokenId);
+
+  if (pinned) {
+    const match = usdc.find((b) => b.tokenId === pinned);
+    return {
+      // Still fails closed. The pin exists precisely to override the automatic
+      // choice below, so falling back to it on a miss would defeat the setting
+      // and could draw the transfer from a token nobody chose.
+      usdc: { tokenId: pinned, available: match?.amount ?? 0 },
+      // An empty wallet has nothing to match and is entirely normal, so it
+      // stays quiet. USDC held under ids that all differ from the pin is not.
+      pinMissed: !match && usdc.length > 0,
+    };
+  }
+
+  if (usdc.length === 0) return { usdc: null, pinMissed: false };
 
   const best = usdc.reduce((a, b) => (b.amount > a.amount ? b : a));
-  return { tokenId: best.tokenId, available: best.amount };
+  return { usdc: { tokenId: best.tokenId, available: best.amount }, pinMissed: false };
 }
 
 /**

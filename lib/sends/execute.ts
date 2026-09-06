@@ -112,7 +112,18 @@ export async function executePendingSend({
     // The confirm link is retired now rather than left to expire: it has done
     // its job, and a live link for a send that is already queued would let a
     // second tap queue it twice.
-    await markPendingSendOutcome(claimed.id, "sent");
+    //
+    // Deliberately NOT marked "sent" first, unlike the branch below. Nothing
+    // has been sent — the transfer is embargoed for twenty-four hours and the
+    // tella_held_send row is its record. Writing "sent" here was a lie that
+    // only ever surfaced if the delete then failed, and it surfaced in the
+    // worst place: migration 0008's unresolved index exists so a person can
+    // find transfers whose fate is unknown, and a row labelled "sent" is one
+    // they would skip. Leaving the outcome null instead means a failed delete
+    // shows up as "worth looking at", and the held-send row explains it.
+    // ("held" is not an option: the CHECK constraint in 0008 admits only
+    // sent/failed/unknown, and a migration to add a value that persists solely
+    // when a DELETE fails is not worth the deploy-ordering hazard.)
     await deletePendingSend(claimed.id);
 
     return {
@@ -134,6 +145,13 @@ export async function executePendingSend({
   });
 
   if (transfer.ok) {
+    // Marked, then deleted. That reads like a wasted write and is not: the
+    // delete can fail, and the ordering decides what a surviving row says.
+    // Marked-then-orphaned reads "this went through"; deleted-without-marking
+    // would leave a claimed row with a null outcome, which migration 0008's
+    // index reports as a transfer needing reconciliation against Circle. One
+    // extra round trip buys the difference between an accurate record and a
+    // false alarm about someone's money.
     await markPendingSendOutcome(claimed.id, "sent");
     await deletePendingSend(claimed.id);
 

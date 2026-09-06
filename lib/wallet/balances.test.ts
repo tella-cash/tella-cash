@@ -10,7 +10,7 @@
  * users double their balance.
  */
 
-import { collapseBySymbol, dedupeSameToken, type RawBalance } from "./circle";
+import { collapseBySymbol, dedupeSameToken, type RawBalance, pickSpendableUsdc } from "./circle";
 
 /** The real shape, from wallet 108aae8a on ARC-TESTNET. */
 const ARC_NATIVE: RawBalance = {
@@ -119,6 +119,74 @@ const CHECKS: Check[] = [
     () => dedupeSameToken([ARC_NATIVE, ARC_ERC20]).length === 2,
   ],
 ];
+
+/**
+ * Which token a transfer draws on, and the misconfiguration that used to be
+ * invisible.
+ *
+ * A pin naming a token the wallet does not hold returns available: 0, so every
+ * send is refused with "you don't have enough USDC" — a statement about the
+ * user's money for what is a typo in an env var. `pinMissed` is what tells the
+ * two apart, and the pair of cases below is the whole reason it exists.
+ */
+const USDC_A: RawBalance = {
+  symbol: "USDC", amount: 40, tokenId: "id-a", tokenAddress: "0xaaa",
+};
+const USDC_B: RawBalance = {
+  symbol: "USDC", amount: 10, tokenId: "id-b", tokenAddress: "0xbbb",
+};
+const EURC: RawBalance = {
+  symbol: "EURC", amount: 99, tokenId: "id-eurc", tokenAddress: "0xccc",
+};
+
+const PIN_CHECKS: Array<[string, () => boolean]> = [
+  [
+    "no pin: spends from the largest USDC entry",
+    () => {
+      const d = pickSpendableUsdc([USDC_B, USDC_A], undefined);
+      return d.usdc?.tokenId === "id-a" && d.usdc.available === 40 && !d.pinMissed;
+    },
+  ],
+  [
+    "no pin, no USDC: nothing to spend, and that is not a misconfiguration",
+    () => {
+      const d = pickSpendableUsdc([EURC], undefined);
+      return d.usdc === null && !d.pinMissed;
+    },
+  ],
+  [
+    "a pin that matches wins even when it is not the largest",
+    () => {
+      const d = pickSpendableUsdc([USDC_A, USDC_B], "id-b");
+      return d.usdc?.tokenId === "id-b" && d.usdc.available === 10 && !d.pinMissed;
+    },
+  ],
+  [
+    "a pin that misses while USDC is held is flagged, and still fails closed",
+    () => {
+      const d = pickSpendableUsdc([USDC_A, USDC_B], "id-typo");
+      // Fails closed rather than falling back: the pin exists to override the
+      // automatic choice, so honouring it on a miss would defeat the setting.
+      return d.usdc?.tokenId === "id-typo" && d.usdc.available === 0 && d.pinMissed;
+    },
+  ],
+  [
+    "a pin against an empty wallet is silent — that is a balance, not a typo",
+    () => {
+      const d = pickSpendableUsdc([EURC], "id-a");
+      return d.usdc?.available === 0 && !d.pinMissed;
+    },
+  ],
+  [
+    "entries with no token id are never spendable",
+    () => {
+      const noId: RawBalance = { symbol: "USDC", amount: 500, tokenId: "", tokenAddress: null };
+      return pickSpendableUsdc([noId], undefined).usdc === null;
+    },
+  ],
+];
+
+CHECKS.push(...PIN_CHECKS);
 
 let passed = 0;
 const failures: string[] = [];

@@ -1,5 +1,11 @@
 // create-wallet.ts
 
+// Marks this file a module rather than a global script. Without it the
+// root-level helpers share one scope, and every script here declares a
+// top-level `main` — tsc reports that as a duplicate implementation across
+// files that never run together.
+export {};
+
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";

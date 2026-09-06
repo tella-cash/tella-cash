@@ -22,7 +22,31 @@ type Stage =
   | { kind: "pin"; mode: "setup" | "verify" }
   | { kind: "working"; label: string; phase: "auth" | "sending" }
   | { kind: "success"; reference: string }
+  /**
+   * Authorized, above the hold threshold, executing in 24 hours.
+   *
+   * A separate stage rather than a variant of success, because it is neither
+   * a success nor a failure and both of the other two would be a lie: the
+   * money has not moved, and nothing went wrong. See lib/sends/tiers.ts.
+   */
+  | { kind: "queued"; message: string }
   | { kind: "error"; message: string };
+
+/**
+ * What a verify route said happened.
+ *
+ * The reason this exists: sendFailureStatus returns 202 for a held send —
+ * "accepted, and it will happen" — and every caller here treated any 2xx as a
+ * completed transfer. The PIN path then read `transactionId` off a body that
+ * carries none and threw on `.slice`, so a user whose transfer was correctly
+ * queued was shown "Something went wrong."; the passkey path did not throw and
+ * showed them a success with the reference "undefined". The comment in
+ * execute.ts already claimed this page "reads this as a success with a
+ * different message" — it does now.
+ */
+type ConfirmOutcome =
+  | { kind: "sent"; reference: string }
+  | { kind: "queued"; message: string };
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
@@ -125,11 +149,11 @@ export function ConfirmClient({
         );
         const assertion = await startAuthentication({ optionsJSON: options });
         setStage({ kind: "working", label: "Sending…", phase: "sending" });
-        const data = await postJson(
+        const outcome = await postConfirm(
           "/api/confirm/webauthn/authenticate/verify",
           { token, response: assertion },
         );
-        setStage({ kind: "success", reference: reference(data) });
+        setStage(stageFor(outcome));
       } else {
         setStage({
           kind: "working",
@@ -142,11 +166,11 @@ export function ConfirmClient({
         );
         const attestation = await startRegistration({ optionsJSON: options });
         setStage({ kind: "working", label: "Sending…", phase: "sending" });
-        const data = await postJson("/api/confirm/webauthn/register/verify", {
+        const outcome = await postConfirm("/api/confirm/webauthn/register/verify", {
           token,
           response: attestation,
         });
-        setStage({ kind: "success", reference: reference(data) });
+        setStage(stageFor(outcome));
       }
     } catch (err) {
       busyRef.current = false;
@@ -221,6 +245,10 @@ export function ConfirmClient({
                 reference={effectiveStage.reference}
                 returnTo={returnTo}
               />
+            )}
+
+            {effectiveStage.kind === "queued" && (
+              <QueuedView message={effectiveStage.message} returnTo={returnTo} />
             )}
 
             {effectiveStage.kind === "error" && (
@@ -361,14 +389,17 @@ function PinForm({
         if (!setupRes.ok) throw new Error(await readError(setupRes));
       }
       onStageChange({ kind: "working", label: "Sending…", phase: "sending" });
+
+      // A lockout isn't a failure the user can retry their way out of, so
+      // it doesn't belong on the error stage with its "try again" affordance.
+      // Put them back on the PIN form with the wait time stated. Checked with
+      // its own request rather than inside postConfirm because it is the one
+      // outcome that returns the user to the form instead of leaving the flow.
       const verifyRes = await fetch("/api/confirm/pin/verify", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ token, pin }),
       });
-      // A lockout isn't a failure the user can retry their way out of, so
-      // it doesn't belong on the error stage with its "try again" affordance.
-      // Put them back on the PIN form with the wait time stated.
       if (verifyRes.status === 429) {
         onStageChange({ kind: "pin", mode: isSetup ? "setup" : "verify" });
         rejectInPlace(await readError(verifyRes));
@@ -377,11 +408,8 @@ function PinForm({
         return;
       }
       if (!verifyRes.ok) throw new Error(await readError(verifyRes));
-      const data = (await verifyRes.json()) as { transactionId: string };
-      onStageChange({
-        kind: "success",
-        reference: data.transactionId.slice(0, 8),
-      });
+
+      onStageChange(stageFor(await readConfirmOutcome(verifyRes)));
     } catch (err) {
       busyRef.current = false;
       setBusy(false);
@@ -394,9 +422,19 @@ function PinForm({
 
   return (
     <form onSubmit={submit} className="space-y-3">
+      {/*
+        The setup copy names BOTH things this one action does. Choosing a PIN
+        here also authorizes the transfer on the screen above — the enrollment
+        gesture doubles as the authorization, which is the whole reason a first
+        send takes one step instead of two (see canEnrollFromConfirmLink). The
+        old wording described only the durable half, "you'll use it going
+        forward", so a first-time user pressed Save expecting to be asked again
+        and instead moved money. The button already said "Save PIN & send";
+        the sentence above it now agrees.
+      */}
       <p className="text-sm leading-relaxed text-ink-500">
         {isSetup
-          ? "Set a 4–8 digit PIN. You'll use it to confirm sends going forward."
+          ? "Set a 4–8 digit PIN. This confirms the send above and becomes how you approve sends from now on."
           : "Enter your PIN to authorize this send."}
       </p>
       <motion.div
@@ -547,6 +585,73 @@ function SuccessView({
         Your receipt is in the chat. You can close this tab.
       </p>
     </div>
+  );
+}
+
+/**
+ * A send that was authorized and will go out in 24 hours.
+ *
+ * Deliberately NOT the success view with different words. The tick and the
+ * word "Sent" describe money that has moved, and this is money that has not —
+ * a user who reads that and checks their balance finds it unchanged, which is
+ * the moment they stop trusting the receipt.
+ *
+ * No auto-redirect either, unlike SuccessView. That one bounces you back to
+ * the chat because the receipt is already waiting there and the page has
+ * nothing more to say. Here the page is telling the user something they have
+ * a day to act on, including how to stop it, so it waits to be read.
+ */
+function QueuedView({
+  message,
+  returnTo,
+}: {
+  message: string;
+  returnTo: ReturnTarget;
+}) {
+  const { url, label } = returnTo;
+
+  return (
+    <div className="py-2 text-center">
+      <motion.div
+        initial={{ scale: 0 }}
+        animate={{ scale: 1 }}
+        transition={{ type: "spring", stiffness: 260, damping: 18 }}
+        className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-ink-900 text-surface-50"
+      >
+        <ClockIcon className="h-7 w-7" />
+      </motion.div>
+      <p className="mt-6 font-display text-3xl text-ink-900">Queued</p>
+      <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-ink-500">
+        {message}
+      </p>
+      {url && (
+        <a
+          href={url}
+          className="mt-6 inline-flex items-center justify-center gap-2 rounded-2xl bg-ink-900 px-6 py-3 text-sm font-medium text-surface-50 transition-transform active:scale-[0.98]"
+        >
+          Back to {label}
+          <ArrowIcon className="h-4 w-4" />
+        </a>
+      )}
+    </div>
+  );
+}
+
+function ClockIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </svg>
   );
 }
 
@@ -705,8 +810,54 @@ async function postJson<T = Record<string, unknown>>(
   return (await res.json()) as T;
 }
 
-function reference(data: Record<string, unknown>): string {
-  return String(data.transactionId ?? "").slice(0, 8);
+/** Copy of last resort, if a held response ever arrives without its own. */
+const HELD_FALLBACK =
+  "Queued. Sends this size wait 24 hours before they go out — reply \u0022cancel send\u0022 in the chat any time before then and nothing moves.";
+
+/**
+ * POST to a verify route and classify what came back.
+ *
+ * Every confirm path funnels through here so the held case cannot be handled
+ * in one of them and forgotten in the other — which is exactly how it was
+ * wrong before: two call sites, two different readings of the same 202.
+ */
+async function postConfirm(url: string, body: unknown): Promise<ConfirmOutcome> {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return readConfirmOutcome(res);
+}
+
+/**
+ * Read a successful verify response. Split from postConfirm because the PIN
+ * path makes its own request — it has a 429 case that returns to the form
+ * rather than leaving the flow — and both must read the body the same way.
+ */
+async function readConfirmOutcome(res: Response): Promise<ConfirmOutcome> {
+  const data = (await res.json()) as {
+    ok?: boolean;
+    reason?: string;
+    error?: string;
+    transactionId?: string;
+  };
+
+  // A 2xx that is explicitly not ok. Today that is only "held"; matching on
+  // the flag rather than on the status keeps this correct if another
+  // accepted-but-not-done outcome is ever added.
+  if (data.ok === false) {
+    return { kind: "queued", message: data.error ?? HELD_FALLBACK };
+  }
+
+  return { kind: "sent", reference: String(data.transactionId ?? "").slice(0, 8) };
+}
+
+function stageFor(outcome: ConfirmOutcome): Stage {
+  return outcome.kind === "queued"
+    ? { kind: "queued", message: outcome.message }
+    : { kind: "success", reference: outcome.reference };
 }
 
 /** Turn raw WebAuthn/DOM errors into something a person can act on. */

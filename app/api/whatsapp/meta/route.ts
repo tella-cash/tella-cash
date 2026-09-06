@@ -98,6 +98,7 @@ export async function POST(request: Request) {
           externalId: msg.fromE164,
           text: msg.text,
           messageId: msg.messageId,
+          profileName: msg.profileName,
         });
       } catch (err) {
         console.error("[meta] inbound failed", { id: msg.messageId, err });

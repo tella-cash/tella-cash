@@ -62,6 +62,20 @@ export async function listChannels(userId: string): Promise<UserChannel[]> {
 }
 
 /**
+ * Thrown when a channel identifier is already bound to a different account.
+ *
+ * Its own class so the linking flow can say something useful instead of
+ * surfacing a database error, and so nothing can catch it by accident with a
+ * generic handler and carry on.
+ */
+export class ChannelOwnedByAnotherUserError extends Error {
+  constructor(provider: MessageProvider, externalId: string) {
+    super(`${provider} channel ${externalId} belongs to another tella account`);
+    this.name = "ChannelOwnedByAnotherUserError";
+  }
+}
+
+/**
  * Record a channel, or refresh the one that already exists.
  *
  * `isPrimary` is only ever set to true here, never false: demoting a channel
@@ -86,6 +100,25 @@ export async function upsertChannel({
 }): Promise<UserChannel> {
   const supabase = getSupabaseAdmin();
   const now = new Date().toISOString();
+
+  // The upsert conflicts on (provider, external_id), so without this check it
+  // would happily rewrite `user_id` and move a live channel from one account
+  // to another. Nothing told the previous owner: their Telegram simply stopped
+  // being one of the places a security notice arrives, which is precisely the
+  // guarantee the fan-out in lib/messaging/notify.ts exists to make.
+  //
+  // Refused rather than transferred. Someone genuinely moving a chat between
+  // accounts unlinks it from the first one — a deliberate act by whoever holds
+  // that account — instead of the second account taking it by asserting.
+  //
+  // Not a lock: two links racing for the same chat both read no conflict and
+  // one wins the upsert. The unique index still resolves that to a single row,
+  // and the loser's user simply finds the chat bound elsewhere. This closes
+  // the ordinary case, which is the one that happens.
+  const existing = await findChannel(provider, externalId);
+  if (existing && existing.user_id !== userId) {
+    throw new ChannelOwnedByAnotherUserError(provider, externalId);
+  }
 
   const { data, error } = await supabase
     .from("tella_user_channel")

@@ -13,6 +13,12 @@
 // Run with env loaded, e.g.:
 //   pnpm tsx --env-file=.env create-content-templates.ts
 
+// Marks this file a module rather than a global script. Without it the
+// root-level helpers share one scope, and every script here declares a
+// top-level `main` — tsc reports that as a duplicate implementation across
+// files that never run together.
+export {};
+
 const CONTENT_API = "https://content.twilio.com/v1/Content";
 
 interface CreatedContent {

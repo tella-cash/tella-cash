@@ -1,6 +1,6 @@
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { FreezeSource, PendingSend } from "@/lib/supabase/types";
-import { revokeResetTokens } from "@/lib/security/reset-tokens";
+import { revokeAllSecurityTokens } from "@/lib/security/reset-tokens";
 import { cancelAllHeldSends } from "@/lib/held_sends/repository";
 import { deletePending, getActivePending } from "@/lib/pending_actions/repository";
 import { raiseAlert } from "@/lib/observability/alerts";
@@ -87,17 +87,33 @@ export async function freezeAccount({
     });
   }
 
-  // An outstanding reset link is a way back into the account, so it goes
-  // too. Note this does NOT stop the user requesting a fresh one: a frozen
-  // user may legitimately need to set a new PIN before lifting the freeze,
-  // and refusing that builds a deadlock. What stops the attacker is that
-  // resetting a PIN does not clear frozen_at.
-  // Both kinds, explicitly. A freeze should also kill an in-flight channel
-  // link: an attacker halfway through attaching their own Telegram account to
-  // this wallet is exactly the scenario, and unlike a PIN reset there is no
-  // deadlock argument for letting it survive.
-  await revokeResetTokens(userId, "pin_reset");
-  await revokeResetTokens(userId, "link_telegram");
+  // Every outstanding token, of every kind. Each one is a way back into an
+  // account whose owner has just said something is wrong, and each was minted
+  // before they said it.
+  //
+  // This does NOT stop the user requesting a fresh one: a frozen user may
+  // legitimately need to set a new PIN before lifting the freeze, and refusing
+  // that builds a deadlock. What stops the attacker is that resetting a PIN
+  // does not clear frozen_at.
+  //
+  // It used to name two kinds explicitly and missed the two that migration
+  // 0018 added — see revokeAllSecurityTokens for what a surviving link_google
+  // or unfreeze token buys someone holding the phone.
+  //
+  // Best-effort in the same sense as the held-send cascade below: loud, and
+  // not a reason to fail a freeze that has already applied.
+  try {
+    await revokeAllSecurityTokens(userId);
+  } catch (err) {
+    console.error("[freeze] revoking outstanding tokens failed", { userId, err });
+    raiseAlert({
+      kind: "account_frozen",
+      message:
+        "Account frozen but outstanding security tokens could not be revoked. Check tella_security_token.",
+      context: { source },
+      force: true,
+    });
+  }
 
   // Mid-conversation flow state, so the account doesn't come back mid-way
   // through answering "save this recipient?". deletePending takes the row

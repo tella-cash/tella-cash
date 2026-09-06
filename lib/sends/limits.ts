@@ -205,9 +205,19 @@ export function mergeLimits(
 export async function checkSendLimits({
   user,
   amount,
+  excludeHeldSendId,
 }: {
   user: tellaUser;
   amount: string;
+  /**
+   * A held send that must not count against itself.
+   *
+   * Only the release job passes this, and only for the row it is about to
+   * execute. Every other caller leaves it unset, so a hold still reserves its
+   * amount against every new send the user composes — which is the whole
+   * reason sumHeldUsdc exists. See its comment for what went wrong without it.
+   */
+  excludeHeldSendId?: string;
 }): Promise<LimitResult> {
   const requested = Number.parseFloat(amount);
   if (!Number.isFinite(requested) || requested <= 0) {
@@ -232,7 +242,7 @@ export async function checkSendLimits({
       resolveSpendableUsdc(user.circle_wallet_id),
       sumSentUsdcSince(user.id, DAILY_WINDOW_HOURS),
       resolveLimits(user.id),
-      sumHeldUsdc(user.id),
+      sumHeldUsdc(user.id, excludeHeldSendId),
     ]);
   } catch (err) {
     // Fails CLOSED. If we can't establish that a send is within limits, we

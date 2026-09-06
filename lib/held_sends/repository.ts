@@ -186,15 +186,36 @@ export async function cancelAllHeldSends({
  * Counts 'executing' as well as 'holding': a row mid-flight has not produced
  * a transaction row yet either, and treating it as free money for the seconds
  * it is in flight is exactly the gap a burst would find.
+ *
+ * `excludeId` IS THE RELEASE JOB'S FIX AND IT IS NOT AN OPTIMISATION.
+ *
+ * When a hold comes due, releaseOne re-runs the full limits check before
+ * sending — correctly, since a day-old check is not a check. But that check
+ * summed the holds, and the hold being released is one of them, so its own
+ * amount was counted against itself twice over: `spendable = available - held`
+ * demanded a balance of 2x the transfer, and `committed + requested > daily`
+ * demanded a daily cap of 2x. A user with exactly enough money had their
+ * queued transfer cancelled a day later and was told they could not afford it.
+ *
+ * Passing the row's own id here removes it from its own reservation. Every
+ * OTHER hold still counts, which is the part that must not be lost — that is
+ * what stops two queued transfers from each spending the same balance.
  */
-export async function sumHeldUsdc(userId: string): Promise<number> {
+export async function sumHeldUsdc(
+  userId: string,
+  excludeId?: string,
+): Promise<number> {
   const supabase = getSupabaseAdmin();
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("tella_held_send")
     .select("payload")
     .eq("user_id", userId)
     .in("state", ["holding", "executing"]);
+
+  if (excludeId) query = query.neq("id", excludeId);
+
+  const { data, error } = await query;
 
   if (error) throw new Error(`sumHeldUsdc failed: ${error.message}`);
 

@@ -31,6 +31,15 @@ export interface InboundMessage {
   text: string;
   /** Provider-unique, for the idempotency claim. */
   messageId: string;
+  /**
+   * The display name the provider reports for this sender, if it gives one.
+   *
+   * Both WhatsApp routes have always parsed it and neither could pass it on,
+   * because this interface had nowhere to put it — so tella_user_channel
+   * .display_name, the column that exists to answer "which account is this",
+   * stayed null for every user. Never logged: it is a real person's name.
+   */
+  profileName?: string | null;
 }
 
 const FALLBACK_MESSAGE =
@@ -72,7 +81,7 @@ async function process(message: InboundMessage): Promise<void> {
 
   let resolved: { user: tellaUser; isNew: boolean } | null;
   try {
-    resolved = await resolveUser(provider, to);
+    resolved = await resolveUser(provider, to, message.profileName);
   } catch (err) {
     console.error("[inbound] user lookup failed", { provider: provider.id, err });
     await safeSend(provider, to, FALLBACK_MESSAGE);
@@ -126,10 +135,12 @@ async function process(message: InboundMessage): Promise<void> {
 async function resolveUser(
   provider: Provider,
   externalId: string,
+  profileName?: string | null,
 ): Promise<{ user: tellaUser; isNew: boolean } | null> {
   if (provider.selfEnrolling) {
     return findOrCreateUser({
       whatsappNumber: externalId,
+      profileName,
       // Only WhatsApp providers are self-enrolling, and the column's CHECK
       // constraint (migration 0002) only admits those two, so this cast is
       // exactly as narrow as the branch it sits in.

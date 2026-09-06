@@ -27,7 +27,11 @@ export type AlertKind =
   | "wallet_provisioning_stuck"
   | "account_frozen"
   | "account_unfrozen"
-  | "hold_notification_failed";
+  | "hold_notification_failed"
+  // A setting that is present, syntactically fine, and wrong in a way only
+  // the running system can see — so it cannot be caught at deploy time and
+  // will otherwise present as users being told they have no money.
+  | "config_invalid";
 
 interface AlertPayload {
   kind: AlertKind;

@@ -160,6 +160,49 @@ export async function revokeResetTokens(
   }
 }
 
+/**
+ * Invalidate every outstanding token a user holds, of every kind.
+ *
+ * The deliberate opposite of revokeResetTokens above, and the distinction is
+ * the point. That one is called after a SUCCESSFUL reset, where revoking
+ * unrelated kinds is a bug: killing an in-flight Telegram link because someone
+ * changed their PIN leaves them tapping a deep link that does nothing.
+ *
+ * This one is called by a FREEZE, where the opposite reasoning applies. Every
+ * outstanding token is a way back into an account whose owner has just said
+ * something is wrong, and each was minted before they said it. A freeze that
+ * leaves one alive is a freeze with a door propped open.
+ *
+ * Enumerating kinds by hand is what went wrong: the freeze revoked exactly
+ * `pin_reset` and `link_telegram`, and when `link_google` and `unfreeze` were
+ * added in 0018 nobody came back here. So an attacker holding the phone who
+ * had already minted a Google-link URL could complete it AFTER the freeze and
+ * permanently attach their own account — which receives every future security
+ * email and can freeze the wallet from the web. A stale `unfreeze` token was
+ * worse: inside its ten minutes it could lift the freeze that had just been
+ * applied. This takes no kind argument, so a fifth kind is covered on the day
+ * it is added rather than the day someone notices.
+ */
+export async function revokeAllSecurityTokens(userId: string): Promise<void> {
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase
+    .from("tella_security_token")
+    .update({ used_at: new Date().toISOString() })
+    .eq("user_id", userId)
+    .is("used_at", null);
+
+  if (error) {
+    // Loud, and it does NOT fail the freeze: the flag and the confirm-link
+    // cascade are already applied, and a surviving token still has to satisfy
+    // its own gate. Reported so it can be chased rather than silently lost.
+    console.error("[security] revoking all outstanding tokens failed", {
+      userId,
+      error: error.message,
+    });
+    throw new Error(`revokeAllSecurityTokens failed: ${error.message}`);
+  }
+}
+
 /** The user-facing URL for a reset token. */
 export function buildResetUrl(token: string): string {
   const base = process.env.APP_BASE_URL;

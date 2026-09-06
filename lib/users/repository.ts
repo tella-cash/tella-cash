@@ -27,9 +27,12 @@ import type { tellaUser, WhatsAppChannel } from "@/lib/supabase/types";
 export async function findOrCreateUser({
   whatsappNumber,
   channel = "twilio",
+  profileName,
 }: {
   whatsappNumber: string;
   channel?: WhatsAppChannel;
+  /** The provider's display name for this sender. Stored on the channel row. */
+  profileName?: string | null;
 }): Promise<{ user: tellaUser; isNew: boolean }> {
   const supabase = getSupabaseAdmin();
 
@@ -51,7 +54,7 @@ export async function findOrCreateUser({
     // Dual-write while the legacy columns are still read elsewhere. The
     // channel row is the authority; this keeps the column usable until the
     // contract migration retires it.
-    await recordChannel(existingUser.id, channel, whatsappNumber, existingUser.whatsapp_channel === channel);
+    await recordChannel(existingUser.id, channel, whatsappNumber, existingUser.whatsapp_channel === channel, profileName);
 
     if (existingUser.whatsapp_channel !== channel) {
       const { data: updated, error: updateError } = await supabase
@@ -89,7 +92,7 @@ export async function findOrCreateUser({
   }
 
   const createdUser = created as tellaUser;
-  await recordChannel(createdUser.id, channel, whatsappNumber, true);
+  await recordChannel(createdUser.id, channel, whatsappNumber, true, profileName);
 
   return { user: createdUser, isNew: true };
 }
@@ -111,6 +114,7 @@ async function recordChannel(
   provider: WhatsAppChannel,
   externalId: string,
   isPrimary: boolean,
+  displayName?: string | null,
 ): Promise<void> {
   try {
     await upsertChannel({
@@ -119,6 +123,10 @@ async function recordChannel(
       externalId,
       isPrimary,
       verified: true,
+      // Passed only when the provider actually sent one. upsertChannel omits
+      // the column for `undefined`, so a delivery without a profile name
+      // leaves an existing one alone instead of blanking it.
+      ...(displayName ? { displayName } : {}),
     });
   } catch (err) {
     console.error("[users] channel mirror failed", { userId, provider, err });

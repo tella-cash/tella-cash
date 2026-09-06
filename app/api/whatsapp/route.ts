@@ -34,7 +34,20 @@ interface TwilioWebhookPayload {
 export async function POST(request: Request) {
   const signature = request.headers.get("x-twilio-signature") ?? "";
   const rawBody = await request.text();
-  const params = Object.fromEntries(new URLSearchParams(rawBody));
+  const search = new URLSearchParams(rawBody);
+  const params = Object.fromEntries(search);
+
+  // Object.fromEntries keeps the LAST value for a repeated key, so a body
+  // carrying one would be validated against a different parameter set than
+  // Twilio signed — the signature would not match and the message would 403
+  // with nothing to explain it. twilio.validateRequest takes a flat object, so
+  // it cannot represent repeats either; there is no fix, only the difference
+  // between a silent drop and a diagnosable one.
+  if (search.size !== Object.keys(params).length) {
+    console.warn("[whatsapp] repeated form parameters — signature check may fail", {
+      sid: search.get("MessageSid"),
+    });
+  }
 
   // Twilio signs the exact URL it posts to, so we validate against the live
   // request URL (host + proto from headers) and the configured
@@ -83,6 +96,7 @@ export async function POST(request: Request) {
         externalId: payload.From,
         text: userMessage,
         messageId: payload.MessageSid,
+        profileName: payload.ProfileName,
       });
     } catch (err) {
       // handleInbound has already logged and released the claim. This is the

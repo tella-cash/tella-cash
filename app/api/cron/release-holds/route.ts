@@ -102,7 +102,15 @@ async function releaseOne(hold: HeldSend): Promise<ReleaseOutcome> {
     return "cancelled";
   }
 
-  const limits = await checkSendLimits({ user, amount: hold.payload.amount });
+  // The hold's own id is excluded from the reserved total: it is about to be
+  // executed, so counting it as still-reserved would make it compete with
+  // itself for the balance and the daily allowance it was authorized against.
+  // Every other hold this user has queued still counts. See sumHeldUsdc.
+  const limits = await checkSendLimits({
+    user,
+    amount: hold.payload.amount,
+    excludeHeldSendId: hold.id,
+  });
   if (!limits.ok) {
     await markHeldSendOutcome({ id: hold.id, state: "cancelled" });
     await tell(user, [
