@@ -31,7 +31,9 @@
 
 export {};
 
-const API_BASE = "https://api.telegram.org";
+import { request as httpsRequest } from "node:https";
+
+const API_HOST = "api.telegram.org";
 
 /**
  * Every update type this app acts on.
@@ -55,22 +57,69 @@ interface WebhookInfo {
   allowed_updates?: string[];
 }
 
-async function callTelegram<T>(
+/**
+ * node:https with family: 4, rather than fetch.
+ *
+ * api.telegram.org publishes an AAAA record, and on a network with no route to
+ * it Node's fetch sits on the v6 address until it times out and reports the
+ * whole thing as "fetch failed" — no host, no address family, no reason. curl
+ * gets through because it tries both and keeps whichever answers first.
+ *
+ * dns.setDefaultResultOrder("ipv4first") was the obvious fix and did not work
+ * here: it steers the resolver, and undici does not reliably follow it. Setting
+ * `family: 4` on the socket is not a hint, so this stops depending on the
+ * resolver's preference being honoured.
+ *
+ * Only this script. The deployed app talks to Telegram from Vercel, where the
+ * route is fine, and lib/telegram/client.ts is unchanged.
+ */
+function callTelegram<T>(
   token: string,
   method: string,
   body?: Record<string, unknown>,
 ): Promise<T> {
-  const res = await fetch(`${API_BASE}/bot${token}/${method}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body ?? {}),
-  });
+  const payload = JSON.stringify(body ?? {});
 
-  const data = (await res.json()) as { ok: boolean; result?: T; description?: string };
-  if (!data.ok) {
-    throw new Error(`Telegram ${method} failed: ${data.description ?? "unknown error"}`);
-  }
-  return data.result as T;
+  return new Promise<T>((resolve, reject) => {
+    const req = httpsRequest(
+      {
+        host: API_HOST,
+        path: `/bot${token}/${method}`,
+        method: "POST",
+        family: 4,
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(payload),
+        },
+        timeout: 30_000,
+      },
+      (res) => {
+        let raw = "";
+        res.setEncoding("utf8");
+        res.on("data", (chunk) => (raw += chunk));
+        res.on("end", () => {
+          let data: { ok: boolean; result?: T; description?: string };
+          try {
+            data = JSON.parse(raw);
+          } catch {
+            reject(new Error(`Telegram ${method}: unreadable response (HTTP ${res.statusCode})`));
+            return;
+          }
+          if (!data.ok) {
+            reject(new Error(`Telegram ${method} failed: ${data.description ?? "unknown error"}`));
+            return;
+          }
+          resolve(data.result as T);
+        });
+      },
+    );
+
+    req.on("timeout", () => req.destroy(new Error(`Telegram ${method}: timed out`)));
+    // Named explicitly, because "fetch failed" with no host attached is what
+    // made this take as long as it did to work out.
+    req.on("error", (err) => reject(new Error(`Telegram ${method}: ${err.message} (${API_HOST}, IPv4)`)));
+    req.end(payload);
+  });
 }
 
 async function main(): Promise<void> {
@@ -98,6 +147,37 @@ async function main(): Promise<void> {
   console.log("  allowed_updates", JSON.stringify(before.allowed_updates ?? "(unset)"));
 
   const url = `${baseUrl.replace(/\/$/, "")}/api/telegram`;
+
+  // REFUSE RATHER THAN SEND A URL TELEGRAM WILL NOT TAKE.
+  //
+  // setWebhook does not reject-and-leave-things-alone: handing it a non-HTTPS
+  // URL fails AND clears the existing webhook, so the bot stops receiving
+  // anything at all. That is a live outage caused by a script someone ran to
+  // fix a button.
+  //
+  // It is an easy mistake to make, because the obvious way to run this is
+  // `--env-file=.env` and a local .env quite reasonably has
+  // APP_BASE_URL=http://localhost:3000. So the check is here rather than in
+  // anyone's memory.
+  if (!/^https:\/\//i.test(url) || /^https:\/\/(localhost|127\.|\[::1\])/i.test(url)) {
+    console.error(
+      `\nRefusing to register ${url}\n\n` +
+        "Telegram requires a public HTTPS URL, and a rejected setWebhook CLEARS the\n" +
+        "existing one — so sending this would take the bot offline rather than leave\n" +
+        "it as it is.\n\n" +
+        `APP_BASE_URL is currently ${baseUrl}. Point it at the deployed origin for\n` +
+        "this run, e.g.\n\n" +
+        "  APP_BASE_URL=https://www.tella.cash pnpm tsx --env-file=.env set-telegram-webhook.ts\n\n" +
+        "(the explicit variable wins over the one in .env)",
+    );
+    process.exit(1);
+  }
+
+  // Keeping the URL it already has, when that is what we are about to send,
+  // makes a re-run visibly a no-op rather than a re-registration.
+  if (before.url && before.url !== url) {
+    console.log(`\n  note: changing the webhook URL\n    from ${before.url}\n    to   ${url}`);
+  }
 
   await callTelegram(token, "setWebhook", {
     url,
