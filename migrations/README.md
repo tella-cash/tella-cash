@@ -287,10 +287,25 @@ from anyone who guesses the URL, and verification fails closed when it is
 unset. Register the webhook with:
 
 ```
-curl -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
-  -d "url=$APP_BASE_URL/api/telegram" \
-  -d "secret_token=$TELEGRAM_WEBHOOK_SECRET"
+pnpm tsx --env-file=.env set-telegram-webhook.ts
 ```
+
+**Use the script, not a hand-written curl, and the reason is specific.** The
+command that used to be here omitted `allowed_updates`, and Telegram's rule for
+that field is *"If not specified, the previous setting will be used."* This bot
+had been registered once with `allowed_updates: ["message"]`, so Telegram
+delivered typed messages and silently discarded every `callback_query` — which
+is what an inline-keyboard tap is.
+
+The result was that no button on Telegram had ever worked: not Balance, not My
+address, not Send, not the saved names in the send flow, and not the
+`Freeze it` / `Not now` confirmation. Nothing reached the app, so nothing
+appeared in its logs either. And because the curl omitted the field,
+re-registering the webhook — the obvious thing to try — inherited the same
+restriction and could never have fixed it.
+
+The script always sends the list explicitly. That is the whole point of it.
+
 
 **Then register the command list — this step is not optional.** Telegram's ☰
 Menu button is bound to whatever `setMyCommands` last registered, and until it
