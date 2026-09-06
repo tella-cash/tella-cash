@@ -49,9 +49,48 @@ const CHECKS: Check[] = [
     "a negative amount is zero confidence",
     () => effectiveConfidence(d({ intent: "SEND", amount: "-5", recipient: "Chidi", confidence: 0.99 })) === 0,
   ],
+  // --- an OPENING is not a broken PROPOSAL ---
+  //
+  // These four are the regression that made the Send button, /send and "send
+  // usdc" answer "I'm not totally sure what you meant". All three arrive as
+  // intent SEND with empty slots at confidence 1 from tier 0, and scoring a
+  // missing slot as 0 put them under the 0.85 threshold — so the switch in
+  // handleOnboardedUser was never reached and startGuidedSend was dead code.
+  //
+  // A SEND with no slots proposes nothing and moves nothing. What the
+  // threshold protects against is a half-READ transfer being acted on, and
+  // there is nothing here to have misread.
   [
-    "a missing recipient is zero confidence",
-    () => effectiveConfidence(d({ intent: "SEND", amount: "5", recipient: null, confidence: 0.99 })) === 0,
+    "a bare send — the Send button, /send, \"send usdc\" — is allowed through",
+    () => {
+      const v = checkConfidence(d({ intent: "SEND", amount: null, recipient: null, confidence: 1 }));
+      return v.ok;
+    },
+  ],
+  [
+    "an amount with no recipient opens the flow rather than being refused",
+    () => {
+      const v = checkConfidence(d({ intent: "SEND", amount: "5", recipient: null, confidence: 0.99 }));
+      return v.ok;
+    },
+  ],
+  [
+    "a recipient with no amount opens the flow rather than being refused",
+    () => {
+      const v = checkConfidence(d({ intent: "SEND", amount: null, recipient: "Chidi", confidence: 0.99 }));
+      return v.ok;
+    },
+  ],
+  [
+    "a bare send the DECODER is unsure about is still refused — only tier 0 is certain",
+    () => {
+      const v = checkConfidence(d({ intent: "SEND", amount: null, recipient: null, confidence: 0.3 }));
+      return !v.ok && v.reason === "too_low";
+    },
+  ],
+  [
+    "an unusable amount is still zero, slots or no slots",
+    () => effectiveConfidence(d({ intent: "SEND", amount: "abc", recipient: null, confidence: 0.99 })) === 0,
   ],
   [
     "a structurally broken send is NOT echoed back — there is nothing worth reading out",

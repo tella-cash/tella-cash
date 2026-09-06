@@ -112,6 +112,12 @@ export interface SendFlowPendingPayload {
    * between the two questions is read correctly rather than from a snapshot.
    */
   recipient?: string;
+  /**
+   * Set when the amount arrived before the recipient — "send 5", or a bare
+   * "5" answered to "who are you sending to?". Held so the next question is
+   * "5 USDC to who?" rather than starting the pair over.
+   */
+  amount?: string;
 }
 
 export type PendingActionPayload =

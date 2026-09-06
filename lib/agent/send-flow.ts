@@ -1,5 +1,6 @@
 import type { Beneficiary, PendingActionPayload, SendFlowPendingPayload } from "@/lib/supabase/types";
 import type { Choice } from "@/lib/agent/menus";
+import { classifyRecipient } from "@/lib/agent/parse-send";
 
 /**
  * The guided send: "Send" as a button that actually sends.
@@ -78,6 +79,72 @@ export function parseSendAmount(text: string): string | null {
   return raw;
 }
 
+export interface SendReplySlots {
+  amount: string | null;
+  recipient: string | null;
+}
+
+/**
+ * Read whatever the user put in one reply — an amount, a recipient, or both.
+ *
+ * People do not answer "who are you sending to?" with only a name. They answer
+ * "5 to chidi", or "chidi 5", or just "5" and expect to be asked the rest.
+ * Taking the whole reply as a recipient label meant "5 to chidi" was looked up
+ * as a beneficiary called "5 to chidi", which nobody has.
+ *
+ * Anchored patterns, whole-string, in the order below. Anything that matches
+ * none of them is a recipient, because that is what the question asked for.
+ *
+ * TWO WAYS THIS COULD SEND MONEY TO THE WRONG PLACE, both guarded:
+ *
+ * A phone number written with spaces — "+234 801 234 5678" — ends in digits,
+ * so the recipient-then-amount pattern would read the last group as an amount
+ * and the truncated number as the destination. So a reply the classifier can
+ * identify ON ITS OWN as a phone number or an address is never split.
+ *
+ * A saved name that ends in a number — "Landlord 2" — would split the same
+ * way. That one cannot be settled here, because whether it is a name is a fact
+ * about the user's address book: the caller checks saved labels against the
+ * whole reply first, and a saved name always wins over any splitting.
+ */
+const AMOUNT = String.raw`\d+(?:\.\d{1,6})?`;
+
+const AMOUNT_ONLY = new RegExp(`^(?:usdc\\s+)?(${AMOUNT})\\s*(?:usdc)?$`, "i");
+const AMOUNT_THEN_RECIPIENT = new RegExp(
+  `^(?:send\\s+)?(${AMOUNT})\\s*(?:usdc)?\\s+(?:to\\s+)?(.+?)$`,
+  "i",
+);
+const RECIPIENT_THEN_AMOUNT = new RegExp(
+  `^(.+?)\\s+(${AMOUNT})\\s*(?:usdc)?$`,
+  "i",
+);
+
+export function parseSendReply(text: string): SendReplySlots {
+  const trimmed = text.trim();
+  if (!trimmed) return { amount: null, recipient: null };
+
+  // Never split something that is already a complete destination.
+  const whole = classifyRecipient(trimmed);
+  if (whole.kind === "phone" || whole.kind === "address") {
+    return { amount: null, recipient: trimmed };
+  }
+
+  const amountOnly = AMOUNT_ONLY.exec(trimmed);
+  if (amountOnly) return { amount: amountOnly[1], recipient: null };
+
+  const amountFirst = AMOUNT_THEN_RECIPIENT.exec(trimmed);
+  if (amountFirst) {
+    return { amount: amountFirst[1], recipient: amountFirst[2].trim() };
+  }
+
+  const amountLast = RECIPIENT_THEN_AMOUNT.exec(trimmed);
+  if (amountLast) {
+    return { amount: amountLast[2], recipient: amountLast[1].trim() };
+  }
+
+  return { amount: null, recipient: trimmed };
+}
+
 /**
  * The saved recipients, as tappable options.
  *
@@ -114,6 +181,17 @@ export function recipientPrompt(hasSaved: boolean): string {
         "",
         "Once you've paid someone I'll offer to save them, so next time it's one tap.",
       ].join("\n");
+}
+
+/** Asked when the amount arrived first — "send 5" — and the name has not. */
+export function recipientPromptWithAmount(amount: string, hasSaved: boolean): string {
+  return [
+    `${amount} USDC to who?`,
+    "",
+    hasSaved
+      ? "Tap a saved name below, or send me a phone number or a 0x wallet address."
+      : "Send me their phone number with the country code, or a 0x wallet address.",
+  ].join("\n");
 }
 
 export function amountPrompt(recipientLabel: string): string {

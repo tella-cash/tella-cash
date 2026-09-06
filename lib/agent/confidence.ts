@@ -46,21 +46,39 @@ export type ConfidenceVerdict =
 /**
  * The structural half of the score.
  *
- * A model can be confident and wrong in ways the payload itself reveals. An
- * amount that is not a finite positive number, or a `SEND` with no recipient
- * at all, is not a 0.9 parse whatever the decoder claims — so the effective
- * confidence is the minimum of what was claimed and what the fields support.
- * Cheap, and it means one obviously broken field cannot ride in on a high
- * score.
+ * A model can be confident and wrong in ways the payload itself reveals: an
+ * amount that is not a finite positive number is not a 0.9 parse whatever the
+ * decoder claims. So the effective confidence is the minimum of what was
+ * claimed and what the fields support, and one obviously broken field cannot
+ * ride in on a high score.
+ *
+ * MISSING SLOTS ARE NOT A BROKEN PARSE, and treating them as one was a real
+ * bug rather than an over-cautious setting.
+ *
+ * This used to return 0 for a SEND with no amount, and again for one with no
+ * recipient. But tapping the Send button, typing /send, or saying "send usdc"
+ * all produce exactly that: intent SEND with both slots empty, at confidence 1
+ * from tier 0, because they are unambiguous requests to START a send. Scoring
+ * them 0 put them under the 0.85 threshold, so the switch in
+ * handleOnboardedUser was never reached and the user got "I'm not totally sure
+ * what you meant" — for the single most explicit thing this product does.
+ *
+ * The distinction that matters is between a PROPOSAL and an OPENING. The
+ * threshold exists because a half-read transfer, acted on, moves the wrong
+ * money to the wrong person. A SEND carrying no slots proposes nothing and
+ * moves nothing; it opens a conversation, and the guided flow asks for
+ * whatever is missing before anything is minted. There is nothing there to be
+ * uncertain about.
+ *
+ * So the only structural failure left is data that is present and unusable.
  */
 function structuralConfidence(decoded: DecodedIntent): number {
   if (decoded.intent !== "SEND") return 1;
 
-  if (decoded.amount === null) return 0;
-  const amount = Number(decoded.amount);
-  if (!Number.isFinite(amount) || amount <= 0) return 0;
-
-  if (!decoded.recipient?.trim()) return 0;
+  if (decoded.amount !== null) {
+    const amount = Number(decoded.amount);
+    if (!Number.isFinite(amount) || amount <= 0) return 0;
+  }
 
   return 1;
 }

@@ -88,7 +88,9 @@ import {
   beneficiaryChoices,
   isSendFlowPayload,
   parseSendAmount,
+  parseSendReply,
   recipientPrompt,
+  recipientPromptWithAmount,
 } from "@/lib/agent/send-flow";
 import { buildConfirmUrl } from "@/lib/confirm/url";
 
@@ -825,10 +827,14 @@ async function handleOnboardedUser({
     case "HISTORY":
       return { reply: await getHistoryReply(user), choices: QUICK_CHOICES };
     case "SEND":
-      // Reached only when there is no amount and no recipient to act on — a
-      // tapped Send button, /send, or "I want to send money". Previously this
-      // printed the command to type; now it asks the first question.
-      return startGuidedSend(user);
+      // Reached when mapDecodedSend refused, which it does unless BOTH an
+      // amount and a recipient were read. That covers a tapped Send button and
+      // /send (nothing to read) as well as "send 5" or "send money to chidi"
+      // (half read). Whatever was understood seeds the flow.
+      return startGuidedSend(user, origin, {
+        amount: decoded.amount,
+        recipient: decoded.recipient,
+      });
     case "GREETING":
       // sendam-ai reads the tone of the user's own greeting and composes a
       // matching reply; fall back to our fixed template on older deploys
@@ -1006,24 +1012,104 @@ async function unknownRecipientReply(
 }
 
 /**
- * Open the guided send: ask who, then how much.
+ * Drive the guided send one answer at a time.
  *
- * The gate runs here as well as in startSendFlow, and that is not redundancy
- * for its own sake — asking a frozen user to pick a recipient and name an
- * amount before telling them nothing can leave their wallet is two wasted
- * questions and a worse moment than saying so immediately.
+ * ONE function for every entry into the flow — the Send button, /send, "send
+ * usdc", a decoder SEND with half its slots, and each reply inside the flow —
+ * because the decision is the same every time and it is a decision about where
+ * money goes. Two copies of "do I have enough to proceed" is how one of them
+ * ends up proceeding on less.
+ *
+ * The rule: hold what is known, ask for exactly what is missing, and only hand
+ * off to startSendFlow when both fields are in hand. startSendFlow stays the
+ * single path from an intent to a confirm link; nothing here mints one.
  */
-async function startGuidedSend(user: tellaUser): Promise<HandlerResult> {
+async function advanceSendFlow({
+  user,
+  origin,
+  amount,
+  recipient,
+  pendingId,
+}: {
+  user: tellaUser;
+  origin: MessageProvider;
+  /** Whatever is known so far. Either may be null; both may be null. */
+  amount: string | null;
+  recipient: string | null;
+  /** The flow row to clear once both fields are in hand. */
+  pendingId?: string;
+}): Promise<HandlerResult> {
   const gate = gateSpend(user);
   if (!gate.ok) {
+    if (pendingId) await deletePending(pendingId);
     if (gate.reason === "frozen") return frozenReply(firstName(user));
     return {
       reply: "Your wallet isn't ready yet. Once it's set up you'll be able to send.",
     };
   }
 
-  // Best-effort. A saved-name lookup failing is a reason to ask for a number
-  // instead, not a reason to refuse to start a send.
+  // A seeded amount comes from the decoder and is only as good as the decoder.
+  // Re-parsed with the same anchored pattern a typed answer gets, so an
+  // unusable one is treated as absent and asked for rather than carried.
+  const known = amount ? parseSendAmount(amount) : null;
+
+  const remember = async (
+    step: "recipient" | "amount",
+    payload: { amount?: string; recipient?: string },
+  ) => {
+    await createPending({
+      userId: user.id,
+      kind: "send",
+      payload: { action: "send", step, ...payload },
+      ttlMinutes: 10,
+    });
+  };
+
+  if (recipient) {
+    // Checked here as well as in startSendFlow, and for the reason
+    // checkSendLimits is: this one is advisory and exists so the message is
+    // useful. Catching a mistyped number NOW costs one message; catching it
+    // after the amount question costs two and makes the user retype both.
+    const classified = classifyRecipient(recipient);
+
+    if (classified.kind === "invalid_phone") {
+      await remember("recipient", known ? { amount: known } : {});
+      return {
+        reply: [
+          `"${classified.typed}" doesn't look like a complete phone number.`,
+          "",
+          "Include the country code, like +234 801 234 5678 — or send a 0x wallet address, or a name you've saved.",
+        ].join("\n"),
+      };
+    }
+
+    if (classified.kind === "label") {
+      const saved = await findBeneficiaryByLabel(user.id, classified.label);
+      if (!saved) {
+        await remember("recipient", known ? { amount: known } : {});
+        return unknownRecipientReply(user, classified.label);
+      }
+    }
+
+    if (known) {
+      // Both fields. The flow is over; the row goes before startSendFlow so a
+      // failure there leaves the user free to start again rather than trapped
+      // answering a question that has already been answered.
+      if (pendingId) await deletePending(pendingId);
+      return startSendFlow({
+        user,
+        intent: { amount: known, token: "USDC", recipient: classified },
+        origin,
+      });
+    }
+
+    await remember("amount", { recipient });
+    return { reply: amountPrompt(recipient) };
+  }
+
+  // No recipient yet. Offer the saved names either way — best-effort, since a
+  // lookup failing is a reason to ask for a number instead of a reason to
+  // refuse to start a send.
   let saved: Awaited<ReturnType<typeof listBeneficiaries>> = [];
   try {
     saved = await listBeneficiaries(user.id);
@@ -1032,38 +1118,65 @@ async function startGuidedSend(user: tellaUser): Promise<HandlerResult> {
   }
 
   try {
-    await createPending({
-      userId: user.id,
-      kind: "send",
-      payload: { action: "send", step: "recipient" },
-      ttlMinutes: 10,
-    });
+    await remember("recipient", known ? { amount: known } : {});
   } catch (err) {
     // Without the row the next message has nothing to answer, so the question
     // would go unheard. Say what still works rather than ask it anyway.
     console.error("[send-flow] could not start", { userId: user.id, err });
-    return { reply: pickReply(REPLIES.sendHelp, { name: firstName(user) }), choices: QUICK_CHOICES };
+    return {
+      reply: pickReply(REPLIES.sendHelp, { name: firstName(user) }),
+      choices: QUICK_CHOICES,
+    };
   }
 
   const choices = beneficiaryChoices(saved);
   return {
-    reply: recipientPrompt(choices.length > 0),
+    reply: known
+      ? recipientPromptWithAmount(known, choices.length > 0)
+      : recipientPrompt(choices.length > 0),
     ...(choices.length > 0 ? { choices } : {}),
   };
 }
 
 /**
+ * The SEND intent, with whatever the decoder managed to extract.
+ *
+ * Reached for a tapped Send button and /send (no slots at all), and for a
+ * partially-read instruction like "send 5" or "send money to chidi" — which
+ * mapDecodedSend refuses, correctly, because it only produces a complete
+ * intent. Seeding the flow with the half that was understood is the difference
+ * between "how much to Chidi?" and starting over.
+ */
+async function startGuidedSend(
+  user: tellaUser,
+  origin: MessageProvider,
+  seed: { amount: string | null; recipient: string | null } = {
+    amount: null,
+    recipient: null,
+  },
+): Promise<HandlerResult> {
+  return advanceSendFlow({
+    user,
+    origin,
+    amount: seed.amount,
+    recipient: seed.recipient?.trim() || null,
+  });
+}
+
+/**
  * One answer inside the guided send.
  *
- * Two escape hatches, both deliberate and both matched before anything else:
+ * Two escape hatches, both matched before anything else:
  *
  *   - a negation or a cancel abandons the flow. Nothing has been created yet,
  *     so this genuinely costs nothing and the reply says so.
- *   - a complete send instruction ("send 5 to chidi") abandons it too and is
- *     handled normally. Someone who gave up on the questions and typed the
- *     whole thing must not have it read as an answer to "how much".
+ *   - a closed-set command means the user has stopped answering and started
+ *     asking for something else, so the flow gets out of the way rather than
+ *     repeating its question until the row expires.
  *
- * Everything else is the answer to the question actually asked.
+ * Everything else is read for slots. A reply is not required to answer only
+ * the question that was asked: "5 to chidi" at the who step finishes the send,
+ * and "5" at the who step is remembered while we ask again who.
  */
 async function handleSendFlowResponse({
   user,
@@ -1081,7 +1194,10 @@ async function handleSendFlowResponse({
   if (!isSendFlowPayload(pending.payload)) {
     console.error("[send-flow] malformed payload", { id: pending.id });
     await deletePending(pending.id);
-    return { reply: pickReply(REPLIES.unknown, { name: firstName(user) }), choices: QUICK_CHOICES };
+    return {
+      reply: pickReply(REPLIES.unknown, { name: firstName(user) }),
+      choices: QUICK_CHOICES,
+    };
   }
 
   if (isNegation(trimmed) || isDeclination(trimmed)) {
@@ -1089,115 +1205,77 @@ async function handleSendFlowResponse({
     return { reply: ABANDONED_REPLY, choices: QUICK_CHOICES };
   }
 
-  // A whole send typed out at either step. fastPathDecode resolves this
-  // locally and only on the one canonical shape, so it cannot mistake a
-  // beneficiary name for an instruction — "Chidi" is not a send, "send 5 to
-  // Chidi" is.
-  const fast = fastPathDecode(trimmed);
-  const typedWholeSend = fast ? mapDecodedSend(fast) : null;
-  if (typedWholeSend) {
-    await deletePending(pending.id);
-    return startSendFlow({ user, intent: typedWholeSend, origin });
+  const carried = pending.payload;
+
+  // A saved name always wins over any splitting. "Landlord 2" is a
+  // beneficiary, not a landlord and two dollars — and only the address book
+  // knows that, which is why parseSendReply cannot decide it alone.
+  let savedWhole = null;
+  try {
+    savedWhole = trimmed ? await findBeneficiaryByLabel(user.id, trimmed) : null;
+  } catch (err) {
+    console.error("[send-flow] beneficiary lookup failed", { userId: user.id, err });
   }
 
-  if (pending.payload.step === "recipient") {
-    if (!trimmed) return { reply: recipientPrompt(false) };
+  // A closed-set command means the user has stopped answering and started
+  // asking for something else, so the flow gets out of the way rather than
+  // repeating its question until the row expires.
+  //
+  // It has to be checked HERE, before the reply is read for slots. Every
+  // single word parses as a recipient — that is what the question asked for —
+  // so a check placed after parsing would only ever fire on an empty message,
+  // and "balance" would come back as "I don't have anyone saved as balance".
+  //
+  // Two conditions on it. Skipped when the reply IS a saved name, so someone
+  // whose landlord is saved as "Balance" gets their landlord. And skipped for
+  // SEND, because a whole instruction typed mid-flow — "send 5 to chidi" — is
+  // an answer rather than an escape, and advanceSendFlow below handles it.
+  if (!savedWhole) {
+    const fast = fastPathDecode(trimmed);
 
-    // Checked here as well as in startSendFlow, and for the reason
-    // checkSendLimits is: this one is advisory and exists so the message is
-    // useful, while the authoritative resolution happens immediately before
-    // the money check. Catching a mistyped number or an unsaved name NOW
-    // costs one message; catching it after the amount question costs two and
-    // makes the user retype both.
-    const classified = classifyRecipient(trimmed);
-
-    if (classified.kind === "invalid_phone") {
-      return {
-        reply: [
-          `"${classified.typed}" doesn't look like a complete phone number.`,
-          "",
-          "Include the country code, like +234 801 234 5678 — or send a 0x wallet address, or a name you've saved.",
-        ].join("\n"),
-      };
-    }
-
-    if (classified.kind === "label") {
-      const saved = await findBeneficiaryByLabel(user.id, classified.label);
-
-      if (!saved) {
-        // A name we do not have. If it is also one of the closed-set commands
-        // tier 0 resolves, the user has stopped answering and started asking
-        // for something else — so the flow gets out of the way rather than
-        // asking "who are you sending to?" at every message until the row
-        // expires. That trap is the same one MAX_FLOW_FAILURES exists to stop
-        // on the beneficiary flow.
-        //
-        // Checked AFTER the beneficiary lookup, which is the part that makes
-        // it safe: someone whose landlord is saved as "Balance" gets their
-        // landlord, because a saved name always wins over a command word.
-        if (fast) {
-          await deletePending(pending.id);
-          const next = await handleOnboardedUser({ user, text: trimmed, origin });
-          return {
-            ...next,
-            reply: `Dropping that send for now.\n\n${next.reply}`,
-          };
-        }
-
-        return unknownRecipientReply(user, classified.label);
-      }
-    }
-
-    await createPending({
-      userId: user.id,
-      kind: "send",
-      payload: { action: "send", step: "amount", recipient: trimmed },
-      ttlMinutes: 10,
-    });
-
-    return { reply: amountPrompt(trimmed) };
-  }
-
-  const recipient = pending.payload.recipient ?? "";
-  if (!recipient) {
-    // The row lost its recipient between turns. Start the question over rather
-    // than ask for an amount to send to nobody.
-    await deletePending(pending.id);
-    return startGuidedSend(user);
-  }
-
-  const amount = parseSendAmount(trimmed);
-  if (!amount) {
-    // Not a number — but if it is one of the closed-set commands tier 0
-    // resolves, it is not a failed answer, it is the user moving on. Someone
-    // who taps Balance mid-flow wants their balance, not to be told a third
-    // time that I need just a number.
-    //
-    // Only at THIS step. At the recipient step the same check would be wrong:
-    // a beneficiary is allowed to be called "Balance", and there the answer is
-    // a name rather than a number, so a command word proves nothing.
-    if (fast) {
+    if (fast && fast.intent !== "SEND") {
       await deletePending(pending.id);
       const next = await handleOnboardedUser({ user, text: trimmed, origin });
-      return {
-        ...next,
-        reply: `Dropping that send for now.\n\n${next.reply}`,
-      };
+      return { ...next, reply: `Dropping that send for now.\n\n${next.reply}` };
     }
 
-    // The row is kept, so the next message is still read as an amount.
-    return { reply: amountRetryPrompt(recipient) };
+    // Send tapped again, or /send typed again, while already in the flow. It
+    // carries no slots, so reading it for them would take the button's own
+    // label as a recipient and answer "I don't have anyone saved as Send".
+    // Re-ask instead, keeping whatever has already been given.
+    if (fast && fast.intent === "SEND" && !fast.amount && !fast.recipient) {
+      return advanceSendFlow({
+        user,
+        origin,
+        amount: carried.amount ?? null,
+        recipient: carried.recipient ?? null,
+        pendingId: pending.id,
+      });
+    }
   }
 
-  // Both fields are in hand. The row goes now rather than after startSendFlow,
-  // so a failure below leaves the user free to start again instead of trapped
-  // answering a question that has already been answered.
-  await deletePending(pending.id);
+  const slots = savedWhole
+    ? { amount: null, recipient: trimmed }
+    : parseSendReply(trimmed);
 
-  return startSendFlow({
+  // Nothing usable at all — an empty or whitespace reply. Ask again for
+  // whichever field is still missing.
+  if (!slots.amount && !slots.recipient) {
+    return {
+      reply: carried.recipient
+        ? amountRetryPrompt(carried.recipient)
+        : recipientPrompt(false),
+    };
+  }
+
+  // At the amount step a bare name is a correction, not an amount — so the
+  // reply's own recipient wins over the one already held.
+  return advanceSendFlow({
     user,
-    intent: { amount, token: "USDC", recipient: classifyRecipient(recipient) },
     origin,
+    amount: slots.amount ?? carried.amount ?? null,
+    recipient: slots.recipient ?? carried.recipient ?? null,
+    pendingId: pending.id,
   });
 }
 
