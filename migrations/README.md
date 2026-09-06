@@ -388,6 +388,54 @@ Email is optional and degrades to a structured `console.error` when unset,
 the same way `raiseAlert` does without `ALERT_WEBHOOK_URL` — every call site
 stays correct either way and a missing provider never breaks a freeze.
 
+### `0022_spend_reservation.sql` — apply BEFORE the code that uses it
+
+`tella_reserve_daily_spend`, which makes the rolling 24-hour cap hold under
+concurrency.
+
+**The hole it closes.** `checkSendLimits` totalled `tella_transactions` rows to
+decide whether a send fitted inside the cap, and the row for a send was written
+*after* `executePendingSend` returned. So a send was invisible between passing
+the check and appearing in it, and two confirm links tapped at the same moment
+both read the same pre-send total and both went through. The cap bounded a
+sequence of sends and did nothing about a burst — which is the shape a
+compromised account actually produces.
+
+**The shape is 0007's, deliberately.** The check and the write happen inside one
+Postgres call, so parallel callers cannot all read the same total. `0007` got
+its serialisation free from an upsert's row lock; a send is an append and has no
+such row, so this takes `pg_advisory_xact_lock` on the user instead. The lock is
+transaction-scoped and the function does nothing but arithmetic and one insert —
+it is never held across the call to Circle.
+
+**The ledger is the reservation.** No new table: the `tella_transactions` row a
+send was always going to produce is written before the transfer rather than
+after. Three consequences, all intended:
+
+| Outcome | The row |
+|---|---|
+| Transfer succeeds | kept, completed with Circle's transaction id |
+| Definite rejection | deleted — nothing moved |
+| **Ambiguous** | **kept** |
+
+That last one is a behaviour change. An ambiguous transfer previously recorded
+nothing at all, so money that may well have left the wallet consumed no
+allowance and never appeared in history. Keeping it is the conservative reading
+and matches what the user is told.
+
+A send in flight shows in history as Processing for about a second. It is being
+processed.
+
+**Known gap.** A process that dies between reserving and transferring leaves a
+`submitted` row that never resolves and permanently consumes allowance. It is
+deliberately not swept: a row whose transfer may have happened is exactly what
+`0008`'s unresolved-send index exists for, and deleting it automatically would
+be guessing about someone's money. The matching `tella_pending_send` row —
+claimed, outcome null — appears in that index and points at it.
+
+`reserveSend` fails closed on a missing function, so deploying the code without
+the migration refuses every send.
+
 ### Environment added alongside 0007–0015
 
 ```

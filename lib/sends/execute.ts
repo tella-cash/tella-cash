@@ -10,6 +10,12 @@ import { checkSendLimits, formatLimitFailure, type LimitFailure } from "./limits
 import { tierFor } from "./tiers";
 import { createHeldSend } from "@/lib/held_sends/repository";
 import { raiseAlert } from "@/lib/observability/alerts";
+import {
+  reserveSend,
+  releaseReservedSend,
+  attachCircleTransactionId,
+} from "@/lib/transactions/repository";
+import { DAILY_WINDOW_HOURS } from "./limits";
 
 export type ExecuteSendResult =
   | {
@@ -136,6 +142,52 @@ export async function executePendingSend({
     };
   }
 
+  // THE AUTHORITATIVE DAILY GATE, and the last thing before the money moves.
+  //
+  // checkSendLimits above already did this arithmetic and produced a good
+  // message — but it READ a total, and two confirms tapped at the same moment
+  // read the same one and both passed. The row that would have made the first
+  // visible to the second is written by sendReceiptAndFollowUp, after this
+  // function has already returned. So the cap bounded a sequence of sends and
+  // did nothing about a burst.
+  //
+  // This reserves and checks in a single statement, so exactly one of a burst
+  // wins. It also writes the tella_transactions row the send was always going
+  // to produce, just earlier — the ledger IS the reservation, which is why
+  // there is no second table to keep in step with it.
+  const reservation = await reserveSend({
+    userId: user.id,
+    amountUsdc: p.amount,
+    amountNgn: p.amountNgn,
+    dailyCap: limits.limits.daily,
+    windowHours: DAILY_WINDOW_HOURS,
+    counterpartyLabel: recipientLabelFor(p),
+    counterpartyAddress: p.recipientAddress,
+  });
+
+  if (!reservation.ok) {
+    // Nothing was sent and nothing was reserved, so the link is retired rather
+    // than left claimed-but-unresolved — the same handling as a failed
+    // checkSendLimits above.
+    await deletePendingSend(claimed.id);
+    return {
+      ok: false,
+      reason: "limit",
+      // Over the cap and "could not establish that you are under it" are
+      // different things to be told. The second is check_failed, the same
+      // wording checkSendLimits uses when it cannot reach the balance API.
+      failure:
+        reservation.reason === "over_cap"
+          ? {
+              kind: "over_daily",
+              cap: limits.limits.daily,
+              alreadySent: reservation.already,
+              requested: Number.parseFloat(p.amount),
+            }
+          : { kind: "check_failed" },
+    };
+  }
+
   const transfer = await performTransfer({
     userId: user.id,
     sendId: claimed.id,
@@ -145,6 +197,7 @@ export async function executePendingSend({
   });
 
   if (transfer.ok) {
+    await attachCircleTransactionId(reservation.transactionId, transfer.transactionId);
     // Marked, then deleted. That reads like a wasted write and is not: the
     // delete can fail, and the ordering decides what a surviving row says.
     // Marked-then-orphaned reads "this went through"; deleted-without-marking
@@ -172,10 +225,20 @@ export async function executePendingSend({
     // Row is deliberately NOT deleted — it's the record of a transfer
     // whose fate we don't know, and the index in migration 0008 exists
     // to find exactly these.
+    //
+    // The RESERVATION is kept too, and that is new. Previously an ambiguous
+    // transfer produced no tella_transactions row at all, so money that may
+    // well have left the wallet consumed no daily allowance and never appeared
+    // in history. Keeping it is the conservative reading and the one that
+    // matches what the user is told: that we cannot tell whether it went
+    // through.
     await markPendingSendOutcome(claimed.id, "unknown");
     return { ok: false, reason: "transfer_unknown" };
   }
 
+  // A definite rejection: isAmbiguousFailure established the request never
+  // reached Circle, so nothing moved and the reservation must not stand.
+  await releaseReservedSend(reservation.transactionId);
   await markPendingSendOutcome(claimed.id, "failed");
   await deletePendingSend(claimed.id);
   return { ok: false, reason: "transfer_failed" };

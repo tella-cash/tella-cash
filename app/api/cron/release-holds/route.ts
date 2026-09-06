@@ -10,7 +10,12 @@ import { checkSendLimits, formatLimitFailure } from "@/lib/sends/limits";
 import { gateSpend } from "@/lib/users/wallet-gate";
 import { findUserById } from "@/lib/users/repository";
 import { notifyUser } from "@/lib/messaging/notify";
-import { recordTransaction } from "@/lib/transactions/repository";
+import {
+  reserveSend,
+  releaseReservedSend,
+  attachCircleTransactionId,
+} from "@/lib/transactions/repository";
+import { DAILY_WINDOW_HOURS } from "@/lib/sends/limits";
 import { raiseAlert } from "@/lib/observability/alerts";
 import type { HeldSend } from "@/lib/supabase/types";
 
@@ -128,6 +133,46 @@ async function releaseOne(hold: HeldSend): Promise<ReleaseOutcome> {
   const claimed = await claimHeldSend(hold.id);
   if (!claimed) return "skipped";
 
+  // The same authoritative daily gate the confirm path uses, and needed here
+  // for a reason the confirm path does not have: this job drains a batch, so
+  // several of a user's holds can come due in the same run and the limits
+  // check above would read an identical total for each of them.
+  //
+  // The hold excludes itself — it is 'executing' by now and counting it would
+  // make the transfer compete with itself, which is the bug fixed alongside
+  // this one in sumHeldUsdc.
+  const reservation = await reserveSend({
+    userId: user.id,
+    amountUsdc: claimed.payload.amount,
+    amountNgn: claimed.payload.amountNgn,
+    dailyCap: limits.limits.daily,
+    windowHours: DAILY_WINDOW_HOURS,
+    counterpartyLabel: recipientLabelFor(claimed.payload),
+    counterpartyAddress: claimed.payload.recipientAddress,
+    excludeHeldSendId: claimed.id,
+  });
+
+  if (!reservation.ok) {
+    await markHeldSendOutcome({ id: claimed.id, state: "cancelled" });
+    await tell(user, [
+      `I couldn't send the ${claimed.payload.amount} USDC queued for ${recipientLabelFor(claimed.payload)}.`,
+      "",
+      formatLimitFailure(
+        reservation.reason === "over_cap"
+          ? {
+              kind: "over_daily",
+              cap: limits.limits.daily,
+              alreadySent: reservation.already,
+              requested: Number.parseFloat(claimed.payload.amount),
+            }
+          : { kind: "check_failed" },
+      ),
+      "",
+      "Nothing left your wallet.",
+    ]);
+    return "cancelled";
+  }
+
   const transfer = await performTransfer({
     userId: user.id,
     sendId: claimed.id,
@@ -140,6 +185,13 @@ async function releaseOne(hold: HeldSend): Promise<ReleaseOutcome> {
     // 'unknown' rows stay for a person to reconcile against Circle, exactly
     // like a pending send with outcome = 'unknown'. performTransfer has
     // already raised the alert.
+    //
+    // The reservation follows the same rule as the confirm path: released for
+    // a definite rejection, kept for an ambiguous one, because money that may
+    // have moved must keep consuming the allowance.
+    if (transfer.reason === "failed") {
+      await releaseReservedSend(reservation.transactionId);
+    }
     await markHeldSendOutcome({ id: claimed.id, state: transfer.reason });
     if (transfer.reason === "failed") {
       await tell(user, [
@@ -163,23 +215,9 @@ async function releaseOne(hold: HeldSend): Promise<ReleaseOutcome> {
     circleTransactionId: transfer.transactionId,
   });
 
-  try {
-    await recordTransaction({
-      userId: user.id,
-      direction: "sent",
-      amountUsdc: claimed.payload.amount,
-      amountNgn: claimed.payload.amountNgn,
-      counterpartyLabel: recipientLabelFor(claimed.payload),
-      counterpartyAddress: claimed.payload.recipientAddress,
-      circleTransactionId: transfer.transactionId,
-      status: "submitted",
-    });
-  } catch (err) {
-    console.error("[cron:release-holds] transaction record failed", {
-      userId: user.id,
-      err,
-    });
-  }
+  // The history row already exists — reserveSend created it before the
+  // transfer. This completes it rather than writing a second one.
+  await attachCircleTransactionId(reservation.transactionId, transfer.transactionId);
 
   await tell(user, [
     `✓ Sent ${claimed.payload.amount} USDC to ${recipientLabelFor(claimed.payload)}.`,

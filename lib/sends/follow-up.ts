@@ -7,7 +7,6 @@ import { createPendingFlow } from "@/lib/pending_actions/repository";
 import { flowStart } from "@/lib/sendam-ai/client";
 import { SAVE_BENEFICIARY_FLOW, SAVE_BENEFICIARY_AWAITING } from "@/lib/sendam-ai/flows";
 import { listActivePendingSends } from "@/lib/pending_sends/repository";
-import { recordTransaction } from "@/lib/transactions/repository";
 import { buildConfirmUrl } from "@/lib/confirm/url";
 
 /**
@@ -32,20 +31,14 @@ export async function sendReceiptAndFollowUp({
 
   if (!result.ok) return;
 
-  try {
-    await recordTransaction({
-      userId: user.id,
-      direction: "sent",
-      amountUsdc: result.amount,
-      amountNgn: result.amountNgn,
-      counterpartyLabel: result.recipientLabel,
-      counterpartyAddress: result.recipientAddress,
-      circleTransactionId: result.transactionId,
-      status: "submitted",
-    });
-  } catch (err) {
-    console.error("[send] transaction record failed", { userId: user.id, err });
-  }
+  // The tella_transactions row is NOT written here any more. It is created by
+  // executePendingSend before the transfer, because the row is what reserves
+  // the amount against the daily cap — writing it afterwards is precisely what
+  // let two simultaneous confirms both pass the same check. See
+  // migrations/0022_spend_reservation.sql.
+  //
+  // Recording it here as well would double every send in history and in the
+  // rolling total.
 
   try {
     await remindOtherPendingSends(user);

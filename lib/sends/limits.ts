@@ -41,7 +41,7 @@ import { sumHeldUsdc } from "@/lib/held_sends/repository";
  * row can sit for five minutes, and the first check is advisory by then).
  */
 
-const DAILY_WINDOW_HOURS = 24;
+export const DAILY_WINDOW_HOURS = 24;
 
 export type LimitFailure =
   | { kind: "no_usdc" }
