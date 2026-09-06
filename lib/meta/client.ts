@@ -104,11 +104,33 @@ export async function sendWhatsAppImage({
  * lib/agent/menus.ts, so a tap comes back as `title` and resolves through
  * the same tier-0 classifier as typed text — see fast-path.ts.
  */
+/** Meta's caps on the text a tappable option may carry. */
+const BUTTON_TITLE_MAX = 20;
+const LIST_TITLE_MAX = 24;
+
 export async function sendWhatsAppButtons({
   to,
   body,
   choices,
-}: SendWhatsAppMessageArgs & { choices: Choice[] }): Promise<string> {
+}: SendWhatsAppMessageArgs & { choices: Choice[] }): Promise<string | null> {
+  // Meta rejects titles over 20 characters with a 400 that names no field, so
+  // this used to truncate. That was safe while every title was written into
+  // menus.ts and none came close to the cap — and stopped being safe the
+  // moment the guided send flow started offering the user's own beneficiary
+  // names, which isValidBeneficiaryLabel allows up to 30 characters.
+  //
+  // A truncated title is not a cosmetic loss here. Meta echoes back the title
+  // it DREW, the core matches that against saved beneficiaries, and a clipped
+  // name matches none of them — so the user taps a recipient and the bot says
+  // it has never heard of them. Returning null instead degrades the whole set
+  // to a line of plain text (lib/messaging/render.ts), where the full names
+  // are readable and typing one back works.
+  const tooLong = choices.slice(0, 3).find((c) => c.title.length > BUTTON_TITLE_MAX);
+  if (tooLong) {
+    console.warn("[meta] choice set not drawable as buttons", { title: tooLong.title });
+    return null;
+  }
+
   return postToGraph(
     normalizeRecipient(to),
     {
@@ -119,9 +141,7 @@ export async function sendWhatsAppButtons({
         action: {
           buttons: choices.slice(0, 3).map((c) => ({
             type: "reply",
-            // Meta rejects titles over 20 characters with a 400 that names
-            // no field, so truncating here is worth more than it costs.
-            reply: { id: c.id, title: c.title.slice(0, 20) },
+            reply: { id: c.id, title: c.title },
           })),
         },
       },
@@ -135,7 +155,15 @@ export async function sendWhatsAppList({
   to,
   body,
   choices,
-}: SendWhatsAppMessageArgs & { choices: Choice[] }): Promise<string> {
+}: SendWhatsAppMessageArgs & { choices: Choice[] }): Promise<string | null> {
+  // Same rule as the buttons above, at the list widget's own cap. See there
+  // for why a clipped title is a correctness problem and not a cosmetic one.
+  const tooLong = choices.slice(0, 10).find((c) => c.title.length > LIST_TITLE_MAX);
+  if (tooLong) {
+    console.warn("[meta] choice set not drawable as a list", { title: tooLong.title });
+    return null;
+  }
+
   return postToGraph(
     normalizeRecipient(to),
     {
@@ -150,7 +178,7 @@ export async function sendWhatsAppList({
               title: "Options",
               rows: choices.slice(0, 10).map((c) => ({
                 id: c.id,
-                title: c.title.slice(0, 24),
+                title: c.title,
                 ...(c.description ? { description: c.description } : {}),
               })),
             },

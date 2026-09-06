@@ -37,6 +37,34 @@ export function isDeclination(text: string): boolean {
 }
 
 /**
+ * A plain "no", and nothing else.
+ *
+ * Narrower than isDeclination on purpose, and the narrowness is the whole
+ * point. buildConfirmBody tells the user "Reply *no* to cancel", and until
+ * now nothing kept that promise: a pending SEND lives in tella_pending_send,
+ * while isDeclination is only ever consulted for a pending ACTION — the
+ * freeze confirmation. So "no" fell through to the decoder, came back
+ * UNKNOWN, and the user was shown the generic help menu while the confirm
+ * link they were trying to kill stayed live for the rest of its five
+ * minutes. That is the worst shape a cancel can fail in: it looks like the
+ * bot did not understand, so the user tries again instead of tapping the
+ * link they now need to avoid.
+ *
+ * It deliberately does NOT include "cancel", "stop" or "nevermind". Those
+ * already route through the CANCEL intent to cancelMostRecent, which reaches
+ * a queued 24-hour transfer first — and that ordering is correct for someone
+ * who typed the word out of the blue. "no" is different: it is an answer to
+ * the question directly in front of the user, so it resolves to the send
+ * that asked it.
+ */
+const NEGATIONS =
+  /^\s*(no|nope|nah|n|no\s+thanks|no\s+thank\s+you|don'?t|do\s+not)\s*[.!]?\s*$/i;
+
+export function isNegation(text: string): boolean {
+  return NEGATIONS.test(text);
+}
+
+/**
  * Narrow a pending row's payload.
  *
  * The row's `kind` column is the authority — this only exists so TypeScript
@@ -46,5 +74,11 @@ export function isDeclination(text: string): boolean {
 export function isConfirmPayload(
   payload: PendingActionPayload,
 ): payload is ConfirmPendingPayload {
-  return typeof (payload as ConfirmPendingPayload).action === "string";
+  // Matched on the literal, not on "has an action field". The guided send
+  // payload also carries `action`, so the looser test that was here would have
+  // narrowed a send row to ConfirmPendingPayload and read `source`/`reason`
+  // off a shape that has neither. Dispatch is on `kind` and never reaches
+  // that, but a type guard that is only correct because of where it is called
+  // is a guard waiting to be called somewhere else.
+  return (payload as ConfirmPendingPayload).action === "freeze";
 }

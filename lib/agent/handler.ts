@@ -22,6 +22,7 @@ import {
 import {
   findBeneficiaryByLabel,
   createBeneficiary,
+  listBeneficiaries,
 } from "@/lib/beneficiaries/repository";
 import { listRecentTransactions } from "@/lib/transactions/repository";
 import {
@@ -46,7 +47,7 @@ import {
   RESET_TTL_MINUTES,
 } from "@/lib/security/reset-tokens";
 import { recordAuthAttempt, formatRetryAfter } from "@/lib/auth/rate-limit";
-import type { ParsedSendIntent } from "@/lib/agent/parse-send";
+import { classifyRecipient, type ParsedSendIntent } from "@/lib/agent/parse-send";
 import { mapDecodedSend } from "@/lib/agent/map-decoded-send";
 import { normalizeFaucetAsset } from "@/lib/agent/normalize-faucet-asset";
 import {
@@ -56,7 +57,7 @@ import {
   SendamUnavailableError,
   type FollowUpSlots,
 } from "@/lib/sendam-ai/client";
-import { fastPathDecode } from "@/lib/agent/fast-path";
+import { fastPathDecode, stripCommandPrefix } from "@/lib/agent/fast-path";
 import { checkConfidence, sanitizeModelReply } from "@/lib/agent/confidence";
 import {
   SAVE_BENEFICIARY_FLOW,
@@ -73,8 +74,22 @@ import {
   FREEZE_CHOICES,
   type Choice,
 } from "@/lib/agent/menus";
-import { isAffirmation, isDeclination, isConfirmPayload } from "@/lib/agent/confirm-action";
+import {
+  isAffirmation,
+  isDeclination,
+  isNegation,
+  isConfirmPayload,
+} from "@/lib/agent/confirm-action";
 import { hasCommandKeyword } from "@/lib/agent/detect-command-keyword";
+import {
+  ABANDONED_REPLY,
+  amountPrompt,
+  amountRetryPrompt,
+  beneficiaryChoices,
+  isSendFlowPayload,
+  parseSendAmount,
+  recipientPrompt,
+} from "@/lib/agent/send-flow";
 import { buildConfirmUrl } from "@/lib/confirm/url";
 
 interface IncomingMessage {
@@ -172,6 +187,15 @@ export async function handleIncomingMessage(
     return handleNameEntry({ user, text });
   }
 
+  // The local detectors below are matched against the text with one leading
+  // slash removed, so /freeze is the kill switch and not an unrecognised
+  // string. Registering these in Telegram's command menu puts them one tap
+  // away, and a menu entry that silently does nothing is worse than no menu
+  // entry — isFreezeRequest anchors on "^\s*freeze$", which "/freeze" does
+  // not match. Only the detectors see this; the decoder still gets the user's
+  // own words.
+  const command = stripCommandPrefix(text.trim());
+
   // A backend-initiated multi-turn flow (e.g. beneficiary-save) is a short,
   // mandatory back-and-forth — every message must be captured until it
   // resolves. Pending *sends* are deliberately NOT intercepted here: a user
@@ -200,13 +224,22 @@ export async function handleIncomingMessage(
   // This is also matched before any decoder runs, for the reason
   // detect-freeze-request.ts gives: the kill switch cannot depend on a
   // network call to a service that may be the thing that is down.
-  if (isFreezeRequest(text)) return startFreezeConfirmation(user, origin);
+  if (isFreezeRequest(command)) return startFreezeConfirmation(user, origin);
 
-  if (isUnfreezeRequest(text)) return handleUnfreezeRequest(user, origin);
+  if (isUnfreezeRequest(command)) return handleUnfreezeRequest(user, origin);
 
-  if (isTelegramLinkRequest(text)) return handleTelegramLinkRequest(user, origin);
+  if (isTelegramLinkRequest(command)) return handleTelegramLinkRequest(user, origin);
 
-  if (isGoogleLinkRequest(text)) return handleGoogleLinkRequest(user, origin);
+  if (isGoogleLinkRequest(command)) return handleGoogleLinkRequest(user, origin);
+
+  // Sits below the kill switch and above the decoder-backed flows. Below,
+  // because someone mid-send whose phone has just been taken must reach
+  // "freeze" without first having to finish or abandon a payment. Above,
+  // because this flow captures plain answers — a bare "5" is an amount here
+  // and nothing anywhere else.
+  if (pending?.kind === "send") {
+    return handleSendFlowResponse({ user, pending, text, origin });
+  }
 
   if (pending?.kind === "flow") {
     return handleFlowPendingResponse({ user, pending, text, origin });
@@ -277,10 +310,10 @@ async function handleFlowPendingResponse({
 }): Promise<HandlerResult> {
   const name = firstName(user);
 
-  if (isConfirmPayload(pending.payload)) {
+  if (isConfirmPayload(pending.payload) || isSendFlowPayload(pending.payload)) {
     // Unreachable via the dispatcher, which routes on `kind`. Guarded anyway
     // so a row whose kind and payload disagree cannot be read as a flow.
-    console.error("[flow] confirm payload on a flow row", { id: pending.id });
+    console.error("[flow] non-flow payload on a flow row", { id: pending.id });
     await deletePending(pending.id);
     return { reply: pickReply(REPLIES.unknown, { name }), choices: QUICK_CHOICES };
   }
@@ -705,6 +738,23 @@ async function handleOnboardedUser({
   // Debug health-check stays deterministic.
   if (trimmed.toLowerCase() === "ping") return { reply: "pong ✓" };
 
+  // The other half of the promise buildConfirmBody makes.
+  //
+  // "Reply *no* to cancel" was printed under every confirm link and nothing
+  // listened for it: a pending send is a tella_pending_send row, and the only
+  // declination check in this file reads tella_pending_action, which a send
+  // never creates. So "no" reached the decoder, came back UNKNOWN, and the
+  // user got the generic help menu — while the link they were trying to kill
+  // stayed live. Matched before the decoder for the same reason freeze and
+  // reset are: cancelling must not depend on a service that may be down.
+  //
+  // Gated on there actually being something to cancel, so a conversational
+  // "no" with nothing pending is still handled normally below.
+  if (isNegation(trimmed)) {
+    const pendingSends = await listActivePendingSends(user.id);
+    if (pendingSends.length > 0) return cancelMostRecentPendingSend(user);
+  }
+
   // Matched before decode() on purpose — see detect-reset-request.ts. A
   // locked-out user must get the recovery link even when sendam-ai is down.
   if (isResetRequest(trimmed)) return startPinReset(user, origin);
@@ -775,8 +825,10 @@ async function handleOnboardedUser({
     case "HISTORY":
       return { reply: await getHistoryReply(user), choices: QUICK_CHOICES };
     case "SEND":
-      // Send-ish but not parseable — show them the format plus quick taps.
-      return { reply: pickReply(REPLIES.sendHelp, { name }), choices: QUICK_CHOICES };
+      // Reached only when there is no amount and no recipient to act on — a
+      // tapped Send button, /send, or "I want to send money". Previously this
+      // printed the command to type; now it asks the first question.
+      return startGuidedSend(user);
     case "GREETING":
       // sendam-ai reads the tone of the user's own greeting and composes a
       // matching reply; fall back to our fixed template on older deploys
@@ -895,7 +947,7 @@ async function cancelMostRecentPendingSend(user: tellaUser): Promise<HandlerResu
   const remaining = pendingSends.length - 1;
   const remainingNote =
     remaining > 0
-      ? ` You still have ${remaining} other pending send${remaining > 1 ? "s" : ""} — say "cancel" again to drop the next one.`
+      ? ` You still have ${remaining} other pending send${remaining > 1 ? "s" : ""} — reply *no* or *cancel* again to drop the next one.`
       : "";
 
   return {
@@ -919,6 +971,234 @@ function addressReply(user: tellaUser): Pick<HandlerResult, "reply" | "followUp"
     return { reply: pickReply(REPLIES.walletPending, { name }) };
   }
   return { reply: pickReply(REPLIES.walletNotReady, { name }) };
+}
+
+/**
+ * "I don't know that name" — and the saved list again, so the correction is a
+ * tap rather than a second guess.
+ *
+ * The pending row is deliberately left in place: the user is still answering
+ * "who are you sending to?", and dropping the flow here would make a typo cost
+ * them the whole send.
+ */
+async function unknownRecipientReply(
+  user: tellaUser,
+  label: string,
+): Promise<HandlerResult> {
+  let saved: Awaited<ReturnType<typeof listBeneficiaries>> = [];
+  try {
+    saved = await listBeneficiaries(user.id);
+  } catch (err) {
+    console.error("[send-flow] beneficiary lookup failed", { userId: user.id, err });
+  }
+
+  const choices = beneficiaryChoices(saved);
+  return {
+    reply: [
+      `I don't have anyone saved as "${label}".`,
+      "",
+      choices.length > 0
+        ? "Tap one of these, or send a phone number or 0x address instead."
+        : "Send me a phone number with the country code, or a 0x wallet address.",
+    ].join("\n"),
+    ...(choices.length > 0 ? { choices } : {}),
+  };
+}
+
+/**
+ * Open the guided send: ask who, then how much.
+ *
+ * The gate runs here as well as in startSendFlow, and that is not redundancy
+ * for its own sake — asking a frozen user to pick a recipient and name an
+ * amount before telling them nothing can leave their wallet is two wasted
+ * questions and a worse moment than saying so immediately.
+ */
+async function startGuidedSend(user: tellaUser): Promise<HandlerResult> {
+  const gate = gateSpend(user);
+  if (!gate.ok) {
+    if (gate.reason === "frozen") return frozenReply(firstName(user));
+    return {
+      reply: "Your wallet isn't ready yet. Once it's set up you'll be able to send.",
+    };
+  }
+
+  // Best-effort. A saved-name lookup failing is a reason to ask for a number
+  // instead, not a reason to refuse to start a send.
+  let saved: Awaited<ReturnType<typeof listBeneficiaries>> = [];
+  try {
+    saved = await listBeneficiaries(user.id);
+  } catch (err) {
+    console.error("[send-flow] beneficiary lookup failed", { userId: user.id, err });
+  }
+
+  try {
+    await createPending({
+      userId: user.id,
+      kind: "send",
+      payload: { action: "send", step: "recipient" },
+      ttlMinutes: 10,
+    });
+  } catch (err) {
+    // Without the row the next message has nothing to answer, so the question
+    // would go unheard. Say what still works rather than ask it anyway.
+    console.error("[send-flow] could not start", { userId: user.id, err });
+    return { reply: pickReply(REPLIES.sendHelp, { name: firstName(user) }), choices: QUICK_CHOICES };
+  }
+
+  const choices = beneficiaryChoices(saved);
+  return {
+    reply: recipientPrompt(choices.length > 0),
+    ...(choices.length > 0 ? { choices } : {}),
+  };
+}
+
+/**
+ * One answer inside the guided send.
+ *
+ * Two escape hatches, both deliberate and both matched before anything else:
+ *
+ *   - a negation or a cancel abandons the flow. Nothing has been created yet,
+ *     so this genuinely costs nothing and the reply says so.
+ *   - a complete send instruction ("send 5 to chidi") abandons it too and is
+ *     handled normally. Someone who gave up on the questions and typed the
+ *     whole thing must not have it read as an answer to "how much".
+ *
+ * Everything else is the answer to the question actually asked.
+ */
+async function handleSendFlowResponse({
+  user,
+  pending,
+  text,
+  origin,
+}: {
+  user: tellaUser;
+  pending: PendingAction;
+  text: string;
+  origin: MessageProvider;
+}): Promise<HandlerResult> {
+  const trimmed = text.trim();
+
+  if (!isSendFlowPayload(pending.payload)) {
+    console.error("[send-flow] malformed payload", { id: pending.id });
+    await deletePending(pending.id);
+    return { reply: pickReply(REPLIES.unknown, { name: firstName(user) }), choices: QUICK_CHOICES };
+  }
+
+  if (isNegation(trimmed) || isDeclination(trimmed)) {
+    await deletePending(pending.id);
+    return { reply: ABANDONED_REPLY, choices: QUICK_CHOICES };
+  }
+
+  // A whole send typed out at either step. fastPathDecode resolves this
+  // locally and only on the one canonical shape, so it cannot mistake a
+  // beneficiary name for an instruction — "Chidi" is not a send, "send 5 to
+  // Chidi" is.
+  const fast = fastPathDecode(trimmed);
+  const typedWholeSend = fast ? mapDecodedSend(fast) : null;
+  if (typedWholeSend) {
+    await deletePending(pending.id);
+    return startSendFlow({ user, intent: typedWholeSend, origin });
+  }
+
+  if (pending.payload.step === "recipient") {
+    if (!trimmed) return { reply: recipientPrompt(false) };
+
+    // Checked here as well as in startSendFlow, and for the reason
+    // checkSendLimits is: this one is advisory and exists so the message is
+    // useful, while the authoritative resolution happens immediately before
+    // the money check. Catching a mistyped number or an unsaved name NOW
+    // costs one message; catching it after the amount question costs two and
+    // makes the user retype both.
+    const classified = classifyRecipient(trimmed);
+
+    if (classified.kind === "invalid_phone") {
+      return {
+        reply: [
+          `"${classified.typed}" doesn't look like a complete phone number.`,
+          "",
+          "Include the country code, like +234 801 234 5678 — or send a 0x wallet address, or a name you've saved.",
+        ].join("\n"),
+      };
+    }
+
+    if (classified.kind === "label") {
+      const saved = await findBeneficiaryByLabel(user.id, classified.label);
+
+      if (!saved) {
+        // A name we do not have. If it is also one of the closed-set commands
+        // tier 0 resolves, the user has stopped answering and started asking
+        // for something else — so the flow gets out of the way rather than
+        // asking "who are you sending to?" at every message until the row
+        // expires. That trap is the same one MAX_FLOW_FAILURES exists to stop
+        // on the beneficiary flow.
+        //
+        // Checked AFTER the beneficiary lookup, which is the part that makes
+        // it safe: someone whose landlord is saved as "Balance" gets their
+        // landlord, because a saved name always wins over a command word.
+        if (fast) {
+          await deletePending(pending.id);
+          const next = await handleOnboardedUser({ user, text: trimmed, origin });
+          return {
+            ...next,
+            reply: `Dropping that send for now.\n\n${next.reply}`,
+          };
+        }
+
+        return unknownRecipientReply(user, classified.label);
+      }
+    }
+
+    await createPending({
+      userId: user.id,
+      kind: "send",
+      payload: { action: "send", step: "amount", recipient: trimmed },
+      ttlMinutes: 10,
+    });
+
+    return { reply: amountPrompt(trimmed) };
+  }
+
+  const recipient = pending.payload.recipient ?? "";
+  if (!recipient) {
+    // The row lost its recipient between turns. Start the question over rather
+    // than ask for an amount to send to nobody.
+    await deletePending(pending.id);
+    return startGuidedSend(user);
+  }
+
+  const amount = parseSendAmount(trimmed);
+  if (!amount) {
+    // Not a number — but if it is one of the closed-set commands tier 0
+    // resolves, it is not a failed answer, it is the user moving on. Someone
+    // who taps Balance mid-flow wants their balance, not to be told a third
+    // time that I need just a number.
+    //
+    // Only at THIS step. At the recipient step the same check would be wrong:
+    // a beneficiary is allowed to be called "Balance", and there the answer is
+    // a name rather than a number, so a command word proves nothing.
+    if (fast) {
+      await deletePending(pending.id);
+      const next = await handleOnboardedUser({ user, text: trimmed, origin });
+      return {
+        ...next,
+        reply: `Dropping that send for now.\n\n${next.reply}`,
+      };
+    }
+
+    // The row is kept, so the next message is still read as an amount.
+    return { reply: amountRetryPrompt(recipient) };
+  }
+
+  // Both fields are in hand. The row goes now rather than after startSendFlow,
+  // so a failure below leaves the user free to start again instead of trapped
+  // answering a question that has already been answered.
+  await deletePending(pending.id);
+
+  return startSendFlow({
+    user,
+    intent: { amount, token: "USDC", recipient: classifyRecipient(recipient) },
+    origin,
+  });
 }
 
 async function startSendFlow({

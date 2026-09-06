@@ -123,7 +123,38 @@ check(
   ),
 );
 
-const total = TAPPED.length + TYPED.length + SENDS.length + 1;
+/**
+ * The slash-command set, which is what Telegram's menu button renders.
+ *
+ * Every entry registered with setMyCommands has to resolve here, because a
+ * command in that menu is one tap away and a tap that resolves to nothing is
+ * the failure this whole set of tests exists to stop. /send is the one that
+ * was broken: "send" is known only as a BUTTON TITLE, and titles were matched
+ * before the leading slash came off.
+ */
+const SLASH: Array<[string, string]> = [
+  ["/balance", "BALANCE"],
+  ["/address", "ADDRESS"],
+  ["/history", "HISTORY"],
+  ["/help", "HELP"],
+  ["/cancel", "CANCEL"],
+  ["/start", "HELP"],
+  ["/send", "SEND"],
+  // Telegram appends @botname when several bots share a chat.
+  ["/balance@cashtellaBot", "BALANCE"],
+  ["/send@cashtellaBot", "SEND"],
+];
+
+for (const [text, expected] of SLASH) {
+  const got = fastPathDecode(text);
+  check(
+    `slash command: ${JSON.stringify(text)}`,
+    got?.intent === expected,
+    `got ${got?.intent ?? "null"}, expected ${expected}`,
+  );
+}
+
+const total = TAPPED.length + TYPED.length + SENDS.length + SLASH.length + 1;
 console.log(`fast-path: ${passed}/${total} passed`);
 if (failures.length) {
   console.error("\nFailures:\n" + failures.join("\n"));

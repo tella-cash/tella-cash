@@ -68,3 +68,49 @@ export const ALL_CHOICES: Choice[] = [
 export function titleForChoiceId(id: string): string | null {
   return ALL_CHOICES.find((c) => c.id === id)?.title ?? null;
 }
+
+/**
+ * DYNAMIC CHOICES, and why they need their own encoding.
+ *
+ * Everything above is a closed set written into this file, so a tap can travel
+ * as a short stable id and be looked up on the way back. The guided send flow
+ * broke that assumption: its options are the user's own saved beneficiaries,
+ * which exist in a table and cannot be in any static list here.
+ *
+ * So a choice the static table cannot resolve carries its own title instead,
+ * behind a prefix. The prefix is what keeps the two unambiguous — a
+ * beneficiary called "balance" must not come back as the Balance button.
+ *
+ * The contract in the header still holds either way: whatever a channel draws,
+ * a tap arrives back as text equal to `title`, and nothing downstream can tell
+ * a tap from typing.
+ */
+const DYNAMIC_PREFIX = "t:";
+
+/** Telegram's hard cap on callback_data. Bytes, not characters. */
+const MAX_CALLBACK_BYTES = 64;
+
+/**
+ * Wire form for a choice, or null if it cannot round-trip.
+ *
+ * Null is not a failure to paper over: a button whose data is truncated comes
+ * back as a title that matches nothing, which on this flow means a send to a
+ * beneficiary the user did not pick. The caller degrades the whole set to text
+ * instead, which is the documented fallback in lib/messaging/render.ts.
+ */
+export function encodeChoiceData(choice: Choice): string | null {
+  if (titleForChoiceId(choice.id) === choice.title) return choice.id;
+
+  const encoded = `${DYNAMIC_PREFIX}${choice.title}`;
+  if (Buffer.byteLength(encoded, "utf8") > MAX_CALLBACK_BYTES) return null;
+  return encoded;
+}
+
+/** The inverse. Returns null for data this deploy no longer understands. */
+export function titleForCallbackData(data: string): string | null {
+  if (data.startsWith(DYNAMIC_PREFIX)) {
+    const title = data.slice(DYNAMIC_PREFIX.length);
+    return title.length > 0 ? title : null;
+  }
+  return titleForChoiceId(data);
+}

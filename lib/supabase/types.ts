@@ -44,7 +44,7 @@ export type FreezeSource =
   | "operator"
   | "auto";
 
-export type PendingActionKind = "flow" | "confirm";
+export type PendingActionKind = "flow" | "confirm" | "send";
 
 /**
  * Backend-initiated multi-turn conversation state — one active conversation
@@ -80,7 +80,44 @@ export interface ConfirmPendingPayload {
   reason: string;
 }
 
-export type PendingActionPayload = FlowPendingPayload | ConfirmPendingPayload;
+/**
+ * The guided send, held one question at a time.
+ *
+ * Shares the table with `flow` and `confirm` for the same reason they share it
+ * with each other: one per user, upserted, short TTL. Like `confirm` and
+ * unlike `flow`, it touches sendam-ai at NO point — the recipient and the
+ * amount are parsed locally by lib/agent/send-flow.ts.
+ *
+ * That is not a performance choice. This is the composition half of a
+ * transfer, and the file that decides how much money moves is the last one
+ * that should ask a language model to interpret a number. The decoder still
+ * handles free-form sends ("send 5 to chidi"), where a wrong reading produces
+ * a confirm prompt the user can read and reject; here the user is answering a
+ * question we asked, so the answer is parsed with an anchored pattern or not
+ * accepted at all.
+ *
+ * `kind: "send"` was already permitted by the CHECK constraint that migration
+ * 0021 rewrote, so this needs no migration.
+ */
+export interface SendFlowPendingPayload {
+  action: "send";
+  step: "recipient" | "amount";
+  /**
+   * Exactly what the user picked or typed at the recipient step, unresolved.
+   *
+   * Stored raw on purpose. Resolving it to an address here would freeze a
+   * lookup for the length of the conversation, and startSendFlow already does
+   * that resolution immediately before the limits check — so a beneficiary
+   * deleted, or a recipient whose wallet finished provisioning, in the seconds
+   * between the two questions is read correctly rather than from a snapshot.
+   */
+  recipient?: string;
+}
+
+export type PendingActionPayload =
+  | FlowPendingPayload
+  | ConfirmPendingPayload
+  | SendFlowPendingPayload;
 
 
 /**

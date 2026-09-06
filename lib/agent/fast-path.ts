@@ -101,7 +101,7 @@ const TYPED: Array<[RegExp, DecodedIntent["intent"]]> = [
  * One slash, and only when a letter follows it. Bounded so this cannot
  * quietly reinterpret anything else a user might type.
  */
-function stripCommandPrefix(text: string): string {
+export function stripCommandPrefix(text: string): string {
   // Telegram appends @botname when several bots share a group chat.
   return text.replace(/^\/([a-z][a-z_]*)(@[\w]+)?/i, "$1");
 }
@@ -128,6 +128,18 @@ export function fastPathDecode(text: string): DecodedIntent | null {
   if (tapped) return intent(tapped);
 
   const trimmed = stripCommandPrefix(raw);
+
+  // And again after stripping, which is what makes the slash commands whole.
+  // TYPED already ran on the stripped text, so /balance and /history worked;
+  // /send did not, because "send" is only known as a BUTTON TITLE and titles
+  // were matched before the slash came off. The result was a command set that
+  // silently had a hole in it at exactly the entry a user is most likely to
+  // reach for — and one that only appears once the commands are registered in
+  // Telegram's menu, where every one of them is a tap away.
+  if (trimmed !== raw) {
+    const command = TAPPED_TITLES[trimmed.toLowerCase()];
+    if (command) return intent(command);
+  }
 
   for (const [pattern, kind] of TYPED) {
     if (pattern.test(trimmed)) return intent(kind);

@@ -4,7 +4,14 @@ Apply in order against the project's Supabase database.
 
 ## How to apply
 
-Open the Supabase SQL editor (or use `psql` against `SUPABASE_DB_URL`) and run the file's contents.
+Open the Supabase SQL editor (or use `psql` against the connection string in
+`SUPABASE_DATABASE_URL`) and run the file's contents.
+
+> The `psql $SUPABASE_DB_URL` lines in the migration files themselves predate
+> that name and were never renamed. The variable the environment actually sets
+> is `SUPABASE_DATABASE_URL`; neither is read by application code, since the
+> app reaches Supabase over `NEXT_PUBLIC_SUPABASE_URL` +
+> `SUPABASE_SERVICE_ROLE_KEY` and never opens a direct Postgres connection.
 
 ## Files
 
@@ -284,6 +291,23 @@ curl -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
   -d "url=$APP_BASE_URL/api/telegram" \
   -d "secret_token=$TELEGRAM_WEBHOOK_SECRET"
 ```
+
+**Then register the command list — this step is not optional.** Telegram's ☰
+Menu button is bound to whatever `setMyCommands` last registered, and until it
+is called that list is empty: the button opens, spins, and closes with nothing
+in it. Users read that as a broken bot, and the linking message points them
+straight at it ("Try /help to see what I do here").
+
+```
+pnpm tsx --env-file=.env set-telegram-commands.ts
+```
+
+The script holds the list and explains why each entry is on it. Re-run it
+after changing the list; it is idempotent. Every command in it resolves
+locally, without the decoder — see `lib/agent/fast-path.test.ts`, which pins
+that. Do not add an entry the bot cannot answer offline: a command in this
+menu is one tap away, so one that falls through to "I didn't understand" is
+worse than no entry at all.
 
 ### `0018_google_identity.sql` — apply BEFORE the code that uses it
 

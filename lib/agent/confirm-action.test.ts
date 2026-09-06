@@ -7,7 +7,7 @@
  * either swallows a real instruction or freezes an account that asked for
  * its balance.
  */
-import { isAffirmation, isDeclination } from "./confirm-action";
+import { isAffirmation, isDeclination, isNegation } from "./confirm-action";
 
 const YES: string[] = [
   "freeze", "FREEZE", "  freeze  ", "freeze it", "Freeze it",
@@ -38,8 +38,39 @@ const NEITHER: string[] = [
   "", "   ",
 ];
 
+/**
+ * isNegation, which answers "Reply *no* to cancel" on a pending send.
+ *
+ * The third column is the one that matters: "cancel", "stop" and
+ * "nevermind" must NOT be negations, because they already route through the
+ * CANCEL intent to cancelMostRecent, which reaches a queued 24-hour transfer
+ * before a five-minute confirm link. Widening this to isDeclination would
+ * silently change which transfer the word "cancel" stops.
+ */
+const NEGATION: string[] = [
+  "no", "No", "NO", "  no  ", "nope", "nah", "n",
+  "no.", "no!", "no thanks", "No thank you", "dont", "don't", "do not",
+];
+
+const NOT_NEGATION: string[] = [
+  // Declinations with their own routing. These must stay out.
+  "cancel", "stop", "not now", "nevermind", "never mind",
+  // Everything else.
+  "yes", "no wait", "no i meant 5", "balance", "send 5 usdc to chidi",
+  "", "   ",
+];
+
 let passed = 0;
 const failures: string[] = [];
+
+for (const t of NEGATION) {
+  if (isNegation(t)) passed++;
+  else failures.push(`  ✗ expected NEGATION for ${JSON.stringify(t)}`);
+}
+for (const t of NOT_NEGATION) {
+  if (!isNegation(t)) passed++;
+  else failures.push(`  ✗ expected NOT-NEGATION for ${JSON.stringify(t)}`);
+}
 
 for (const t of YES) {
   if (isAffirmation(t) && !isDeclination(t)) passed++;
@@ -54,6 +85,7 @@ for (const t of NEITHER) {
   else failures.push(`  ✗ expected NEITHER for ${JSON.stringify(t)}`);
 }
 
-const total = YES.length + NO.length + NEITHER.length;
+const total =
+  YES.length + NO.length + NEITHER.length + NEGATION.length + NOT_NEGATION.length;
 console.log(`confirm-action: ${passed}/${total} passed`);
 if (failures.length) { console.error("\nFailures:\n" + failures.join("\n")); process.exit(1); }

@@ -1,5 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
-import type { Choice } from "@/lib/agent/menus";
+import { encodeChoiceData, type Choice } from "@/lib/agent/menus";
 
 /**
  * Telegram Bot API client.
@@ -127,19 +127,30 @@ export async function sendTelegramChoices({
   to: string;
   body: string;
   choices: Choice[];
-}): Promise<string> {
+}): Promise<string | null> {
+  // Null rather than a truncated button. callback_data is capped at 64 bytes,
+  // and a beneficiary name clipped to fit comes back as a title that matches
+  // no saved recipient — on this flow, that is a send aimed at nobody. The
+  // renderer degrades the whole set to text, which still works: the titles
+  // arrive as a line the user can type back.
+  const rows: Array<Array<{ text: string; callback_data: string }>> = [];
+  for (const c of choices) {
+    const data = encodeChoiceData(c);
+    if (data === null) {
+      console.warn("[telegram] choice set not drawable as buttons", { title: c.title });
+      return null;
+    }
+    // One per row: these are sentences, not icons, and Telegram truncates
+    // side-by-side buttons hard on narrow screens.
+    rows.push([{ text: c.title, callback_data: data }]);
+  }
+
   return callTelegram("sendMessage", {
     chat_id: to,
     text: toTelegramHtml(body),
     parse_mode: "HTML",
     disable_web_page_preview: true,
-    reply_markup: {
-      // One per row: these are sentences, not icons, and Telegram truncates
-      // side-by-side buttons hard on narrow screens.
-      inline_keyboard: choices.map((c) => [
-        { text: c.title, callback_data: c.id },
-      ]),
-    },
+    reply_markup: { inline_keyboard: rows },
   });
 }
 
@@ -169,10 +180,24 @@ export async function sendTelegramLink({
  *
  * Not optional politeness: Telegram spins a loading indicator on the button
  * until this is called, and leaves it spinning for a while if it never is.
+ * A tap that is never acknowledged is the single most confusing failure this
+ * channel can produce — the button looks like it is working, for about half
+ * a minute, and then simply stops. Nothing appears in the chat to say why.
+ *
+ * `text` renders as a transient toast over the chat. It is for the case where
+ * there is no chat message to send: an update we cannot route has no user
+ * turn to reply to, and a toast says something happened without pretending
+ * to have understood what the button meant.
  */
-export async function answerTelegramCallback(callbackId: string): Promise<void> {
+export async function answerTelegramCallback(
+  callbackId: string,
+  text?: string,
+): Promise<void> {
   try {
-    await callTelegram("answerCallbackQuery", { callback_query_id: callbackId });
+    await callTelegram("answerCallbackQuery", {
+      callback_query_id: callbackId,
+      ...(text ? { text } : {}),
+    });
   } catch (err) {
     // The tap has already been recorded; failing to clear the spinner is
     // cosmetic and must not abort handling the message it produced.

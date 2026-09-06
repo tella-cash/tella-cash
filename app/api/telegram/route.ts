@@ -5,8 +5,8 @@ import {
   answerTelegramCallback,
 } from "@/lib/telegram/client";
 import { handleInbound } from "@/lib/messaging/inbound";
-import { titleForChoiceId } from "@/lib/agent/menus";
-import { upsertChannel } from "@/lib/messaging/channels";
+import { titleForCallbackData } from "@/lib/agent/menus";
+import { upsertChannel, ChannelOwnedByAnotherUserError } from "@/lib/messaging/channels";
 import { loadResetContext, consumeResetToken } from "@/lib/security/reset-tokens";
 import { notifyUserPrimary } from "@/lib/messaging/notify";
 import { raiseAlert } from "@/lib/observability/alerts";
@@ -64,7 +64,29 @@ export async function POST(request: Request) {
   }
 
   const inbound = extractInbound(update);
-  if (!inbound) return NextResponse.json({ ok: true });
+  if (!inbound) {
+    // An update this route cannot act on. If it was a tapped button, the
+    // spinner is ALREADY turning on the user's screen and the only thing that
+    // stops it is answerCallbackQuery — returning here without one leaves the
+    // button loading until Telegram gives up on its own, which is exactly
+    // what "it looks like it's going to open, then nothing happens" is.
+    //
+    // Two live paths reach here with a callback in hand: an id we no longer
+    // render (extractInbound logs it), and a callback_query whose `message`
+    // Telegram omits because the message it belongs to is more than 48 hours
+    // old. Neither is safe to guess at — a retired button on a wallet must
+    // not be interpreted — but both must still be answered.
+    const orphaned = update.callback_query?.id;
+    if (orphaned) {
+      after(() =>
+        answerTelegramCallback(
+          orphaned,
+          "That button is from an older message. Send /help for the current menu.",
+        ),
+      );
+    }
+    return NextResponse.json({ ok: true });
+  }
 
   console.log("[telegram] incoming", {
     id: inbound.messageId,
@@ -123,7 +145,7 @@ interface InboundUpdate {
 function extractInbound(update: TelegramUpdate): InboundUpdate | null {
   const cb = update.callback_query;
   if (cb?.data && cb.message) {
-    const title = titleForChoiceId(cb.data);
+    const title = titleForCallbackData(cb.data);
     // An id we no longer render — an old message tapped after a deploy that
     // renamed it. Acknowledged rather than answered, since guessing what a
     // retired button used to mean is exactly the wrong move on a wallet.
@@ -200,17 +222,39 @@ async function linkAccount({
     return;
   }
 
-  await upsertChannel({
-    userId: ctx.user.id,
-    provider: "telegram",
-    externalId: chatId,
-    displayName: username,
-    // Never primary on linking. Conversational replies stay where the user
-    // already is; this channel is for notifications and the kill switch until
-    // they say otherwise.
-    isPrimary: false,
-    verified: true,
-  });
+  try {
+    await upsertChannel({
+      userId: ctx.user.id,
+      provider: "telegram",
+      externalId: chatId,
+      displayName: username,
+      // Never primary on linking. Conversational replies stay where the user
+      // already is; this channel is for notifications and the kill switch until
+      // they say otherwise.
+      isPrimary: false,
+      verified: true,
+    });
+  } catch (err) {
+    // This chat already belongs to a different tella account. Taking it would
+    // silently strip a notification channel from whoever holds that one, so
+    // say so instead. The token is already consumed, which is correct: it was
+    // used, it just did not succeed, and a fresh one costs one message.
+    if (err instanceof ChannelOwnedByAnotherUserError) {
+      console.warn("[telegram] chat already linked to another account", {
+        userId: ctx.user.id,
+      });
+      await sendTelegramMessage({
+        to: chatId,
+        body: [
+          "This Telegram account is already connected to a different tella wallet.",
+          "",
+          "Unlink it from that wallet first, then ask for a new link here.",
+        ].join("\n"),
+      });
+      return;
+    }
+    throw err;
+  }
 
   await sendTelegramMessage({
     to: chatId,
