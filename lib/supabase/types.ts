@@ -44,7 +44,7 @@ export type FreezeSource =
   | "operator"
   | "auto";
 
-export type PendingActionKind = "flow" | "confirm" | "send";
+export type PendingActionKind = "flow" | "confirm" | "send" | "save_beneficiary";
 
 /**
  * Backend-initiated multi-turn conversation state — one active conversation
@@ -123,7 +123,60 @@ export interface SendFlowPendingPayload {
 export type PendingActionPayload =
   | FlowPendingPayload
   | ConfirmPendingPayload
-  | SendFlowPendingPayload;
+  | SendFlowPendingPayload
+  | BeneficiaryPendingPayload;
+
+/**
+ * "Want to save this recipient?", held between messages.
+ *
+ * Shares the table with `flow`, `confirm` and `send` for the reason they all
+ * share it: one per user, upserted, short TTL. Like `confirm` and `send`, and
+ * UNLIKE `flow`, it touches sendam-ai at no point — and that is the whole
+ * reason this shape exists.
+ *
+ * It used to be a `flow` row: the recipient lived inside an opaque sendam-ai
+ * token and the only way to read a reply was to send it back to /decode. That
+ * made a courtesy question depend on a network call twice over. Minting the
+ * token happened BEFORE the question was sent, inside one try/catch, so a
+ * single /flow/start timeout — or, far more often, a circuit breaker that
+ * /decode had already tripped — meant the user was simply never asked, with
+ * nothing but a log line to say so and no second chance, because by then the
+ * send was finished and its row was gone.
+ *
+ * So the recipient is stored here in the clear and the answer is read by
+ * lib/agent/beneficiary-flow.ts, which is anchored patterns and nothing else.
+ * The decoder was never doing the part that needed judgement: an unrecognised
+ * reply is offered back as a proposed name ("Did you mean to save them as
+ * X?"), which is self-correcting in a way a model's guess is not.
+ */
+export interface BeneficiaryPendingPayload {
+  action: "save_beneficiary";
+  /**
+   * Which question is outstanding.
+   *
+   * `confirm` — "save them?", answered yes/no, or with a name the user
+   * assumed we were asking for.
+   * `name` — "what should we call them?", answered with the label itself.
+   */
+  step: "confirm" | "name";
+  /**
+   * The recipient, captured at send time rather than looked up later. The
+   * send is already complete when this row is written, so there is nothing
+   * left to re-resolve — and a name the user gives ten minutes from now must
+   * attach to the address the money actually went to.
+   */
+  recipientAddress: string;
+  recipientUserId: string | null;
+  recipientWhatsappNumber: string | null;
+  /** How the recipient was described in the receipt, for the question text. */
+  suggestedLabel: string;
+  /**
+   * A name read out of an unrecognised reply at the `confirm` step, waiting
+   * for a yes. Set only alongside `step: "confirm"`; a yes then saves under
+   * it directly instead of asking for a name that was already given.
+   */
+  proposedLabel?: string;
+}
 
 
 /**

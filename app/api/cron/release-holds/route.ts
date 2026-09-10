@@ -10,6 +10,7 @@ import { checkSendLimits, formatLimitFailure } from "@/lib/sends/limits";
 import { gateSpend } from "@/lib/users/wallet-gate";
 import { findUserById } from "@/lib/users/repository";
 import { notifyUser } from "@/lib/messaging/notify";
+import { offerBeneficiarySave } from "@/lib/beneficiaries/offer";
 import {
   reserveSend,
   releaseReservedSend,
@@ -224,6 +225,31 @@ async function releaseOne(hold: HeldSend): Promise<ReleaseOutcome> {
     "",
     "This was the transfer you queued yesterday.",
   ]);
+
+  // A held send reaches here having never been offered the beneficiary save.
+  // sendReceiptAndFollowUp returns early on `{ ok: false, reason: "held" }` —
+  // correctly, since nothing had moved at that point — and nothing picked it
+  // up afterwards, so every transfer over the hold threshold quietly lost the
+  // question. It is asked now, when the money has actually gone.
+  //
+  // Never throws, and deliberately after the receipt: the offer is a courtesy
+  // and must not come between the user and being told their money moved.
+  const offer = await offerBeneficiarySave({
+    user,
+    recipient: {
+      address: claimed.payload.recipientAddress,
+      userId: claimed.payload.recipientUserId,
+      whatsappNumber: claimed.payload.recipientWhatsappNumber,
+      label: recipientLabelFor(claimed.payload),
+    },
+  });
+
+  if (offer === "not_recorded" || offer === "not_delivered") {
+    console.error("[cron:release-holds] beneficiary offer not made", {
+      heldSendId: claimed.id,
+      outcome: offer,
+    });
+  }
 
   return "sent";
 }

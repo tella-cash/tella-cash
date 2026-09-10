@@ -30,7 +30,17 @@ export async function findBeneficiaryByLabel(
   return (data as Beneficiary | null) ?? null;
 }
 
-/** True if this address is already saved as a beneficiary for the user. */
+/**
+ * True if this address is already saved as a beneficiary for the user.
+ *
+ * `limit(1)`, NOT `maybeSingle()`. Nothing stops the same address being saved
+ * under two labels — the only uniqueness is on (user_id, lower(label)), see
+ * createBeneficiary below — and maybeSingle throws PGRST116 on a second row
+ * rather than returning either of them. The single caller that matters treats
+ * a throw as "do not offer to save this recipient", so one duplicate pair
+ * permanently suppressed the offer for that address. The question this answers
+ * is "is it saved at all", which the first row settles.
+ */
 export async function findBeneficiaryByAddress(
   userId: string,
   recipientAddress: string,
@@ -41,10 +51,11 @@ export async function findBeneficiaryByAddress(
     .select("*")
     .eq("user_id", userId)
     .ilike("recipient_address", recipientAddress)
-    .maybeSingle();
+    .order("created_at", { ascending: true })
+    .limit(1);
 
   if (error) throw new Error(`findBeneficiaryByAddress failed: ${error.message}`);
-  return (data as Beneficiary | null) ?? null;
+  return ((data as Beneficiary[] | null) ?? [])[0] ?? null;
 }
 
 export type CreateBeneficiaryResult =

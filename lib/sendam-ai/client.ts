@@ -83,12 +83,24 @@ const TIMEOUT_MS: Record<string, number> = {
 const DEFAULT_TIMEOUT_MS = 4000;
 
 /**
- * Circuit breaker.
+ * Circuit breaker, PER PATH.
  *
  * Without one, an outage costs every single message its full timeout before
  * falling through — so a dead service does not just fail, it makes the whole
  * bot slow while failing. After a few consecutive failures we stop asking for
  * a while and let the caller fall through immediately.
+ *
+ * WHY IT IS KEYED ON THE PATH, which it was not.
+ *
+ * One shared counter meant /decode and /flow/start took each other down, and
+ * the traffic is nothing like symmetric: /decode runs on EVERY inbound message
+ * and calls a language model, /flow/start runs occasionally and only signs a
+ * token. So the busy, slow, model-backed endpoint decided whether the cheap
+ * deterministic one was allowed to be called at all — four consecutive decoder
+ * failures and every flow mint in the next thirty seconds was refused before it
+ * was attempted. A breaker is a statement about one dependency being unhealthy;
+ * these are different dependencies behind one host, and the evidence for one
+ * is not evidence for the other.
  *
  * Per-process and therefore per-instance, which on serverless means it resets
  * on cold start. That is fine: this is a latency guard, not a correctness
@@ -96,27 +108,48 @@ const DEFAULT_TIMEOUT_MS = 4000;
  */
 const BREAKER_THRESHOLD = 4;
 const BREAKER_COOLDOWN_MS = 30_000;
-let consecutiveFailures = 0;
-let breakerOpenedAt = 0;
 
-function breakerIsOpen(): boolean {
-  if (consecutiveFailures < BREAKER_THRESHOLD) return false;
-  if (Date.now() - breakerOpenedAt > BREAKER_COOLDOWN_MS) {
+interface BreakerState {
+  consecutiveFailures: number;
+  openedAt: number;
+}
+
+const breakers = new Map<string, BreakerState>();
+
+function breakerFor(path: string): BreakerState {
+  let state = breakers.get(path);
+  if (!state) {
+    state = { consecutiveFailures: 0, openedAt: 0 };
+    breakers.set(path, state);
+  }
+  return state;
+}
+
+function breakerIsOpen(path: string): boolean {
+  const state = breakerFor(path);
+  if (state.consecutiveFailures < BREAKER_THRESHOLD) return false;
+  if (Date.now() - state.openedAt > BREAKER_COOLDOWN_MS) {
     // Cooldown elapsed. Let one call through to test the water; if it fails
     // the counter is still high and the breaker re-opens immediately.
-    consecutiveFailures = BREAKER_THRESHOLD - 1;
+    state.consecutiveFailures = BREAKER_THRESHOLD - 1;
     return false;
   }
   return true;
 }
 
-function recordFailure(): void {
-  consecutiveFailures++;
-  if (consecutiveFailures >= BREAKER_THRESHOLD) breakerOpenedAt = Date.now();
+function recordFailure(path: string): void {
+  const state = breakerFor(path);
+  state.consecutiveFailures++;
+  if (state.consecutiveFailures >= BREAKER_THRESHOLD) state.openedAt = Date.now();
 }
 
-function recordSuccess(): void {
-  consecutiveFailures = 0;
+function recordSuccess(path: string): void {
+  breakerFor(path).consecutiveFailures = 0;
+}
+
+/** Test seam. Nothing in the request path calls this. */
+export function __resetBreakersForTests(): void {
+  breakers.clear();
 }
 
 /** Thrown when the breaker is open, so callers can tell it apart from a 4xx. */
@@ -131,7 +164,7 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   if (!BASE_URL) throw new Error("Missing SENDAM_AI_BASE_URL");
   if (!SIGNING_SECRET) throw new Error("Missing SENDAM_AI_SIGNING_SECRET");
 
-  if (breakerIsOpen()) {
+  if (breakerIsOpen(path)) {
     console.warn(`[sendam-ai] breaker open, skipping ${path}`);
     throw new SendamUnavailableError();
   }
@@ -174,7 +207,7 @@ async function post<T>(path: string, body: unknown): Promise<T> {
       if (res.status >= 400 && res.status < 500) {
         console.error(`[sendam-ai] <- ${path} ${res.status} (${ms}ms)`);
         if (DEBUG_BODIES) console.error(`[sendam-ai] <- ${path} body`, resText);
-        recordSuccess();
+        recordSuccess(path);
         throw new Error(`sendam-ai ${path} failed (${res.status}): ${resText}`);
       }
 
@@ -182,13 +215,13 @@ async function post<T>(path: string, body: unknown): Promise<T> {
         console.error(`[sendam-ai] <- ${path} ${res.status} (${ms}ms)`);
         if (DEBUG_BODIES) console.error(`[sendam-ai] <- ${path} body`, resText);
         if (attempt === 0) continue;
-        recordFailure();
+        recordFailure(path);
         throw new Error(`sendam-ai ${path} failed (${res.status}): ${resText}`);
       }
 
       console.log(`[sendam-ai] <- ${path} ${res.status} (${ms}ms)`);
       if (DEBUG_BODIES) console.log(`[sendam-ai] <- ${path} body`, resText);
-      recordSuccess();
+      recordSuccess(path);
       return JSON.parse(resText) as T;
     } catch (err) {
       // A 4xx above throws a plain Error; don't retry or penalise those.
@@ -201,7 +234,7 @@ async function post<T>(path: string, body: unknown): Promise<T> {
       });
 
       if (attempt === 0) continue;
-      recordFailure();
+      recordFailure(path);
       throw new SendamUnavailableError(
         aborted ? `sendam-ai ${path} timed out` : `sendam-ai ${path} unreachable`,
       );
@@ -211,7 +244,7 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   }
 
   // Unreachable: the loop either returns or throws on its second pass.
-  recordFailure();
+  recordFailure(path);
   throw new SendamUnavailableError();
 }
 

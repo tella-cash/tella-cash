@@ -1,5 +1,6 @@
 import type {
   tellaUser,
+  BeneficiaryPendingPayload,
   PendingAction,
   PendingSend,
   FreezeSource,
@@ -13,6 +14,7 @@ import {
   deletePending,
   createPending,
   createPendingFlow,
+  createPendingSaveBeneficiary,
 } from "@/lib/pending_actions/repository";
 import {
   createPendingSend,
@@ -60,7 +62,6 @@ import {
 import { fastPathDecode, stripCommandPrefix } from "@/lib/agent/fast-path";
 import { checkConfidence, sanitizeModelReply } from "@/lib/agent/confidence";
 import {
-  SAVE_BENEFICIARY_FLOW,
   FAUCET_ASSET_FLOW,
   FAUCET_ASSET_AWAITING,
   nextQuestionFor,
@@ -80,6 +81,15 @@ import {
   isNegation,
   isConfirmPayload,
 } from "@/lib/agent/confirm-action";
+import {
+  BENEFICIARY_DECLINED_REPLY,
+  beneficiaryNamePrompt,
+  beneficiaryProposalPrompt,
+  beneficiaryReAskPrompt,
+  isBeneficiaryPayload,
+  isValidBeneficiaryLabel,
+  readConfirmReply,
+} from "@/lib/agent/beneficiary-flow";
 import { hasCommandKeyword } from "@/lib/agent/detect-command-keyword";
 import {
   ABANDONED_REPLY,
@@ -154,13 +164,6 @@ function extractName(input: string): string {
     .replace(/^(my name is|i am|i'm|im|its|it's|call me)\s+/i, "")
     .replace(/[.!]+$/, "")
     .trim();
-}
-
-/** Beneficiary labels are looser than user names — "Mum", "Landlord 2" etc. */
-function isValidBeneficiaryLabel(input: string): boolean {
-  const trimmed = input.trim();
-  if (trimmed.length < 2 || trimmed.length > 30) return false;
-  return /^[\p{L}\p{N}][\p{L}\p{N}\s'-]*[\p{L}\p{N}]$/u.test(trimmed);
 }
 
 export async function handleIncomingMessage(
@@ -243,8 +246,16 @@ export async function handleIncomingMessage(
     return handleSendFlowResponse({ user, pending, text, origin });
   }
 
+  // Above the generic flow handler and, like it, below the kill switch. Its
+  // own branch because it shares nothing with `flow` any more: no token, no
+  // decoder call, and a payload that holds the recipient in the clear. See
+  // migrations/0023.
+  if (pending?.kind === "save_beneficiary") {
+    return handleBeneficiaryPendingResponse({ user, pending, text, origin });
+  }
+
   if (pending?.kind === "flow") {
-    return handleFlowPendingResponse({ user, pending, text, origin });
+    return handleFlowPendingResponse({ user, pending, text });
   }
 
   return handleOnboardedUser({ user, text, origin });
@@ -303,16 +314,18 @@ async function handleFlowPendingResponse({
   user,
   pending,
   text,
-  origin,
 }: {
   user: tellaUser;
   pending: PendingAction;
   text: string;
-  origin: MessageProvider;
 }): Promise<HandlerResult> {
   const name = firstName(user);
 
-  if (isConfirmPayload(pending.payload) || isSendFlowPayload(pending.payload)) {
+  if (
+    isConfirmPayload(pending.payload) ||
+    isSendFlowPayload(pending.payload) ||
+    isBeneficiaryPayload(pending.payload)
+  ) {
     // Unreachable via the dispatcher, which routes on `kind`. Guarded anyway
     // so a row whose kind and payload disagree cannot be read as a flow.
     console.error("[flow] non-flow payload on a flow row", { id: pending.id });
@@ -322,25 +335,6 @@ async function handleFlowPendingResponse({
 
   const { flow, token } = pending.payload;
   const failures = pending.payload.failures ?? 0;
-
-  // The beneficiary prompt is a courtesy question, not an interrogation. If
-  // the next message is plainly a new request — "balance", "send 5 to
-  // chidi" — it is not an answer, and feeding it to the flow decoder to be
-  // told what it means about beneficiaries is both wrong and slow. Drop the
-  // prompt, say so, and do the thing they actually asked for.
-  //
-  // Deliberately before decodeFollowUp: no round-trip, and it still works
-  // when sendam-ai is down. Scoped to this flow — the faucet flow's single
-  // question is part of an action the user just asked for, so it keeps
-  // capturing replies as before.
-  if (flow === SAVE_BENEFICIARY_FLOW && hasCommandKeyword(text)) {
-    await deletePending(pending.id);
-    const next = await handleOnboardedUser({ user, text, origin });
-    return {
-      ...next,
-      reply: `Dropping the beneficiary save for now.\n\n${next.reply}`,
-    };
-  }
 
   let result: Awaited<ReturnType<typeof decodeFollowUp>>;
   try {
@@ -385,33 +379,9 @@ async function handleFlowPendingResponse({
     return { reply: "Sorry, having a little trouble right now — could you say that again?" };
   }
 
-  // Early termination on decline: our own business rule layered on top of
-  // the generic token mechanism — sendam-ai doesn't know "declining ends
-  // the flow," it just resolves whatever slots it can. Checked before
-  // `status`, since a lone "no" reply can leave the flow IN_PROGRESS
-  // (beneficiaryName still unresolved) with confirmed already false.
-  if (result.slots["confirmed"] === false) {
-    await deletePending(pending.id);
-    return { reply: "No problem, skipped. Let me know if you change your mind." };
-  }
-
   if (result.status === "IN_PROGRESS") {
-    // Still at the yes/no step, and the decoder could not read the reply as
-    // either. The keyword check above already ruled out a new request, so
-    // the most likely thing the user just typed is the name they want the
-    // recipient saved under — they answered the question they thought we
-    // asked. Offer that reading back rather than repeating ourselves.
-    if (flow === SAVE_BENEFICIARY_FLOW && result.slots["confirmed"] == null) {
-      const candidate = await proposeCandidateLabel({ user, result, text });
-      if (candidate) return candidate;
-    }
-
     await createPendingFlow({ userId: user.id, flow: result.flow, token: result.token });
     return { reply: nextQuestionFor(result.flow, result.slots) ?? "Sorry, could you say that again?" };
-  }
-
-  if (flow === SAVE_BENEFICIARY_FLOW) {
-    return completeSaveBeneficiaryFlow({ user, pending, slots: result.slots });
   }
 
   if (flow === FAUCET_ASSET_FLOW) {
@@ -422,161 +392,235 @@ async function handleFlowPendingResponse({
   return { reply: pickReply(REPLIES.unknown, { name }), choices: QUICK_CHOICES };
 }
 
-async function completeSaveBeneficiaryFlow({
+/**
+ * One answer to "want to save this recipient?".
+ *
+ * Runs on lib/agent/beneficiary-flow.ts and nothing else — no token, no
+ * decoder, no fetch. See BeneficiaryPendingPayload and migrations/0023 for
+ * why: this used to be a sendam-ai flow, and a courtesy question that depends
+ * on a language model to hear the word "yes" is a question that disappears
+ * whenever that service has a bad thirty seconds.
+ *
+ * The row is kept until the flow actually resolves. Every re-ask below
+ * rewrites it rather than deleting and re-minting, because the recipient's
+ * address lives in it and losing that mid-conversation is how a name ends up
+ * attached to nothing.
+ */
+async function handleBeneficiaryPendingResponse({
   user,
   pending,
-  slots,
+  text,
+  origin,
 }: {
   user: tellaUser;
   pending: PendingAction;
-  slots: FollowUpSlots;
+  text: string;
+  origin: MessageProvider;
 }): Promise<HandlerResult> {
-  await deletePending(pending.id);
+  const name = firstName(user);
 
-  const label = (typeof slots["beneficiaryName"] === "string" ? slots["beneficiaryName"] : "").trim();
+  if (!isBeneficiaryPayload(pending.payload)) {
+    // Unreachable via the dispatcher, which routes on `kind`. Guarded anyway
+    // so a row whose kind and payload disagree cannot be read as an offer.
+    console.error("[beneficiary] non-beneficiary payload on a beneficiary row", {
+      id: pending.id,
+    });
+    await deletePending(pending.id);
+    return { reply: pickReply(REPLIES.unknown, { name }), choices: QUICK_CHOICES };
+  }
 
-  // The model proposes a name — we still validate it ourselves before
-  // persisting, same as any other proposal from sendam-ai.
-  if (!isValidBeneficiaryLabel(label)) {
-    return reissueNamePrompt({
+  const payload = pending.payload;
+
+  // The offer is a courtesy question, not an interrogation. If the next
+  // message is plainly a new request — "balance", "send 5 to chidi" — it is
+  // not an answer. Drop the offer, say so, and do the thing they asked for.
+  if (hasCommandKeyword(text)) {
+    await deletePending(pending.id);
+    const next = await handleOnboardedUser({ user, text, origin });
+    return {
+      ...next,
+      reply: `Dropping the beneficiary save for now.\n\n${next.reply}`,
+    };
+  }
+
+  // Checked at BOTH steps, and the name step is the one that needs saying.
+  // "no" is a perfectly valid beneficiary label — two letters, no punctuation
+  // — so without this, someone answering "what would you like to save them
+  // as?" with "no" gets a saved beneficiary called No. The token flow got
+  // this for free because sendam-ai resolved `confirmed: false` even from a
+  // reply to the name question; reading locally means saying it out loud.
+  if (isDeclination(text.trim()) || isNegation(text.trim())) {
+    await deletePending(pending.id);
+    return { reply: BENEFICIARY_DECLINED_REPLY };
+  }
+
+  if (payload.step === "name") {
+    return saveBeneficiaryUnder({ user, pending, payload, label: text });
+  }
+
+  const reading = readConfirmReply(text, payload);
+
+  switch (reading.kind) {
+    case "declined":
+      await deletePending(pending.id);
+      return { reply: BENEFICIARY_DECLINED_REPLY };
+
+    case "accepted":
+      // A name was proposed and this yes accepts it, so there is nothing left
+      // to ask.
+      if (reading.label) {
+        return saveBeneficiaryUnder({ user, pending, payload, label: reading.label });
+      }
+      await advanceBeneficiaryStep({ user, payload, step: "name" });
+      return { reply: beneficiaryNamePrompt() };
+
+    case "proposed":
+      // Not yes and not no, but it could be the name they thought we were
+      // asking for. Offer that reading back rather than repeating ourselves.
+      await advanceBeneficiaryStep({
+        user,
+        payload,
+        step: "confirm",
+        proposedLabel: reading.label,
+      });
+      return { reply: beneficiaryProposalPrompt(reading.label) };
+
+    case "unreadable":
+      return {
+        reply: payload.proposedLabel
+          ? beneficiaryProposalPrompt(payload.proposedLabel)
+          : beneficiaryReAskPrompt(),
+      };
+  }
+}
+
+/** The recipient half of the payload, carried across every re-ask. */
+function beneficiaryContext(payload: BeneficiaryPendingPayload) {
+  return {
+    recipientAddress: payload.recipientAddress,
+    recipientUserId: payload.recipientUserId,
+    recipientWhatsappNumber: payload.recipientWhatsappNumber,
+    suggestedLabel: payload.suggestedLabel,
+  };
+}
+
+/**
+ * Move the offer to its next question. Upserts on user_id, so this rewrites
+ * the row in place.
+ *
+ * A failure here is deliberately swallowed rather than thrown. Throwing would
+ * reach the webhook route, which on the Meta channel has no fallback message
+ * of its own, so the user would get silence. Swallowing leaves the row on its
+ * previous step, and the previous step is always `confirm` — where an
+ * unrecognised reply is read as a proposed name and offered back. So the
+ * worst case is one extra round trip, and the flow still completes.
+ */
+async function advanceBeneficiaryStep({
+  user,
+  payload,
+  step,
+  proposedLabel,
+}: {
+  user: tellaUser;
+  payload: BeneficiaryPendingPayload;
+  step: BeneficiaryPendingPayload["step"];
+  proposedLabel?: string;
+}): Promise<void> {
+  try {
+    await createPendingSaveBeneficiary({
+      userId: user.id,
+      payload: {
+        ...beneficiaryContext(payload),
+        step,
+        ...(proposedLabel ? { proposedLabel } : {}),
+      },
+    });
+  } catch (err) {
+    console.error("[beneficiary] could not advance the offer", {
+      userId: user.id,
+      step,
+      err,
+    });
+  }
+}
+
+async function saveBeneficiaryUnder({
+  user,
+  pending,
+  payload,
+  label,
+}: {
+  user: tellaUser;
+  pending: PendingAction;
+  payload: BeneficiaryPendingPayload;
+  label: string;
+}): Promise<HandlerResult> {
+  const trimmed = label.trim();
+
+  if (!isValidBeneficiaryLabel(trimmed)) {
+    return askForAnotherName({
       user,
-      slots,
+      payload,
       replyPrefix: "That doesn't look like a name I can save. Try something like *Chidi* or *Mum*.",
     });
   }
 
-  const recipientAddress = String(slots["recipientAddress"] ?? "");
-  const recipientUserId = typeof slots["recipientUserId"] === "string" ? slots["recipientUserId"] : null;
-  const recipientWhatsappNumber =
-    typeof slots["recipientWhatsappNumber"] === "string" ? slots["recipientWhatsappNumber"] : null;
-
-  const existing = await findBeneficiaryByLabel(user.id, label);
+  const existing = await findBeneficiaryByLabel(user.id, trimmed);
   if (existing) {
-    return reissueNamePrompt({
+    return askForAnotherName({
       user,
-      slots,
+      payload,
       replyPrefix: `You already have a beneficiary called *${existing.label}*. Try a different name.`,
     });
   }
 
   const result = await createBeneficiary({
     userId: user.id,
-    label,
-    recipientUserId,
-    recipientAddress,
-    recipientWhatsappNumber,
+    label: trimmed,
+    recipientUserId: payload.recipientUserId,
+    recipientAddress: payload.recipientAddress,
+    recipientWhatsappNumber: payload.recipientWhatsappNumber,
   });
 
   if (!result.ok) {
-    return reissueNamePrompt({
+    // Lost the race against the unique index on (user_id, lower(label)) —
+    // belt-and-suspenders alongside the lookup above.
+    return askForAnotherName({
       user,
-      slots,
-      replyPrefix: `You already have a beneficiary called *${label}*. Try a different name.`,
+      payload,
+      replyPrefix: `You already have a beneficiary called *${trimmed}*. Try a different name.`,
     });
   }
 
+  // Only now. Deleting before the insert is what would strand the address if
+  // any of the checks above sent us back for another name.
+  await deletePending(pending.id);
+
   return {
     reply: [
-      `✓ Saved as *${label}*.`,
+      `✓ Saved as *${trimmed}*.`,
       "",
-      `Next time just say "send 5 usdc to ${label}".`,
+      `Next time just say "send 5 usdc to ${trimmed}".`,
     ].join("\n"),
   };
 }
 
 /**
- * Reads an unrecognised reply to "save this recipient?" as the name the
- * user wants them saved under, and asks them to confirm just that.
- *
- * Mints a fresh token whose only open slot is `confirmed`, carrying the
- * proposed name in the slots — so a "yes" comes back COMPLETE with
- * beneficiaryName already resolved and completeSaveBeneficiaryFlow saves it
- * (still through isValidBeneficiaryLabel), and a "no" is caught by the
- * decline check above. No new completion path needed.
- *
- * Returns null when it cannot make the offer, and the caller falls back to
- * plainly re-asking for a yes or a no.
+ * The name was refused. Put the offer back on the name question — clearing
+ * any proposal, since the proposal is the thing that was just refused.
  */
-async function proposeCandidateLabel({
+async function askForAnotherName({
   user,
-  result,
-  text,
-}: {
-  user: tellaUser;
-  result: Extract<Awaited<ReturnType<typeof decodeFollowUp>>, { status: "IN_PROGRESS" }>;
-  text: string;
-}): Promise<HandlerResult | null> {
-  const candidate = text.trim();
-
-  // Someone typing a paragraph is not proposing a name, and quoting it back
-  // in full would be nonsense. isValidBeneficiaryLabel caps at 30; this is
-  // looser on purpose so a slightly-too-long name still gets the offer and
-  // the specific "that doesn't look like a name I can save" reply.
-  if (!candidate || candidate.length > 60) return null;
-
-  // The address lives in the slots we seeded at flow start. If it did not
-  // come back, there is nothing to save the name against.
-  const recipientAddress = result.slots["recipientAddress"];
-  if (typeof recipientAddress !== "string" || !recipientAddress) return null;
-
-  try {
-    const { token } = await flowStart(
-      SAVE_BENEFICIARY_FLOW,
-      { ...result.slots, beneficiaryName: candidate },
-      [
-        {
-          slot: "confirmed",
-          type: "CONFIRMATION",
-          description: "save this recipient under that name?",
-        },
-      ],
-    );
-    await createPendingFlow({ userId: user.id, flow: SAVE_BENEFICIARY_FLOW, token });
-  } catch (err) {
-    // Same reason reissueNamePrompt swallows this: an uncaught throw here is
-    // total silence on the Meta channel, which has no fallback message.
-    console.error("[agent] flowStart failed", { userId: user.id, flow: SAVE_BENEFICIARY_FLOW, err });
-    return null;
-  }
-
-  return {
-    reply: [
-      `Did you mean to save them as *${candidate}*?`,
-      "",
-      "Reply *yes* to save it, or *no* to skip.",
-    ].join("\n"),
-  };
-}
-
-/**
- * The original token is already COMPLETE/consumed at this point — mints a
- * fresh single-slot token for just the name rather than trying to continue
- * a finished flow.
- */
-async function reissueNamePrompt({
-  user,
-  slots,
+  payload,
   replyPrefix,
 }: {
   user: tellaUser;
-  slots: FollowUpSlots;
+  payload: BeneficiaryPendingPayload;
   replyPrefix: string;
 }): Promise<HandlerResult> {
-  // A sendam-ai outage here must not throw all the way up to the webhook
-  // route — the Meta channel has no fallback-message safety net of its own
-  // (unlike Twilio's), so an uncaught throw here means total silence.
-  try {
-    const { token } = await flowStart(SAVE_BENEFICIARY_FLOW, slots, [
-      { slot: "beneficiaryName", type: "FREE_TEXT", description: "what should we call them?" },
-    ]);
-    await createPendingFlow({ userId: user.id, flow: SAVE_BENEFICIARY_FLOW, token });
-    return { reply: replyPrefix };
-  } catch (err) {
-    console.error("[agent] flowStart failed", { userId: user.id, flow: SAVE_BENEFICIARY_FLOW, err });
-    return { reply: replyPrefix };
-  }
+  await advanceBeneficiaryStep({ user, payload, step: "name" });
+  return { reply: replyPrefix };
 }
-
 async function completeFaucetAssetFlow({
   user,
   pending,

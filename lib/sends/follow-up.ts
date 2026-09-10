@@ -2,10 +2,7 @@ import type { tellaUser } from "@/lib/supabase/types";
 import type { ExecuteSendResult } from "@/lib/sends/execute";
 import { formatSendResultForChat } from "@/lib/sends/execute";
 import { notifyUser } from "@/lib/messaging/notify";
-import { findBeneficiaryByAddress } from "@/lib/beneficiaries/repository";
-import { createPendingFlow } from "@/lib/pending_actions/repository";
-import { flowStart } from "@/lib/sendam-ai/client";
-import { SAVE_BENEFICIARY_FLOW, SAVE_BENEFICIARY_AWAITING } from "@/lib/sendam-ai/flows";
+import { offerBeneficiarySave } from "@/lib/beneficiaries/offer";
 import { listActivePendingSends } from "@/lib/pending_sends/repository";
 import { buildConfirmUrl } from "@/lib/confirm/url";
 
@@ -46,33 +43,23 @@ export async function sendReceiptAndFollowUp({
     console.error("[send] pending-send reminder failed", { userId: user.id, err });
   }
 
-  try {
-    const existing = await findBeneficiaryByAddress(user.id, result.recipientAddress);
-    if (existing) return;
+  // Nothing here can throw — offerBeneficiarySave reports instead, and each of
+  // its steps fails independently. That is the whole change: this used to be
+  // one try/catch around a sendam-ai POST, a row write and the message, so a
+  // decoder blip meant the user was simply never asked. See
+  // lib/beneficiaries/offer.ts and migrations/0023.
+  const outcome = await offerBeneficiarySave({
+    user,
+    recipient: {
+      address: result.recipientAddress,
+      userId: result.recipientUserId,
+      whatsappNumber: result.recipientWhatsappNumber,
+      label: result.recipientLabel,
+    },
+  });
 
-    // Backend-initiated flow start: we already know exactly what we want to
-    // ask, there's no ambiguous text to classify, so this mints a token
-    // directly rather than going through /decode. We still author the
-    // question text ourselves — sendam-ai's decoder never does that, only
-    // interprets replies (see docs/INTEGRATION.md in that repo).
-    const { token } = await flowStart(
-      SAVE_BENEFICIARY_FLOW,
-      {
-        recipientAddress: result.recipientAddress,
-        recipientUserId: result.recipientUserId,
-        recipientWhatsappNumber: result.recipientWhatsappNumber,
-        suggestedLabel: result.recipientLabel,
-      },
-      SAVE_BENEFICIARY_AWAITING,
-    );
-    await createPendingFlow({ userId: user.id, flow: SAVE_BENEFICIARY_FLOW, token });
-
-    await notifyUser({
-      user,
-      body: `Want to save ${result.recipientLabel} as a beneficiary? Reply *yes* or *no*.`,
-    });
-  } catch (err) {
-    console.error("[send] beneficiary prompt failed", { userId: user.id, err });
+  if (outcome === "not_recorded" || outcome === "not_delivered") {
+    console.error("[send] beneficiary offer not made", { userId: user.id, outcome });
   }
 }
 

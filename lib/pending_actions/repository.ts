@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type {
+  BeneficiaryPendingPayload,
   PendingAction,
   PendingActionKind,
   PendingActionPayload,
@@ -59,6 +60,28 @@ export function createPendingFlow({
     userId,
     kind: "flow",
     payload: { flow, token, ...(failures ? { failures } : {}) },
+  });
+}
+
+/**
+ * Start (or restart) the "save this recipient?" question.
+ *
+ * No token, no network call — see BeneficiaryPendingPayload's doc comment and
+ * lib/agent/beneficiary-flow.ts. The TTL is the flow default: long enough for
+ * someone to put their phone down mid-answer, short enough that an abandoned
+ * question stops capturing their messages.
+ */
+export function createPendingSaveBeneficiary({
+  userId,
+  payload,
+}: {
+  userId: string;
+  payload: Omit<BeneficiaryPendingPayload, "action">;
+}): Promise<PendingAction> {
+  return createPending({
+    userId,
+    kind: "save_beneficiary",
+    payload: { action: "save_beneficiary", ...payload },
   });
 }
 
