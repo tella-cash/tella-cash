@@ -122,5 +122,21 @@ export async function replacePinForUser({
   userId: string;
   pin: string;
 }): Promise<void> {
-  await setPinForUser({ userId, pin });
+  if (!isValidPin(pin)) {
+    throw new Error("PIN must be 4–8 digits");
+  }
+  const pin_hash = await hashPin(pin);
+  const now = new Date().toISOString();
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase
+    .from("tella_users")
+    // factors_changed_at in the same write as the PIN, never a second one.
+    // The recovery gate is possession of the chat, so the hold that follows
+    // a reset (lib/sends/tiers.ts) is what stands between someone holding
+    // the phone and the balance. A PIN that landed without its timestamp
+    // would be a reset with no hold behind it.
+    .update({ pin_hash, pin_set_at: now, factors_changed_at: now })
+    .eq("id", userId);
+
+  if (error) throw new Error(`replacePinForUser failed: ${error.message}`);
 }

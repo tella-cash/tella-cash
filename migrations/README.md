@@ -451,6 +451,33 @@ claimed, outcome null — appears in that index and points at it.
 `reserveSend` fails closed on a missing function, so deploying the code without
 the migration refuses every send.
 
+### `0024_mainnet_readiness.sql` — apply BEFORE the code that uses it
+
+- `tella_users.wallet_network`, backfilled to `ARC-TESTNET` for every existing
+  wallet. The wallet gate refuses any wallet whose network is not
+  `ARC_NETWORK`, and pending/held sends carry the network they were composed
+  on, so a switch to mainnet can never pay into a testnet-entity address.
+- `tella_users.factors_changed_at`. Set by a PIN reset, passkey removal, or a
+  Telegram/Google link. For 48 hours afterwards every send is held for 24
+  hours and new links are refused.
+- Revokes `EXECUTE` on `tella_record_auth_attempt` / `tella_reset_auth_attempts`
+  from `public`, `anon` and `authenticated`.
+
+Deploying the code without it breaks every read of `tella_users` that selects
+the new columns into the gate: `wallet_network` undefined is read as testnet,
+so on ARC-TESTNET nothing changes, but the PIN reset route's write of
+`factors_changed_at` fails. Apply first.
+
+**Mainnet:** use a fresh Supabase project rather than switching this one. The
+gate stops money going to testnet wallets, but existing users would be left
+with a wallet that never becomes ready again.
+
+### `0025_retire_twilio.sql` — apply BEFORE the code that uses it
+
+Moves any `twilio` rows in `tella_users.whatsapp_channel` and
+`tella_user_channel.provider` to `meta` and sets the column default to `meta`.
+WhatsApp runs only on the Meta Cloud API now.
+
 ### Environment added alongside 0007–0015
 
 ```

@@ -8,6 +8,7 @@ import {
 import { performTransfer, recipientLabelFor } from "@/lib/sends/execute";
 import { checkSendLimits, formatLimitFailure } from "@/lib/sends/limits";
 import { gateSpend } from "@/lib/users/wallet-gate";
+import { arcNetwork } from "@/lib/wallet/network";
 import { findUserById } from "@/lib/users/repository";
 import { notifyUser } from "@/lib/messaging/notify";
 import { offerBeneficiarySave } from "@/lib/beneficiaries/offer";
@@ -91,6 +92,17 @@ async function releaseOne(hold: HeldSend): Promise<ReleaseOutcome> {
   if (!user) {
     // The row cascades on user delete, so this should be unreachable.
     await markHeldSendOutcome({ id: hold.id, state: "cancelled" });
+    return "cancelled";
+  }
+
+  // Queued on another network — see the matching check in executePendingSend.
+  if ((hold.payload.network ?? "ARC-TESTNET") !== arcNetwork()) {
+    await markHeldSendOutcome({ id: hold.id, state: "cancelled" });
+    await tell(user, [
+      `I didn't send the ${hold.payload.amount} USDC that was queued for ${recipientLabelFor(hold.payload)}.`,
+      "",
+      "tella moved networks since it was queued, so nothing left your wallet.",
+    ]);
     return "cancelled";
   }
 

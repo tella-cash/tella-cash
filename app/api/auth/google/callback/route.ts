@@ -6,14 +6,20 @@ import {
   getGoogleLink,
   linkGoogleIdentity,
 } from "@/lib/google/oauth";
-import { loadResetContext, consumeResetToken, createResetToken } from "@/lib/security/reset-tokens";
-import { findUserById } from "@/lib/users/repository";
+import {
+  loadAuthorizedLink,
+  consumeResetToken,
+  createResetToken,
+} from "@/lib/security/reset-tokens";
 import { freezeAccount } from "@/lib/users/freeze";
 import { isFrozen } from "@/lib/users/wallet-gate";
 import { factorsPredating } from "@/lib/auth/factors";
 import { notifyUser } from "@/lib/messaging/notify";
 import { sendSecurityEmail } from "@/lib/email/client";
 import { adminCookieOptions, isAdminSub, issueAdminCookie } from "@/lib/admin/session";
+import { findUserById, markFactorsChanged } from "@/lib/users/repository";
+import { inFactorChangeWindow } from "@/lib/sends/tiers";
+import type { ResultErrorCode } from "@/lib/security/result-errors";
 
 export const dynamic = "force-dynamic";
 
@@ -44,21 +50,21 @@ export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
 
   const error = searchParams.get("error");
-  if (error) return fail(origin, "Sign-in was cancelled.");
+  if (error) return fail(origin, "cancelled");
 
   const code = searchParams.get("code");
   const rawState = searchParams.get("state");
-  if (!code || !rawState) return fail(origin, "Sign-in didn't complete. Try again.");
+  if (!code || !rawState) return fail(origin, "incomplete");
 
   const state = decodeState(rawState);
-  if (!state) return fail(origin, "That sign-in link expired. Start again.");
+  if (!state) return fail(origin, "state_expired");
 
   let identity;
   try {
     identity = await exchangeCode({ code, verifier: state.verifier });
   } catch (err) {
     console.error("[google] code exchange failed", err);
-    return fail(origin, "Couldn't verify that Google account. Try again.");
+    return fail(origin, "google_unverified");
   }
 
   if (state.purpose === "link") {
@@ -78,7 +84,7 @@ export async function GET(request: Request) {
         sub: identity.sub,
         email: identity.email,
       });
-      return fail(origin, "That account doesn't have dashboard access.");
+      return fail(origin, "no_admin_access");
     }
 
     const response = NextResponse.redirect(`${origin}/admin`);
@@ -95,14 +101,11 @@ export async function GET(request: Request) {
   // the message must not reveal which of those two it was.
   const link = await findUserByGoogleSub(identity.sub);
   if (!link) {
-    return fail(
-      origin,
-      "That Google account isn't connected to a tella wallet. Ask tella on WhatsApp to link it first.",
-    );
+    return fail(origin, "google_not_linked");
   }
 
   const user = await findUserById(link.user_id);
-  if (!user) return fail(origin, "Couldn't find that account.");
+  if (!user) return fail(origin, "account_missing");
 
   if (state.purpose === "freeze") {
     if (isFrozen(user)) {
@@ -152,10 +155,7 @@ export async function GET(request: Request) {
   if (!(await factorsPredating(user, user.frozen_at!)).any) {
     // Nothing predates the freeze, so there is nothing to prove. Refusing
     // here is the honest answer: this needs a person, not a second click.
-    return fail(
-      origin,
-      "This account has no PIN or passkey set, so I can't safely unfreeze it from here. Message tella on WhatsApp and we'll sort it out.",
-    );
+    return fail(origin, "no_factor");
   }
 
   const token = await createResetToken(user.id, "unfreeze");
@@ -167,22 +167,39 @@ async function handleLink(
   token: string,
   identity: Awaited<ReturnType<typeof exchangeCode>>,
 ) {
-  const ctx = await loadResetContext(token, "link_google");
-  if (!ctx) return fail(origin, "That link expired. Ask tella on WhatsApp for a new one.");
+  // `token` is the "<id>_<secret>" handoff minted when the account's PIN or
+  // passkey was proven on /security/link/<id>. The bare id went to the chat,
+  // so without the secret, holding or reading the chat would be enough to
+  // attach a Google account that can freeze the wallet and receives every
+  // security email.
+  const ctx = await loadAuthorizedLink(token, "link_google");
+  if (!ctx) return fail(origin, "link_unconfirmed");
+  if (inFactorChangeWindow(ctx.user.factors_changed_at)) return fail(origin, "link_paused");
 
   const existing = await findUserByGoogleSub(identity.sub);
   if (existing && existing.user_id !== ctx.user.id) {
     // One Google account, one wallet. Otherwise a single Google compromise
     // reaches several accounts and the freeze door becomes a skeleton key.
-    return fail(origin, "That Google account is already connected to another tella wallet.");
+    return fail(origin, "google_taken");
   }
 
   const consumed = await consumeResetToken(ctx.token.id);
-  if (!consumed) return fail(origin, "That link has already been used.");
+  if (!consumed) return fail(origin, "link_used");
+
+  // Read BEFORE the upsert, which replaces it. The address being replaced is
+  // the one that most needs telling: if this relink wasn't the owner, it is
+  // their only remaining way to hear about it.
+  const previous = await getGoogleLink(ctx.user.id);
 
   await linkGoogleIdentity({ userId: ctx.user.id, identity });
 
-  const alreadyLinked = await getGoogleLink(ctx.user.id);
+  try {
+    await markFactorsChanged(ctx.user.id);
+  } catch (err) {
+    console.error("[google] marking factors changed failed", { userId: ctx.user.id, err });
+  }
+
+  const replaced = previous && previous.google_sub !== identity.sub ? previous : null;
 
   await Promise.allSettled([
     notifyUser({
@@ -207,9 +224,23 @@ async function handleLink(
         "If you don't recognise this, reply to this email.",
       ],
     }),
+    replaced
+      ? sendSecurityEmail({
+          to: replaced.google_email,
+          kind: "google_linked",
+          subject: "This email was disconnected from your tella wallet",
+          lines: [
+            `A different Google account (${identity.email}) was just connected to your tella wallet in place of this one.`,
+            "",
+            "This address will no longer get security notices or be able to freeze the wallet.",
+            "",
+            "If this wasn't you, message tella immediately and say freeze.",
+          ],
+        })
+      : Promise.resolve(false),
   ]);
 
-  console.log("[google] identity linked", { userId: ctx.user.id, relinked: Boolean(alreadyLinked) });
+  console.log("[google] identity linked", { userId: ctx.user.id, relinked: Boolean(previous) });
   return done(origin, "linked", "0");
 }
 
@@ -217,8 +248,6 @@ function done(origin: string, result: string, count: string) {
   return NextResponse.redirect(`${origin}/security/result?r=${result}&n=${count}`);
 }
 
-function fail(origin: string, message: string) {
-  return NextResponse.redirect(
-    `${origin}/security/result?r=error&m=${encodeURIComponent(message)}`,
-  );
+function fail(origin: string, code: ResultErrorCode) {
+  return NextResponse.redirect(`${origin}/security/result?r=error&e=${code}`);
 }

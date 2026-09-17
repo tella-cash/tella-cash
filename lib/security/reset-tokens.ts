@@ -1,3 +1,4 @@
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { tellaUser } from "@/lib/supabase/types";
 import type { MessageProvider } from "@/lib/messaging/processed-messages";
@@ -34,7 +35,18 @@ export interface SecurityToken {
    * assuming WhatsApp. Nullable, because rows minted before this existed
    * have no payload and a ten-minute TTL makes that brief.
    */
-  payload: { origin?: MessageProvider } | null;
+  payload: {
+    origin?: MessageProvider;
+    /**
+     * Link tokens only. Set once the account's PIN or passkey has been proven
+     * on /security/link/<token>; the Telegram /start handler and the Google
+     * callback refuse a token without it. Holding the chat is not enough to
+     * attach a channel that outlives holding the chat.
+     */
+    authorized_at?: string;
+    /** Link tokens only. See markTokenAuthorized. Never sent to a chat. */
+    link_secret?: string;
+  } | null;
 }
 
 export interface ResetContext {
@@ -201,6 +213,85 @@ export async function revokeAllSecurityTokens(userId: string): Promise<void> {
     });
     throw new Error(`revokeAllSecurityTokens failed: ${error.message}`);
   }
+}
+
+/**
+ * Record that a link token's owner proved a factor, and mint the secret that
+ * completes the link.
+ *
+ * The secret is the point. The token id was already sent to the chat, so an
+ * id that merely became "authorized" could be completed by anyone who can
+ * read that chat, the moment the owner entered their PIN. The handoff
+ * returned here is shown only on the page where the factor was proven, and
+ * the Telegram /start handler and the Google callback require it.
+ *
+ * Conditional on the token still being unused and unexpired, so a consumed
+ * or revoked token cannot be revived.
+ */
+export async function markTokenAuthorized(token: SecurityToken): Promise<string | null> {
+  const secret = randomBytes(18).toString("base64url");
+  const supabase = getSupabaseAdmin();
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("tella_security_token")
+    .update({
+      payload: { ...(token.payload ?? {}), authorized_at: now, link_secret: secret },
+    })
+    .eq("id", token.id)
+    .is("used_at", null)
+    .gt("expires_at", now)
+    .select("id")
+    .maybeSingle();
+
+  if (error) throw new Error(`markTokenAuthorized failed: ${error.message}`);
+  return data ? `${token.id}${HANDOFF_SEPARATOR}${secret}` : null;
+}
+
+const HANDOFF_SEPARATOR = "_";
+const UUID_LENGTH = 36;
+
+/**
+ * Resolve a link handoff ("<token id>_<secret>") to its context, or null.
+ *
+ * Returns null for a bare token id, an unauthorized token, or a wrong secret,
+ * all alike. Fits Telegram's 64-character /start payload (36 + 1 + 24).
+ */
+export async function loadAuthorizedLink(
+  handoff: string,
+  kind: "link_telegram" | "link_google",
+): Promise<ResetContext | null> {
+  if (handoff.length <= UUID_LENGTH + 1 || handoff[UUID_LENGTH] !== HANDOFF_SEPARATOR) {
+    return null;
+  }
+  const id = handoff.slice(0, UUID_LENGTH);
+  const presented = Buffer.from(handoff.slice(UUID_LENGTH + 1));
+
+  const ctx = await loadResetContext(id, kind);
+  const stored = ctx?.token.payload?.link_secret;
+  if (!ctx || !ctx.token.payload?.authorized_at || !stored) return null;
+
+  const expected = Buffer.from(stored);
+  if (expected.length !== presented.length || !timingSafeEqual(expected, presented)) {
+    return null;
+  }
+  return ctx;
+}
+
+/** Resolve a link token of either kind. */
+export async function loadLinkContext(token: string): Promise<ResetContext | null> {
+  return (
+    (await loadResetContext(token, "link_telegram")) ??
+    (await loadResetContext(token, "link_google"))
+  );
+}
+
+/** Where a link token is authorized: a PIN or passkey step on the web. */
+export function buildLinkUrl(token: string): string {
+  const base = process.env.APP_BASE_URL;
+  if (!base) {
+    throw new Error("Missing APP_BASE_URL environment variable");
+  }
+  return `${base.replace(/\/$/, "")}/security/link/${token}`;
 }
 
 /** The user-facing URL for a reset token. */

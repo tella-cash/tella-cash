@@ -7,8 +7,11 @@ import {
 import { handleInbound } from "@/lib/messaging/inbound";
 import { titleForCallbackData } from "@/lib/agent/menus";
 import { upsertChannel, ChannelOwnedByAnotherUserError } from "@/lib/messaging/channels";
-import { loadResetContext, consumeResetToken } from "@/lib/security/reset-tokens";
-import { notifyUserPrimary } from "@/lib/messaging/notify";
+import { loadAuthorizedLink, consumeResetToken } from "@/lib/security/reset-tokens";
+import { notifyUser } from "@/lib/messaging/notify";
+import { emailLinkedGoogle } from "@/lib/email/security-notice";
+import { markFactorsChanged } from "@/lib/users/repository";
+import { FACTOR_CHANGE_HOLD_HOURS, inFactorChangeWindow } from "@/lib/sends/tiers";
 import { raiseAlert } from "@/lib/observability/alerts";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +26,7 @@ export const maxDuration = 60;
  * remembers making, which is exactly what happened here: this route used to
  * call a bespoke read-only handler while the others called the agent.
  *
- * Telegram does NOT sign request bodies the way Twilio and Meta do. The only
+ * Telegram does NOT sign request bodies the way Meta does. The only
  * thing separating a real update from anyone who guessed this URL is the
  * secret token echoed back in X-Telegram-Bot-Api-Secret-Token, set at
  * setWebhook time. Verified in constant time, failing closed when unset.
@@ -205,11 +208,25 @@ async function linkAccount({
   token: string;
   username: string | null;
 }): Promise<void> {
-  const ctx = await loadResetContext(token, "link_telegram");
+  // The deep link carries "<token id>_<secret>", and the secret exists only
+  // once the account's PIN or passkey has been proven on the web
+  // (app/api/security/link/authorize). A bare token id is what the chat
+  // received, so holding or reading the chat is not enough to link.
+  const ctx = await loadAuthorizedLink(token, "link_telegram");
   if (!ctx) {
     await sendTelegramMessage({
       to: chatId,
-      body: "That link is invalid or has expired. Ask tella on WhatsApp for a new one.",
+      body: "That link is invalid, expired, or hasn't been confirmed yet. Open the link tella sent you, confirm with your Face ID, fingerprint or PIN, then tap Open Telegram from there.",
+    });
+    return;
+  }
+
+  // Same refusal as the web step and the Google callback. A token confirmed
+  // just before a PIN reset must not complete just after it.
+  if (inFactorChangeWindow(ctx.user.factors_changed_at)) {
+    await sendTelegramMessage({
+      to: chatId,
+      body: `Your PIN, passkeys or linked accounts changed recently, so new links are paused for ${FACTOR_CHANGE_HOLD_HOURS} hours after that. Try again later.`,
     });
     return;
   }
@@ -261,27 +278,50 @@ async function linkAccount({
     body: [
       "✅ Linked. This Telegram account is now connected to your tella wallet.",
       "",
-      "You'll get alerts here as well as on WhatsApp, and you can check your balance or freeze your account any time.",
+      "You'll get alerts here as well as on WhatsApp, and you can check your balance, send, or freeze your account any time.",
       "",
       "Try /help to see what I do here.",
     ].join("\n"),
   });
 
-  // Announced on the channels they already had. Adding a way to reach an
-  // account is a security-relevant change, and the owner hears about it
-  // wherever they are — the same doctrine as the PIN-reset notice.
+  // A new way into the account starts the post-change hold window, so a
+  // link made by someone holding the phone cannot be followed by an
+  // immediate send from the new chat. See lib/sends/tiers.ts.
   try {
-    await notifyUserPrimary({
+    await markFactorsChanged(ctx.user.id);
+  } catch (err) {
+    console.error("[telegram] marking factors changed failed", { userId: ctx.user.id, err });
+  }
+
+  // Announced everywhere, not just the primary chat: whoever linked this
+  // holds the primary chat, and could delete a notice sent only there. The
+  // linked Google address is the one they don't automatically control.
+  await Promise.allSettled([
+    notifyUser({
       user: ctx.user,
       body: [
         "🔗 A Telegram account was just linked to your tella wallet.",
         "",
+        `For the next ${FACTOR_CHANGE_HOLD_HOURS} hours every send waits 24 hours before it goes out.`,
+        "",
         "If this wasn't you, reply *freeze* immediately.",
       ].join("\n"),
-    });
-  } catch (err) {
-    console.error("[telegram] link notification failed", { userId: ctx.user.id, err });
-  }
+    }).catch((err) => {
+      console.error("[telegram] link notification failed", { userId: ctx.user.id, err });
+    }),
+    emailLinkedGoogle({
+      userId: ctx.user.id,
+      kind: "channel_linked",
+      subject: "A Telegram account was linked to your tella wallet",
+      lines: [
+        "A Telegram account was just linked to your tella wallet. It can check the balance, send and freeze.",
+        "",
+        `For the next ${FACTOR_CHANGE_HOLD_HOURS} hours every send waits 24 hours before it goes out.`,
+        "",
+        "If this wasn't you, freeze your wallet now: message tella and say freeze, or use the freeze page with this Google account.",
+      ],
+    }),
+  ]);
 
   console.log("[telegram] account linked", { userId: ctx.user.id });
 }

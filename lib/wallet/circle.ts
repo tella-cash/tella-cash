@@ -1,4 +1,5 @@
 import { raiseAlert } from "@/lib/observability/alerts";
+import { arcNetwork, isMainnet, type ArcNetwork } from "@/lib/wallet/network";
 import {
   initiateDeveloperControlledWalletsClient,
   ForbiddenError,
@@ -27,11 +28,13 @@ function getCircleClient() {
 export interface CreatedWallet {
   walletId: string;
   address: string;
+  /** Recorded on the user row so a later network switch can't reuse it. */
+  network: ArcNetwork;
 }
 
 export async function createWalletForUser(userId: string): Promise<CreatedWallet> {
   const walletSetId = process.env.CIRCLE_WALLET_SET_ID;
-  const network = process.env.ARC_NETWORK ?? "ARC-TESTNET";
+  const network = arcNetwork();
   if (!walletSetId) {
     throw new Error("Missing CIRCLE_WALLET_SET_ID environment variable");
   }
@@ -40,7 +43,7 @@ export async function createWalletForUser(userId: string): Promise<CreatedWallet
 
   const response = await client.createWallets({
     walletSetId,
-    blockchains: [network as "ARC-TESTNET"],
+    blockchains: [network],
     count: 1,
     accountType: "EOA",
     idempotencyKey: userId,
@@ -63,6 +66,7 @@ export async function createWalletForUser(userId: string): Promise<CreatedWallet
   return {
     walletId: wallet.id,
     address: wallet.address,
+    network,
   };
 }
 
@@ -489,13 +493,18 @@ export async function requestFaucetTokens({
   address,
   asset,
 }: RequestFaucetTokensArgs): Promise<void> {
-  const network = process.env.ARC_NETWORK ?? "ARC-TESTNET";
+  // There is no faucet on mainnet. The handler already refuses before
+  // getting here; this is the backstop so no other caller can reach it.
+  if (isMainnet()) {
+    throw new Error("requestFaucetTokens called on mainnet");
+  }
+  const network: TestnetBlockchain = "ARC-TESTNET";
   const client = getCircleClient();
 
   try {
     await client.requestTestnetTokens({
       address,
-      blockchain: network as TestnetBlockchain,
+      blockchain: network,
       native: asset === "NATIVE",
       usdc: asset === "USDC",
       eurc: asset === "EURC",

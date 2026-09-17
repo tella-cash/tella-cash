@@ -1,18 +1,8 @@
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { upsertChannel } from "@/lib/messaging/channels";
 import type { tellaUser, WhatsAppChannel } from "@/lib/supabase/types";
+import { arcNetwork, type ArcNetwork } from "@/lib/wallet/network";
 
-/**
- * Looks up (or creates) the user for an inbound WhatsApp message.
- *
- * `channel` records which provider (Twilio vs Meta Cloud API) this message
- * arrived through. It's kept current on every inbound message — not just
- * set at creation — so a user who moves between channels (e.g. during the
- * Twilio→Meta migration) always gets outbound notifications (payment
- * received, send receipts) routed through whichever API they're actually
- * reachable on. Same underlying `whatsapp_number` matches either way, since
- * both webhooks normalize to Twilio-style `whatsapp:+E164`.
- */
 /**
  * Resolve an inbound WhatsApp identifier to a user, creating one if needed.
  *
@@ -26,7 +16,7 @@ import type { tellaUser, WhatsAppChannel } from "@/lib/supabase/types";
  */
 export async function findOrCreateUser({
   whatsappNumber,
-  channel = "twilio",
+  channel = "meta",
   profileName,
 }: {
   whatsappNumber: string;
@@ -170,10 +160,12 @@ export async function setWalletActive({
   userId,
   walletId,
   address,
+  network,
 }: {
   userId: string;
   walletId: string;
   address: string;
+  network: ArcNetwork;
 }): Promise<void> {
   const supabase = getSupabaseAdmin();
   const { error } = await supabase
@@ -182,6 +174,7 @@ export async function setWalletActive({
       circle_wallet_id: walletId,
       wallet_address: address,
       wallet_status: "active",
+      wallet_network: network,
     })
     .eq("id", userId);
   if (error) throw new Error(`setWalletActive failed: ${error.message}`);
@@ -218,7 +211,15 @@ export async function listUsersNeedingWallet(
   const { data, error } = await supabase
     .from("tella_users")
     .select("*")
-    .or(`wallet_status.eq.failed,and(wallet_status.eq.pending,updated_at.lt.${staleBefore})`)
+    // The third clause: active wallets from another network. After an
+    // ARC_NETWORK switch the gate treats those as not provisioned, and
+    // nothing else would ever create the user a wallet on this one.
+    // Re-provisioning replaces circle_wallet_id and wallet_address; the old
+    // wallet belongs to a different Circle entity and this deployment
+    // cannot use it either way.
+    .or(
+      `wallet_status.eq.failed,and(wallet_status.eq.pending,updated_at.lt.${staleBefore}),and(wallet_status.eq.active,or(wallet_network.is.null,wallet_network.neq.${arcNetwork()}))`,
+    )
     .order("updated_at", { ascending: true })
     .limit(limit);
 
@@ -290,4 +291,17 @@ export async function findUserByWalletAddress(
     throw new Error(`findUserByWalletAddress failed: ${error.message}`);
   }
   return (data as tellaUser | null) ?? null;
+}
+/**
+ * Record a security change that starts the post-change hold window: a
+ * channel linked, passkeys removed. PIN resets stamp it in their own write
+ * (lib/auth/pin.ts). See lib/sends/tiers.ts for what the window does.
+ */
+export async function markFactorsChanged(userId: string): Promise<void> {
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase
+    .from("tella_users")
+    .update({ factors_changed_at: new Date().toISOString() })
+    .eq("id", userId);
+  if (error) throw new Error(`markFactorsChanged failed: ${error.message}`);
 }

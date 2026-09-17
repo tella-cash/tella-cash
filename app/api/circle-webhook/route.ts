@@ -4,6 +4,7 @@ import { notifyUser, notifyUserWithImage } from "@/lib/messaging/notify";
 import { recordTransaction, markOutboundComplete } from "@/lib/transactions/repository";
 import { getUsdToNgnRate, usdToNgn } from "@/lib/fx/naira";
 import { getTokenSymbol, getFormattedBalanceLines } from "@/lib/wallet/circle";
+import { arcNetwork, explorerTxUrl } from "@/lib/wallet/network";
 import { verifyCircleWebhook } from "@/lib/circle/verify-webhook";
 import {
   claimNotification,
@@ -44,7 +45,7 @@ interface CircleNotification {
 /**
  * POST /api/circle-webhook
  *
- * Receives webhook events from Circle. Pattern mirrors the Twilio webhook:
+ * Receives webhook events from Circle. Same pattern as the chat webhooks:
  * verify, ack 200 fast, process async via after().
  *
  * Verification happens before anything else and fails closed — an
@@ -71,6 +72,16 @@ export async function POST(request: Request) {
     payload = JSON.parse(rawBody);
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  // A notification from another network is not about any wallet this
+  // deployment manages, whatever its walletId says. Acked so Circle stops
+  // retrying, and otherwise ignored.
+  if (payload.notification?.blockchain && payload.notification.blockchain !== arcNetwork()) {
+    console.warn("[circle-webhook] ignoring notification for another network", {
+      blockchain: payload.notification.blockchain,
+    });
+    return NextResponse.json({ received: true }, { status: 200 });
   }
 
   console.log("[circle-webhook] received", {
@@ -211,7 +222,7 @@ async function handleInboundTransaction(
   }
 
   const explorerLink = notification.txHash
-    ? buildExplorerTxUrl(notification.txHash)
+    ? explorerTxUrl(notification.txHash)
     : null;
 
   const fallbackText = [
@@ -390,7 +401,7 @@ async function handleOutboundTransaction(
       ? `Sent ${amount} ${token} to ${destLabel}`
       : `Sent to ${destLabel}`,
     "",
-    buildExplorerTxUrl(notification.txHash),
+    explorerTxUrl(notification.txHash),
   ].join("\n");
 
   await notifyUser({ user, body: message });
@@ -411,17 +422,6 @@ async function handleOutboundTransaction(
 }
 
 /**
- * Build an Arc block-explorer link for a transaction hash. Defaults to the
- * testnet explorer; override with ARC_EXPLORER_TX_URL (no trailing slash)
- * when pointing at mainnet.
- */
-function buildExplorerTxUrl(txHash: string): string {
-  const base =
-    process.env.ARC_EXPLORER_TX_URL ?? "https://testnet.arcscan.app/tx";
-  return `${base.replace(/\/$/, "")}/${txHash}`;
-}
-
-/**
  * Format a 0x address into something readable in chat.
  * "0x1234567890abcdef..." → "0x1234…cdef"
  *
@@ -436,7 +436,7 @@ function shortenAddress(address: string | undefined): string {
 
 /**
  * Builds the absolute URL for the "money received" notification image
- * (app/api/notifications/received-image), which Twilio/Meta fetch directly
+ * (app/api/notifications/received-image), which Meta fetches directly
  * over HTTPS to deliver as WhatsApp media.
  */
 function buildReceivedImageUrl(params: {

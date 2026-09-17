@@ -9,6 +9,8 @@ import { isValidPin, replacePinForUser } from "@/lib/auth/pin";
 import { resetAuthAttempts } from "@/lib/auth/rate-limit";
 import { deleteCredentialsForUser } from "@/lib/webauthn/repository";
 import { notifyUser } from "@/lib/messaging/notify";
+import { emailLinkedGoogle } from "@/lib/email/security-notice";
+import { FACTOR_CHANGE_HOLD_HOURS } from "@/lib/sends/tiers";
 
 export const dynamic = "force-dynamic";
 
@@ -117,24 +119,48 @@ export async function POST(request: Request) {
   // Out-of-band notice. If the reset wasn't the account owner, this is the
   // message that tells them — so it is sent even though they're looking at
   // the success screen already.
-  try {
-    await notifyUser({
+  //
+  // Chat alone is not out of band: the reset link was delivered to a chat,
+  // so whoever did this holds at least one of them. The linked Google
+  // address is the notice that can reach the owner, and the hold window
+  // started by this reset is what gives them time to act on it.
+  const removedLine =
+    removedPasskeys > 0
+      ? [`Face ID / fingerprint was also removed from ${removedPasskeys} device${removedPasskeys === 1 ? "" : "s"}.`]
+      : [];
+  const holdLine = `For the next ${FACTOR_CHANGE_HOLD_HOURS} hours every send waits 24 hours before it goes out.`;
+
+  await Promise.allSettled([
+    notifyUser({
       user: ctx.user,
       body: [
         "🔐 Your tella PIN was just changed.",
-        ...(removedPasskeys > 0
-          ? [`Face ID / fingerprint was also removed from ${removedPasskeys} device${removedPasskeys === 1 ? "" : "s"}.`]
-          : []),
+        ...removedLine,
         "",
-        "If this wasn't you, reply here immediately.",
+        holdLine,
+        "",
+        "If this wasn't you, reply *freeze* immediately.",
       ].join("\n"),
-    });
-  } catch (err) {
-    console.error("[security] reset notification failed", {
+    }).catch((err) => {
+      console.error("[security] reset notification failed", {
+        userId: ctx.user.id,
+        err,
+      });
+    }),
+    emailLinkedGoogle({
       userId: ctx.user.id,
-      err,
-    });
-  }
+      kind: "pin_reset",
+      subject: "Your tella PIN was changed",
+      lines: [
+        "The PIN on your tella wallet was just reset.",
+        ...removedLine,
+        "",
+        holdLine,
+        "",
+        "If this wasn't you, freeze your wallet now: message tella and say freeze, or use the freeze page with this Google account. Freezing cancels any queued transfer.",
+      ],
+    }),
+  ]);
 
   return NextResponse.json({ ok: true, removedPasskeys });
 }

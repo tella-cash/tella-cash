@@ -3,12 +3,6 @@ import type { MessageProvider } from "./processed-messages";
 import type { FreezeSource } from "@/lib/supabase/types";
 import { SITE } from "@/lib/data/site";
 import {
-  sendWhatsAppMessage as twilioText,
-  sendWhatsAppImage as twilioImage,
-  sendWhatsAppChoices as twilioChoices,
-  sendWhatsAppLink as twilioLink,
-} from "@/lib/twilio/client";
-import {
   sendWhatsAppMessage as metaText,
   sendWhatsAppImage as metaImage,
   sendWhatsAppButtons as metaButtons,
@@ -123,28 +117,13 @@ export interface Provider {
 }
 
 export const PROVIDERS: Record<MessageProvider, Provider> = {
-  twilio: {
-    id: "twilio",
-    label: "WhatsApp",
-    selfEnrolling: true,
-    freezeSource: "whatsapp",
-    // Twilio's own `whatsapp:+E164`, which is the form the users table has
-    // always stored, so it is the canonical one and everything else
-    // normalizes towards it.
-    normalizeId: (raw) => (raw.startsWith("whatsapp:") ? raw : `whatsapp:${raw}`),
-    returnUrl: () => waLink(process.env.TWILIO_WHATSAPP_FROM),
-    sendText: twilioText,
-    sendImage: twilioImage,
-    sendChoices: twilioChoices,
-    sendLink: twilioLink,
-  },
   meta: {
     id: "meta",
     label: "WhatsApp",
     selfEnrolling: true,
     freezeSource: "whatsapp",
-    // Meta delivers bare digits. Stored in Twilio's form so one user row
-    // matches whichever provider the message arrived through.
+    // Meta delivers bare digits. Stored as `whatsapp:+E164`, the form the
+    // users table has always held, so existing rows keep matching.
     normalizeId: (raw) => {
       const bare = raw.replace(/^whatsapp:/, "").replace(/^\+/, "");
       return `whatsapp:+${bare}`;

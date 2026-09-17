@@ -1,3 +1,4 @@
+import { maskPhoneForLog } from "@/lib/utils/phone";
 import type { Choice } from "@/lib/agent/menus";
 
 const GRAPH_API_VERSION = "v21.0";
@@ -49,14 +50,14 @@ async function postToGraph(
     messages?: Array<{ id: string }>;
   };
   const id = payload.messages?.[0]?.id ?? "";
-  console.log(`[meta] sent ${label}`, { id, to: recipient });
+  console.log(`[meta] sent ${label}`, { id, to: maskPhoneForLog(recipient) });
   return id;
 }
 
 /**
  * Sends a plain-text WhatsApp message through Meta's Graph API.
  *
- * `to` accepts either Twilio-style `whatsapp:+234...` or bare `+234.../234...`
+ * `to` accepts either `whatsapp:+234...` or bare `+234.../234...`
  * — Meta wants bare E.164 digits, so we strip the prefix and the leading `+`.
  */
 export async function sendWhatsAppMessage({
@@ -79,7 +80,7 @@ interface SendWhatsAppImageArgs {
 /**
  * Sends an image message via Meta's Graph API, referencing the image by a
  * publicly reachable HTTPS URL rather than uploading raw bytes — Meta fetches
- * it directly, same approach as Twilio's `mediaUrl`.
+ * it directly, by URL.
  */
 export async function sendWhatsAppImage({
   to,

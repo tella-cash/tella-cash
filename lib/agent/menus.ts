@@ -2,7 +2,7 @@
  * The tap-to-choose option sets, defined once.
  *
  * These titles used to live in three places at once: hard-coded in
- * lib/meta/client.ts's button and list JSON, mirrored in the Twilio content
+ * lib/meta/client.ts's button and list JSON, mirrored in the
  * templates (scripts/create-content-templates.ts), and mirrored AGAIN in
  * fast-path.ts's TAPPED_TITLES so a tap could be recognised on the way back
  * in. A test pinned the pairs, which caught drift but did not prevent it.

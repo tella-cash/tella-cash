@@ -14,9 +14,11 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
  * browsable list of phone numbers is both unnecessary and a much worse thing
  * to leak if the admin cookie ever escapes.
  *
- * Everything is denominated in testnet USDC, because the whole application
- * runs on ARC-TESTNET. The numbers are real user behaviour and unreal money,
- * and the UI says so rather than leaving a reader to assume.
+ * Everything is denominated in USDC on whichever network ARC_NETWORK names.
+ * On ARC-TESTNET the numbers are real user behaviour and unreal money, and
+ * the UI says which network it is rather than leaving a reader to assume.
+ * The tables are not split by network, so switching a deployment to
+ * mainnet on the same database mixes testnet history into these totals.
  */
 
 export interface Headline {

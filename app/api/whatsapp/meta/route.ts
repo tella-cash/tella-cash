@@ -19,8 +19,8 @@ export const maxDuration = 60;
  * POST — message events. Verified via X-Hub-Signature-256 (HMAC-SHA256 over
  *        the raw request body with the app secret).
  *
- * This runs in parallel to the Twilio webhook at /api/whatsapp during the
- * migration. Downstream agent + side-effect handling is shared.
+ * The only WhatsApp webhook. Downstream agent + side-effect handling is
+ * shared with Telegram through lib/messaging/inbound.ts.
  */
 
 export async function GET(request: Request) {
@@ -83,7 +83,7 @@ export async function POST(request: Request) {
     // different subset of the same ones — so each is claimed on its own,
     // inside handleInbound.
     for (const msg of messages) {
-      // Redacted for the same reason the Twilio route redacts: the message
+      // Redacted: the message
       // id is enough to find this message in Meta's console, and the phone
       // number, profile name and body are not things that belong in stdout.
       console.log("[meta] incoming", {
@@ -175,7 +175,7 @@ function extractTextMessages(payload: MetaWebhookPayload): IncomingMessage[] {
         }
 
         // Tapped quick-reply button or list row — route its title through
-        // the same classifier as typed text (mirrors Twilio's ButtonText).
+        // the same classifier as typed text.
         if (m.type === "interactive") {
           const title =
             m.interactive?.button_reply?.title ??

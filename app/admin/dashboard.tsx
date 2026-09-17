@@ -1,4 +1,5 @@
 import type { DashboardData, DayPoint, FunnelStage } from "@/lib/analytics/queries";
+import { isMainnet } from "@/lib/wallet/network";
 
 /**
  * The dashboard, rendered server-side as plain HTML and SVG.
@@ -65,11 +66,17 @@ export function Dashboard({
         </header>
 
         {/* Stated once, at the top, rather than annotated on every figure.
-            The behaviour below is real; the money is not, and a reader should
-            not have to infer that from context. */}
+            On testnet the behaviour is real and the money is not, and a
+            reader should not have to infer that from context. */}
         <p className="rounded-2xl border border-ink-200/70 bg-surface-0 px-4 py-3 text-sm text-ink-500">
-          All amounts are <strong className="text-ink-900">ARC testnet USDC</strong>.
-          Transaction counts and user behaviour are real; the balances are not.
+          {isMainnet() ? (
+            <>All amounts are <strong className="text-ink-900">Arc mainnet USDC</strong>.</>
+          ) : (
+            <>
+              All amounts are <strong className="text-ink-900">ARC testnet USDC</strong>.
+              Transaction counts and user behaviour are real; the balances are not.
+            </>
+          )}
         </p>
 
         <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">

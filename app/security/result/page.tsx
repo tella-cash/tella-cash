@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ConfirmShell } from "@/app/confirm/[token]/confirm-shell";
+import { resultErrorMessage } from "@/lib/security/result-errors";
 
 export const dynamic = "force-dynamic";
 
@@ -15,17 +16,18 @@ export const metadata = {
  * One page for all outcomes rather than a redirect per case, because the
  * alternative is leaking what happened into the URL of a page someone may be
  * viewing on a borrowed device. The only thing in the query string is a short
- * result code and, for errors, a message we wrote ourselves.
+ * result code and, for errors, a code naming a message we wrote ourselves
+ * (lib/security/result-errors.ts).
  */
 export default async function ResultPage({
   searchParams,
 }: {
-  searchParams: Promise<{ r?: string; n?: string; m?: string }>;
+  searchParams: Promise<{ r?: string; n?: string; e?: string }>;
 }) {
-  const { r, n, m } = await searchParams;
+  const { r, n, e } = await searchParams;
   const stopped = Number.parseInt(n ?? "0", 10) || 0;
 
-  const content = describe(r, stopped, m);
+  const content = describe(r, stopped, resultErrorMessage(e));
 
   return (
     <ConfirmShell>
@@ -58,7 +60,7 @@ export default async function ResultPage({
   );
 }
 
-function describe(result: string | undefined, stopped: number, message: string | undefined) {
+function describe(result: string | undefined, stopped: number, message: string) {
   switch (result) {
     case "frozen":
       return {
@@ -105,7 +107,7 @@ function describe(result: string | undefined, stopped: number, message: string |
       return {
         icon: "⚠️",
         title: "That didn't work",
-        body: [message ?? "Something went wrong. Try again."],
+        body: [message],
         retry: true,
       };
   }

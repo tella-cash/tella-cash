@@ -12,8 +12,7 @@ import type { Provider } from "./providers";
  * understands (see lib/agent/fast-path.ts).
  *
  * A provider signals "I can't draw this particular thing" by returning null,
- * not by throwing and not by silently sending something else. Twilio does
- * exactly that for any option set it has no Content Template for.
+ * not by throwing and not by silently sending something else.
  */
 export async function renderResult({
   provider,

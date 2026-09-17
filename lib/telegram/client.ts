@@ -70,7 +70,7 @@ async function callTelegram(
  * Translate the app's neutral emphasis markup into something Telegram draws.
  *
  * The core composes one string for every channel and marks emphasis the
- * WhatsApp way, with *asterisks*. Meta and Twilio render that natively;
+ * WhatsApp way, with *asterisks*. Meta renders that natively;
  * Telegram shows the asterisks literally unless told otherwise.
  *
  * HTML rather than MarkdownV2, deliberately. MarkdownV2 requires escaping

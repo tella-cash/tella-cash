@@ -1,4 +1,5 @@
 import type { tellaUser } from "@/lib/supabase/types";
+import { arcNetwork } from "@/lib/wallet/network";
 
 /**
  * The two questions the codebase asks about a wallet before doing anything
@@ -42,6 +43,13 @@ function gateProvisioned(user: tellaUser): WalletGate {
     return { ok: false, reason: "provisioning" };
   }
   if (user.wallet_status !== "active" || !user.circle_wallet_id) {
+    return { ok: false, reason: "not_provisioned" };
+  }
+  // A wallet from another network is not a wallet on this one. Without this,
+  // a deployment switched to mainnet would pay real USDC into testnet-entity
+  // addresses it cannot sign for. Null predates migration 0024 and can only
+  // be testnet.
+  if ((user.wallet_network ?? "ARC-TESTNET") !== arcNetwork()) {
     return { ok: false, reason: "not_provisioned" };
   }
   return { ok: true, walletId: user.circle_wallet_id, address: user.wallet_address };

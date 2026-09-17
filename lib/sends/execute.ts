@@ -7,7 +7,9 @@ import {
 import { sendUsdc } from "@/lib/wallet/circle";
 import { gateSpend } from "@/lib/users/wallet-gate";
 import { checkSendLimits, formatLimitFailure, type LimitFailure } from "./limits";
-import { tierFor } from "./tiers";
+import { tierFor, inFactorChangeWindow, FACTOR_CHANGE_HOLD_HOURS } from "./tiers";
+import { emailLinkedGoogle } from "@/lib/email/security-notice";
+import { arcNetwork } from "@/lib/wallet/network";
 import { createHeldSend } from "@/lib/held_sends/repository";
 import { raiseAlert } from "@/lib/observability/alerts";
 import {
@@ -51,6 +53,12 @@ export type ExecuteSendResult =
       releaseAt: string;
       amount: string;
       recipientLabel: string;
+      /**
+       * Why it waits. "amount" is the size threshold; "security_change" is a
+       * recent PIN reset, passkey removal or channel link — the user needs to
+       * be told that one, because it is not about this send.
+       */
+      heldBecause: "amount" | "security_change";
     };
 
 /**
@@ -99,6 +107,15 @@ export async function executePendingSend({
 
   const p = claimed.payload;
 
+  // Composed on another network, so the recipient address and the sending
+  // wallet both belong to it. Only possible across an ARC_NETWORK switch, and
+  // exactly the case where executing would send real money somewhere nobody
+  // can reach. Absent means the row predates migration 0024: testnet.
+  if ((p.network ?? "ARC-TESTNET") !== arcNetwork()) {
+    await deletePendingSend(claimed.id);
+    return { ok: false, reason: "wallet_inactive" };
+  }
+
   // Re-checked here even though the agent already checked when the link was
   // minted: the pending row can sit for five minutes, during which the
   // balance can drop and other sends can eat the daily allowance.
@@ -112,8 +129,27 @@ export async function executePendingSend({
 
   // Above the threshold, authorization and execution come apart. The factor
   // has been proven; only the transfer waits. See lib/sends/tiers.ts.
-  if (tierFor(Number.parseFloat(p.amount), limits.limits) === "hold") {
+  if (tierFor(Number.parseFloat(p.amount), limits.limits, user.factors_changed_at) === "hold") {
     const held = await createHeldSend({ userId: user.id, payload: p });
+    const heldBecause = inFactorChangeWindow(user.factors_changed_at)
+      ? "security_change"
+      : "amount";
+
+    // Told out of band as well as in chat. The chat may be the thing that
+    // was taken, and a held transfer is only a defence if the owner hears
+    // about it in time to freeze.
+    await emailLinkedGoogle({
+      userId: user.id,
+      kind: "transfer_held",
+      subject: "A tella transfer is queued",
+      lines: [
+        `A transfer of ${p.amount} USDC to ${recipientLabelFor(p)} was just authorized from your tella wallet.`,
+        "",
+        `It is queued and goes out at ${held.release_at} (UTC).`,
+        "",
+        "If this wasn't you, freeze your wallet now: message tella and say freeze, or use the freeze page with this Google account. Freezing cancels the transfer.",
+      ],
+    });
 
     // The confirm link is retired now rather than left to expire: it has done
     // its job, and a live link for a send that is already queued would let a
@@ -139,6 +175,7 @@ export async function executePendingSend({
       releaseAt: held.release_at,
       amount: p.amount,
       recipientLabel: recipientLabelFor(p),
+      heldBecause,
     };
   }
 
@@ -372,7 +409,9 @@ export function formatSendResultForChat(result: ExecuteSendResult): string {
         return [
           `⏳ Queued ${result.amount} USDC to ${result.recipientLabel}.`,
           "",
-          `Sends this size wait 24 hours before they go out, so you've got time to stop it if this wasn't you.`,
+          result.heldBecause === "security_change"
+            ? `Your PIN, passkeys or linked accounts changed recently, so for ${FACTOR_CHANGE_HOLD_HOURS} hours after that every send waits 24 hours before it goes out. That gives you time to stop it if the change wasn't you.`
+            : `Sends this size wait 24 hours before they go out, so you've got time to stop it if this wasn't you.`,
           "",
           'Reply *cancel send* any time before then and nothing moves.',
         ].join("\n");

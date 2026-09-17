@@ -57,7 +57,39 @@ export function holdThreshold(limits: ResolvedLimits): number {
   return limits.holdThreshold ?? envHoldThreshold();
 }
 
-export function tierFor(amount: number, limits: ResolvedLimits): SendTier {
+/**
+ * How long after a security change every send is held, whatever its size.
+ *
+ * A PIN reset needs nothing but the chat — possession of the WhatsApp or
+ * Telegram account IS the recovery factor. So the PIN protects nothing
+ * against someone holding the chat unless there is a gap between "set a new
+ * PIN" and "money moves" in which the owner can hear about it and freeze.
+ * This is that gap. Passkey removal and linking a new channel count too:
+ * each is something an attacker holding the chat does on the way to a drain.
+ *
+ * Longer than HOLD_HOURS so a send confirmed right at the end of the window
+ * still waits a full day.
+ */
+export const FACTOR_CHANGE_HOLD_HOURS = 48;
+
+/** True while a recent security change puts every send on hold. */
+export function inFactorChangeWindow(
+  factorsChangedAt: string | null | undefined,
+  now: number = Date.now(),
+): boolean {
+  if (!factorsChangedAt) return false;
+  const changed = new Date(factorsChangedAt).getTime();
+  if (!Number.isFinite(changed)) return false;
+  return now - changed < FACTOR_CHANGE_HOLD_HOURS * 60 * 60 * 1000;
+}
+
+export function tierFor(
+  amount: number,
+  limits: ResolvedLimits,
+  factorsChangedAt?: string | null,
+  now: number = Date.now(),
+): SendTier {
   if (!Number.isFinite(amount) || amount <= 0) return "normal";
+  if (inFactorChangeWindow(factorsChangedAt, now)) return "hold";
   return amount > holdThreshold(limits) ? "hold" : "normal";
 }

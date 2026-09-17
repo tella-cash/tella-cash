@@ -1,3 +1,4 @@
+import { isMainnet } from "@/lib/wallet/network";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { ADMIN_COOKIE_NAME } from "./cookie-name";
 
@@ -46,7 +47,11 @@ interface Payload extends AdminIdentity {
 }
 
 function secret(): string {
-  const s = process.env.ADMIN_SESSION_SECRET ?? process.env.GOOGLE_STATE_SECRET;
+  // Shared with the OAuth state secret on testnet only. On mainnet the two
+  // must be separate, so rotating one never silently re-keys the other.
+  const s =
+    process.env.ADMIN_SESSION_SECRET ??
+    (isMainnet() ? undefined : process.env.GOOGLE_STATE_SECRET);
   if (!s) throw new Error("Missing ADMIN_SESSION_SECRET");
   return s;
 }

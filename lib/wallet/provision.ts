@@ -37,9 +37,9 @@ export async function provisionWalletForUser(
   try {
     await markWalletPending(userId);
 
-    const { walletId, address } = await createWalletForUser(userId);
+    const { walletId, address, network } = await createWalletForUser(userId);
 
-    await setWalletActive({ userId, walletId, address });
+    await setWalletActive({ userId, walletId, address, network });
 
     return true;
   } catch (err) {

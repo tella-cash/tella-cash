@@ -1,12 +1,10 @@
 import { NextResponse } from "next/server";
 import { readJson } from "@/lib/http/json";
 import { loadResetContext, consumeResetToken } from "@/lib/security/reset-tokens";
-import { verifyPin } from "@/lib/auth/pin";
 import { recordAuthAttempt, resetAuthAttempts, formatRetryAfter } from "@/lib/auth/rate-limit";
 import { unfreezeAccount } from "@/lib/users/freeze";
 import { isFrozen } from "@/lib/users/wallet-gate";
-import { verifyAuthentication } from "@/lib/webauthn/server";
-import { consumeChallenge, listCredentials, updateCredentialCounter } from "@/lib/webauthn/repository";
+import { proveFactor } from "@/lib/auth/prove-factor";
 import { getGoogleLink } from "@/lib/google/oauth";
 import { factorsPredating } from "@/lib/auth/factors";
 import { notifyUser } from "@/lib/messaging/notify";
@@ -78,37 +76,12 @@ export async function POST(request: Request) {
     );
   }
 
-  let proved = false;
-
-  if (body.assertion) {
-    const challenge = await consumeChallenge(ctx.user.id, "authentication");
-    const credentials = challenge ? await listCredentials(ctx.user.id) : [];
-    const credential = credentials.find((c) => c.credential_id === body.assertion!.id);
-
-    if (challenge && credential && predating.passkey) {
-      try {
-        const verification = await verifyAuthentication(
-          body.assertion,
-          challenge,
-          credential,
-        );
-        if (verification.verified) {
-          await updateCredentialCounter(
-            credential.credential_id,
-            verification.authenticationInfo.newCounter,
-          );
-          proved = true;
-        }
-      } catch (err) {
-        console.error("[security] unfreeze passkey verify threw", { err });
-      }
-    }
-  } else if (body.pin) {
-    proved =
-      predating.pin && ctx.user.pin_hash
-        ? await verifyPin(body.pin, ctx.user.pin_hash)
-        : false;
-  }
+  const proved = await proveFactor({
+    user: ctx.user,
+    pin: body.pin,
+    assertion: body.assertion,
+    allow: { pin: predating.pin, passkey: predating.passkey },
+  });
 
   if (!proved) {
     return NextResponse.json(

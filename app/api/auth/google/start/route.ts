@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { buildAuthUrl, type GooglePurpose } from "@/lib/google/oauth";
+import { loadAuthorizedLink } from "@/lib/security/reset-tokens";
 
 export const dynamic = "force-dynamic";
 
@@ -26,8 +27,17 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unknown purpose" }, { status: 400 });
   }
 
-  if (purpose === "link" && !token) {
-    return NextResponse.json({ error: "Missing link token" }, { status: 400 });
+  if (purpose === "link") {
+    if (!token) {
+      return NextResponse.json({ error: "Missing link token" }, { status: 400 });
+    }
+    // Checked again in the callback, which is what enforces it. Refusing here
+    // spares an unconfirmed link a pointless round trip through Google.
+    const ctx = await loadAuthorizedLink(token, "link_google");
+    if (!ctx) {
+      const { origin } = new URL(request.url);
+      return NextResponse.redirect(`${origin}/security/result?r=error&e=link_unconfirmed`);
+    }
   }
 
   try {

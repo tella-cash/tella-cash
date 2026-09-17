@@ -1,5 +1,6 @@
 import { createHash, randomBytes, createHmac, timingSafeEqual } from "node:crypto";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { isMainnet } from "@/lib/wallet/network";
 
 /**
  * Sign in with Google, for the two jobs it is trusted with.
@@ -40,7 +41,12 @@ function config() {
 }
 
 function stateSecret(): string {
-  const secret = process.env.GOOGLE_STATE_SECRET ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
+  // The service-role key fallback exists for testnet convenience only. On
+  // mainnet it would mean the key that bypasses every RLS policy doubles as
+  // an HMAC key, so it is refused and the secret must be set on its own.
+  const secret =
+    process.env.GOOGLE_STATE_SECRET ??
+    (isMainnet() ? undefined : process.env.SUPABASE_SERVICE_ROLE_KEY);
   if (!secret) throw new Error("Missing GOOGLE_STATE_SECRET");
   return secret;
 }

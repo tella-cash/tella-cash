@@ -11,10 +11,10 @@ export const metadata = {
 export default async function AdminLoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ r?: string; m?: string }>;
+  searchParams: Promise<{ r?: string }>;
 }) {
-  const { r, m } = await searchParams;
-  const note = explain(r, m);
+  const { r } = await searchParams;
+  const note = explain(r);
 
   return (
     <ConfirmShell>
@@ -54,9 +54,11 @@ export default async function AdminLoginPage({
  * Every branch here exists because the alternative is a user clicking "sign
  * in", being returned to this exact page, and having no idea whether they are
  * unauthorized, expired, or looking at a bug.
+ *
+ * Reads a reason code only. It used to print any `?m=` text verbatim, which
+ * let anyone put their own words on this page; nothing ever sent one.
  */
-function explain(reason: string | undefined, message: string | undefined): string | null {
-  if (message) return message;
+function explain(reason: string | undefined): string | null {
   switch (reason) {
     case "rejected":
       return "That session isn't valid any more — it may have expired, or your access may have been removed. Sign in again.";

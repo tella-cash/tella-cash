@@ -3,7 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 /**
  * Once-only processing for inbound chat messages.
  *
- * Twilio and Meta both redeliver: a slow response, a non-2xx, or their own
+ * Meta and Telegram both redeliver: a slow response, a non-2xx, or their own
  * retry policy hands us the same message again. Handling it twice sends a
  * second reply and, worse, mints a second confirm link for a send the user
  * asked for once — `createPendingSend` is a plain insert on purpose, so a
@@ -24,7 +24,7 @@ const TABLE = "tella_processed_message";
 /** Postgres unique_violation — the key is already claimed. */
 const UNIQUE_VIOLATION = "23505";
 
-export type MessageProvider = "twilio" | "meta" | "telegram";
+export type MessageProvider = "meta" | "telegram";
 
 /**
  * Namespaced because the providers mint ids independently and nothing says

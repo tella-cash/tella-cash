@@ -38,6 +38,15 @@ export const REPLIES = {
     "Here's the menu, {name} 📋\n\n• Balance → see your funds\n• Address → receive USDC\n• Send → \"send 5 usdc to +234…\"\n• Faucet → \"faucet usdc\" for testnet tokens\n\nWhat would you like?",
   ],
 
+  // Mainnet has no faucet, so its menu can't offer one. Chosen in handler.ts
+  // by isMainnet().
+  helpMainnet: [
+    "Here's what I can do, {name} 👇\n\n• *Balance* — \"what's my balance?\"\n• *Address* — \"what's my address?\"\n• *Send* — \"send 5 usdc to +234…\"\n• *Send to a wallet* — \"send 5 usdc to 0x…\"",
+    "Happy to help, {name}! These all work:\n\n• \"balance\"\n• \"my address\"\n• \"send 5 usdc to +234…\"\n• \"send 5 usdc to 0x…\"",
+    "No problem {name} — here are your options:\n\n💰 Check balance\n📥 Get your address\n💸 Send USDC to a number or 0x address\n\nJust type what you want to do.",
+    "Here's the menu, {name} 📋\n\n• Balance → see your funds\n• Address → receive USDC\n• Send → \"send 5 usdc to +234…\"\n\nWhat would you like?",
+  ],
+
   about: [
     "I'm *tella*, your money companion right here in your chats 💚\n\nI hold a USDC wallet for you so you can send and receive money just by texting — no app to download, no seed phrases.",
     "Great question, {name}! *tella* lets you send and receive *USDC* by chat.\n\nYou get a real wallet, but you talk to it in plain language — like \"send 5 to +234…\".",
@@ -163,6 +172,11 @@ export const REPLIES = {
     "I couldn't fetch your balance just now, {name}. Try again in a moment?",
     "Hmm, balance check failed — give it another try shortly.",
     "Something went wrong getting your balance, {name}. One more try in a sec?",
+  ],
+
+  faucetUnavailable: [
+    "There's no faucet here, {name} — tella runs on Arc mainnet, so balances are real USDC. To add funds, send USDC on Arc to your *address*.",
+    "Free test tokens were a testnet thing, {name}. On mainnet you fund your wallet by sending real USDC on Arc to your *address*.",
   ],
 
   faucetSuccess: [

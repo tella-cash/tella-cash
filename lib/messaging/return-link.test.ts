@@ -11,7 +11,6 @@ import type { tellaUser } from "@/lib/supabase/types";
 
 process.env.TELEGRAM_BOT_USERNAME = "@cashtellaBot";
 process.env.META_WHATSAPP_DISPLAY_NUMBER = "+234 904 358 0863";
-process.env.TWILIO_WHATSAPP_FROM = "whatsapp:+14155238886";
 
 const user = { whatsapp_channel: "meta" } as tellaUser;
 
@@ -44,20 +43,16 @@ function check(label: string, ok: boolean, detail?: string) {
   check("meta label is WhatsApp", t.label === "WhatsApp", t.label);
 }
 
-{
-  const t = returnTarget(user, "twilio");
-  check("twilio strips the whatsapp: prefix", t.url === "https://wa.me/14155238886", String(t.url));
-}
-
 // No origin recorded — links minted before this existed. Falls back to the
 // user row, which is exactly the old behaviour.
 {
   const t = returnTarget(user, null);
   check("null origin falls back to the user row", t.url === "https://wa.me/2349043580863", String(t.url));
-  const twilioUser = { whatsapp_channel: "twilio" } as tellaUser;
+  // A retired provider value left on an old row still resolves to WhatsApp.
+  const legacyUser = { whatsapp_channel: "twilio" } as unknown as tellaUser;
   check(
-    "fallback follows the user's own channel",
-    returnTarget(twilioUser, undefined).url === "https://wa.me/14155238886",
+    "an unknown stored channel falls back to WhatsApp",
+    returnTarget(legacyUser, undefined).url === "https://wa.me/2349043580863",
   );
 }
 

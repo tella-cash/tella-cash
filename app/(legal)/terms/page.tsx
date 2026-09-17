@@ -213,8 +213,8 @@ export default function TermsPage() {
       <Section title="9. Third-party services">
         <p>
           Tella relies on third parties, including (without limitation) Meta /
-          WhatsApp for messaging, Circle for wallet and USDC infrastructure,
-          Twilio for messaging delivery, and our identity-verification
+          WhatsApp and Telegram for messaging, Circle for wallet and USDC
+          infrastructure, and our identity-verification
           providers. Their terms and privacy practices govern your interaction
           with them. We are not responsible for outages, errors, or actions of
           third parties, except as required by law.

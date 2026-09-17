@@ -69,8 +69,10 @@ export async function listChannels(userId: string): Promise<UserChannel[]> {
  * generic handler and carry on.
  */
 export class ChannelOwnedByAnotherUserError extends Error {
-  constructor(provider: MessageProvider, externalId: string) {
-    super(`${provider} channel ${externalId} belongs to another tella account`);
+  // No external id in the message: it is a phone number or chat id, and this
+  // error ends up in logs.
+  constructor(provider: MessageProvider) {
+    super(`${provider} channel belongs to another tella account`);
     this.name = "ChannelOwnedByAnotherUserError";
   }
 }
@@ -117,7 +119,7 @@ export async function upsertChannel({
   // the ordinary case, which is the one that happens.
   const existing = await findChannel(provider, externalId);
   if (existing && existing.user_id !== userId) {
-    throw new ChannelOwnedByAnotherUserError(provider, externalId);
+    throw new ChannelOwnedByAnotherUserError(provider);
   }
 
   const { data, error } = await supabase

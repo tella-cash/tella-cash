@@ -208,7 +208,9 @@ async function post<T>(path: string, body: unknown): Promise<T> {
         console.error(`[sendam-ai] <- ${path} ${res.status} (${ms}ms)`);
         if (DEBUG_BODIES) console.error(`[sendam-ai] <- ${path} body`, resText);
         recordSuccess(path);
-        throw new Error(`sendam-ai ${path} failed (${res.status}): ${resText}`);
+        // Status only. The body can echo the user's message back, and this
+        // error is logged by every caller. DEBUG_BODIES prints it above.
+        throw new Error(`sendam-ai ${path} failed (${res.status})`);
       }
 
       if (!res.ok) {
@@ -216,7 +218,9 @@ async function post<T>(path: string, body: unknown): Promise<T> {
         if (DEBUG_BODIES) console.error(`[sendam-ai] <- ${path} body`, resText);
         if (attempt === 0) continue;
         recordFailure(path);
-        throw new Error(`sendam-ai ${path} failed (${res.status}): ${resText}`);
+        // Status only. The body can echo the user's message back, and this
+        // error is logged by every caller. DEBUG_BODIES prints it above.
+        throw new Error(`sendam-ai ${path} failed (${res.status})`);
       }
 
       console.log(`[sendam-ai] <- ${path} ${res.status} (${ms}ms)`);

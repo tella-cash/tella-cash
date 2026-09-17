@@ -7,6 +7,7 @@ import type {
 } from "@/lib/supabase/types";
 import {
   completeOnboarding,
+  findUserById,
   findUserByWhatsApp,
 } from "@/lib/users/repository";
 import {
@@ -34,6 +35,9 @@ import {
   FaucetRateLimitedError,
   type FaucetAsset,
 } from "@/lib/wallet/circle";
+import { arcNetwork, isMainnet } from "@/lib/wallet/network";
+import { inFactorChangeWindow, FACTOR_CHANGE_HOLD_HOURS } from "@/lib/sends/tiers";
+import { telegramDeepLink } from "@/lib/telegram/deep-link";
 import { getUsdToNgnRate, usdToNgn } from "@/lib/fx/naira";
 import { checkSendLimits, formatLimitFailure } from "@/lib/sends/limits";
 import { isResetRequest } from "@/lib/agent/detect-reset-request";
@@ -46,6 +50,7 @@ import { factorCount, factorsPredating } from "@/lib/auth/factors";
 import {
   createResetToken,
   buildResetUrl,
+  buildLinkUrl,
   RESET_TTL_MINUTES,
 } from "@/lib/security/reset-tokens";
 import { recordAuthAttempt, formatRetryAfter } from "@/lib/auth/rate-limit";
@@ -632,6 +637,12 @@ async function completeFaucetAssetFlow({
 }): Promise<HandlerResult> {
   await deletePending(pending.id);
 
+  // A faucet flow opened on testnet can still be pending when the
+  // deployment switches network. Clear it without dripping.
+  if (isMainnet()) {
+    return { reply: pickReply(REPLIES.faucetUnavailable, { name: firstName(user) }) };
+  }
+
   const asset = normalizeFaucetAsset(typeof slots["asset"] === "string" ? slots["asset"] : null);
   if (!asset) {
     return reissueFaucetAssetPrompt({
@@ -649,7 +660,7 @@ async function completeFaucetAssetFlow({
  * same principle as decode()'s try/catch in handleOnboardedUser — so a
  * failed flowStart() falls back to a plain reply instead of throwing all
  * the way up to the webhook route, which for the Meta channel has no
- * fallback-message safety net of its own (unlike the Twilio route).
+ * fallback-message safety net of its own.
  *
  * `priorSlots` is deliberately NOT forwarded on a re-ask (see call sites):
  * an old, unrecognized "asset" value would otherwise look already-resolved
@@ -694,6 +705,10 @@ async function handleFaucetIntent({
   asset: string | null;
 }): Promise<HandlerResult> {
   const name = firstName(user);
+
+  if (isMainnet()) {
+    return { reply: pickReply(REPLIES.faucetUnavailable, { name }), choices: QUICK_CHOICES };
+  }
 
   // A faucet drip is a write against the wallet, so it follows the same
   // gate as a send rather than the read gate.
@@ -890,7 +905,10 @@ async function handleOnboardedUser({
       };
     case "HELP":
       // Fuller menu with descriptions.
-      return { reply: pickReply(REPLIES.help, { name }), choices: MENU_CHOICES };
+      return {
+        reply: pickReply(isMainnet() ? REPLIES.helpMainnet : REPLIES.help, { name }),
+        choices: MENU_CHOICES,
+      };
     case "ABOUT":
       return { reply: pickReply(REPLIES.about, { name }), choices: QUICK_CHOICES };
     case "HOW_IT_WORKS":
@@ -974,7 +992,7 @@ async function startPinReset(
       "",
       url,
       "",
-      `It works once and expires in ${RESET_TTL_MINUTES} minutes.`,
+      `It works once and expires in ${RESET_TTL_MINUTES} minutes. After a reset, sends wait 24 hours before going out for the next ${FACTOR_CHANGE_HOLD_HOURS} hours — that's what stops someone else who gets hold of this chat.`,
       "",
       "If you didn't ask for this, ignore it — nothing changes until someone opens that link and sets a new PIN.",
     ].join("\n"),
@@ -1421,6 +1439,20 @@ async function startSendFlow({
     recipientName = beneficiary.label;
     recipientUserId = beneficiary.recipient_user_id;
     recipientWhatsappNumber = beneficiary.recipient_whatsapp_number;
+
+    // A beneficiary that is a tella user is re-resolved rather than trusted.
+    // The saved address is whatever their wallet was when it was saved, and
+    // after a network switch that is a wallet this deployment cannot pay
+    // into. Their current row is the only thing that knows.
+    if (beneficiary.recipient_user_id) {
+      const recipient = await findUserById(beneficiary.recipient_user_id);
+      if (!recipient || !gateWalletReady(recipient).ok || !recipient.wallet_address) {
+        return {
+          reply: `${beneficiary.label} hasn't finished setting up their wallet yet. Try again in a moment.`,
+        };
+      }
+      recipientAddress = recipient.wallet_address;
+    }
   }
 
   // Checked here so an unaffordable or over-cap send is refused with a
@@ -1446,6 +1478,7 @@ async function startSendFlow({
       recipientAddress,
       recipientWhatsappNumber,
       origin,
+      network: arcNetwork(),
     },
   });
 
@@ -1820,23 +1853,45 @@ async function handleGoogleLinkRequest(
     };
   }
 
-  const base = process.env.APP_BASE_URL;
-  if (!base) {
-    console.error("[google] APP_BASE_URL is not set");
+  const paused = linkPausedReply(user);
+  if (paused) return paused;
+
+  let url: string;
+  try {
+    const token = await createResetToken(user.id, "link_google", origin);
+    url = buildLinkUrl(token.id);
+  } catch (err) {
+    console.error("[google] link token creation failed", { userId: user.id, err });
     return { reply: "That isn't set up yet on my side. Try again later." };
   }
-
-  const token = await createResetToken(user.id, "link_google", origin);
 
   return {
     reply: [
       "Tap this to connect your Google account:",
       "",
-      `${base.replace(/\/$/, "")}/api/auth/google/start?purpose=link&token=${token.id}`,
+      url,
       "",
-      "It works once and expires in 10 minutes.",
+      "You'll confirm with your Face ID, fingerprint or PIN first. The link works once and expires in 10 minutes.",
       "",
       "Once connected you can freeze your wallet from any device, even without this phone — and security alerts go to that email too. It can't send money.",
+    ].join("\n"),
+  };
+}
+
+/**
+ * Refuse a new link inside the post-change window.
+ *
+ * A PIN reset needs only the chat, so someone holding the phone could reset
+ * the PIN and then prove the PIN they just chose. The web step enforces this
+ * too; saying it here saves the user a pointless tap.
+ */
+function linkPausedReply(user: tellaUser): HandlerResult | null {
+  if (!inFactorChangeWindow(user.factors_changed_at)) return null;
+  return {
+    reply: [
+      `Your PIN, passkeys or linked accounts changed recently, ${firstName(user)}, so new links are paused for ${FACTOR_CHANGE_HOLD_HOURS} hours after that.`,
+      "",
+      "If that change wasn't you, reply *freeze* now.",
     ].join("\n"),
   };
 }
@@ -1891,30 +1946,32 @@ async function handleTelegramLinkRequest(
     };
   }
 
-  // Normalised rather than trusted. BotFather displays the username as
-  // "@cashtellaBot" and that is what gets pasted into env, but t.me links
-  // take the bare name — https://t.me/@name is a dead link, and the failure
-  // is a user tapping something that goes nowhere rather than an error
-  // anybody sees. Also tolerates someone pasting the whole t.me URL.
-  const botUsername = (process.env.TELEGRAM_BOT_USERNAME ?? "")
-    .trim()
-    .replace(/^https?:\/\/t\.me\//i, "")
-    .replace(/^@/, "");
+  const paused = linkPausedReply(user);
+  if (paused) return paused;
 
-  if (!botUsername) {
+  if (!telegramDeepLink("probe")) {
     console.error("[telegram] TELEGRAM_BOT_USERNAME is not set");
     return { reply: "Telegram isn't set up yet on my side. Try again later." };
   }
 
-  const token = await createResetToken(user.id, "link_telegram", origin);
+  let url: string;
+  try {
+    const token = await createResetToken(user.id, "link_telegram", origin);
+    url = buildLinkUrl(token.id);
+  } catch (err) {
+    console.error("[telegram] link token creation failed", { userId: user.id, err });
+    return { reply: "I couldn't start that just now. Try again in a moment." };
+  }
 
   return {
     reply: [
       "Tap this to connect Telegram:",
       "",
-      `https://t.me/${botUsername}?start=${token.id}`,
+      url,
       "",
-      "It works once and expires in 10 minutes. On Telegram you'll be able to check your balance and freeze your account — sending stays here.",
+      "You'll confirm with your Face ID, fingerprint or PIN, then open Telegram. The link works once and expires in 10 minutes.",
+      "",
+      "Once linked, Telegram works just like this chat — balance, sends and freeze — and you'll get alerts in both places.",
     ].join("\n"),
   };
 }

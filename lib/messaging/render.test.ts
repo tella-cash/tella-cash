@@ -81,7 +81,7 @@ async function main() {
     check("widget body is untouched", sent[0]?.body === "pick");
   }
 
-  // A provider that refuses THIS set (Twilio without a matching template)
+  // A provider that refuses THIS set (no template for these options)
   // and one with no widget at all must both degrade the same way.
   for (const mode of ["refuses", "absent"] as const) {
     const { provider, sent } = fake({ choices: mode });

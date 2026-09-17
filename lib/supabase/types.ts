@@ -1,8 +1,9 @@
 import type { MessageProvider } from "@/lib/messaging/processed-messages";
+import type { ArcNetwork } from "@/lib/wallet/network";
 
 export type OnboardingStep = "awaiting_name" | "completed";
 export type WalletStatus = "none" | "pending" | "active" | "failed";
-export type WhatsAppChannel = "twilio" | "meta";
+export type WhatsAppChannel = "meta";
 
 export interface tellaUser {
   id: string;
@@ -13,6 +14,12 @@ export interface tellaUser {
   circle_wallet_id: string | null;
   wallet_address: string | null;
   wallet_status: WalletStatus;
+  /**
+   * The Arc network the wallet was created on. A wallet from another network
+   * is treated as not provisioned — see migrations/0024_mainnet_readiness.sql.
+   * Null only for users with no wallet yet.
+   */
+  wallet_network: ArcNetwork | null;
   pin_hash: string | null;
   pin_salt: string | null;
   /**
@@ -22,6 +29,11 @@ export interface tellaUser {
    * a PIN could not prove that. See migrations/0019_pin_set_at.sql.
    */
   pin_set_at: string | null;
+  /**
+   * Last PIN reset, passkey removal or channel link. Sends are held for a
+   * while afterwards; see lib/sends/tiers.ts and migrations/0024.
+   */
+  factors_changed_at: string | null;
   /**
    * Set when the account is frozen, cleared when it is lifted. Deliberately
    * NOT a wallet_status value — see migrations/0012_account_freeze.sql for
@@ -250,6 +262,12 @@ export interface SendPayload {
    * a five-minute TTL means "before this existed" stops mattering quickly.
    */
   origin?: MessageProvider;
+  /**
+   * The network the send was composed on. Checked again before the transfer,
+   * so a send queued on testnet can never execute after a switch to mainnet.
+   * Absent on rows from before migration 0024, which were all testnet.
+   */
+  network?: ArcNetwork;
 }
 
 /** Payload for a pending flow conversation: the flow name (backend-defined,

@@ -4,7 +4,7 @@ import { ImageResponse } from "next/og";
  * GET /api/notifications/received-image
  *
  * Renders the "money received" WhatsApp notification as a branded square
- * PNG card. Twilio/Meta fetch this URL directly (mediaUrl / image.link),
+ * PNG card. Meta fetches this URL directly (image.link),
  * so it must be a plain, unauthenticated GET — the params it reads back
  * (amount/token/sender/balances) aren't secrets, they're just display data
  * the webhook handler already computed.
@@ -117,7 +117,7 @@ export async function GET(request: Request) {
         height: 1080,
         headers: {
           // The image is a pure function of its query string, so the same
-          // URL is always the same PNG. Twilio and Meta each fetch it at
+          // URL is always the same PNG. Meta fetches it at
           // least once, and a retry or a repeated notification should hit
           // the CDN rather than re-render.
           "Cache-Control": "public, max-age=86400, s-maxage=86400, immutable",

@@ -1,4 +1,9 @@
 // create-wallet.ts
+//
+// Testnet onboarding only, whatever ARC_NETWORK says. It relies on the
+// faucet and moves 5 USDC between two throwaway wallets, which on mainnet
+// would be real money. A mainnet entity secret and wallet set are set up
+// in the Circle console instead.
 
 // Marks this file a module rather than a global script. Without it the
 // root-level helpers share one scope, and every script here declares a

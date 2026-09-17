@@ -6,7 +6,16 @@
  * transfer leaves immediately or waits a day, so it is worth pinning exactly.
  */
 
-import { tierFor, holdThreshold, HOLD_HOURS } from "./tiers";
+import {
+  tierFor,
+  holdThreshold,
+  inFactorChangeWindow,
+  HOLD_HOURS,
+  FACTOR_CHANGE_HOLD_HOURS,
+} from "./tiers";
+
+const HOUR = 60 * 60 * 1000;
+const NOW = Date.parse("2026-09-17T12:00:00Z");
 import type { ResolvedLimits } from "./limits";
 
 function limits(over: Partial<ResolvedLimits> = {}): ResolvedLimits {
@@ -49,6 +58,30 @@ const CHECKS: Check[] = [
   ["NaN is not held", () => tierFor(NaN, limits({ holdThreshold: 5 })) === "normal"],
 
   ["the hold, when one applies, is still a full day", () => HOLD_HOURS === 24],
+
+  // The post-change window. A PIN reset needs only the chat, so without this
+  // a reset followed by a send moves the whole balance at once.
+  [
+    "a small send right after a PIN reset is held",
+    () => tierFor(1, limits(), new Date(NOW - HOUR).toISOString(), NOW) === "hold",
+  ],
+  [
+    "the window holds sends even with the size threshold switched off",
+    () => holdThreshold(limits()) === Infinity && tierFor(5, limits(), new Date(NOW).toISOString(), NOW) === "hold",
+  ],
+  [
+    "just inside the window is still held",
+    () =>
+      tierFor(5, limits(), new Date(NOW - (FACTOR_CHANGE_HOLD_HOURS * HOUR - 1000)).toISOString(), NOW) ===
+      "hold",
+  ],
+  [
+    "once the window has passed, sends go out normally",
+    () => tierFor(5, limits(), new Date(NOW - FACTOR_CHANGE_HOLD_HOURS * HOUR).toISOString(), NOW) === "normal",
+  ],
+  ["no recorded change means no window", () => tierFor(5, limits(), null, NOW) === "normal"],
+  ["a garbage timestamp does not open a window", () => !inFactorChangeWindow("not a date", NOW)],
+  ["the window outlasts the hold it imposes", () => FACTOR_CHANGE_HOLD_HOURS > HOLD_HOURS],
 ];
 
 let passed = 0;

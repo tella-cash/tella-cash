@@ -141,10 +141,9 @@ async function resolveUser(
     return findOrCreateUser({
       whatsappNumber: externalId,
       profileName,
-      // Only WhatsApp providers are self-enrolling, and the column's CHECK
-      // constraint (migration 0002) only admits those two, so this cast is
+      // WhatsApp (Meta) is the only self-enrolling provider, so this cast is
       // exactly as narrow as the branch it sits in.
-      channel: provider.id as "twilio" | "meta",
+      channel: provider.id as "meta",
     });
   }
 

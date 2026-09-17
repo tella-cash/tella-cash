@@ -107,7 +107,7 @@ export default function PrivacyPage() {
           <strong>From third parties:</strong> we receive verification
           outcomes from our KYC provider, settlement data from the Arc network,
           and messaging metadata (e.g. delivery state) from Meta / WhatsApp
-          and Twilio.
+          and Telegram.
         </p>
       </Section>
 
@@ -172,9 +172,6 @@ export default function PrivacyPage() {
               <li>
                 <strong>Meta Platforms (WhatsApp Business)</strong> — messaging
                 delivery.
-              </li>
-              <li>
-                <strong>Twilio</strong> — messaging infrastructure.
               </li>
               <li>
                 <strong>Circle</strong> — wallet creation, USDC custody, and
