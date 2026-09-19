@@ -31,7 +31,11 @@ export type AlertKind =
   // A setting that is present, syntactically fine, and wrong in a way only
   // the running system can see — so it cannot be caught at deploy time and
   // will otherwise present as users being told they have no money.
-  | "config_invalid";
+  | "config_invalid"
+  // A wallet holds a token whose symbol claims to be USDC while its contract
+  // is not Arc's. Ignored by the balance and send paths, and worth a look:
+  // it is a deliberate act by somebody.
+  | "impostor_token";
 
 interface AlertPayload {
   kind: AlertKind;

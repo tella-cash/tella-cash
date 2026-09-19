@@ -11,6 +11,7 @@
  */
 
 import { collapseBySymbol, dedupeSameToken, type RawBalance, pickSpendableUsdc } from "./circle";
+import { isRecognisedUsdc, arcUsdcAddress } from "./network";
 
 /** The real shape, from wallet 108aae8a on ARC-TESTNET. */
 const ARC_NATIVE: RawBalance = {
@@ -26,9 +27,51 @@ const ARC_ERC20: RawBalance = {
   tokenAddress: "0x3600000000000000000000000000000000000000",
 };
 
+/**
+ * What an attacker airdrops: symbol "USDC", somebody else's contract, and a
+ * balance large enough to win every "largest wins" comparison in this file.
+ */
+const IMPOSTOR: RawBalance = {
+  symbol: "USDC",
+  amount: 1_000_000,
+  tokenId: "beefbeef-0000-4000-8000-beefbeefbeef",
+  tokenAddress: "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+  isNative: false,
+};
+
 type Check = [string, () => boolean];
 
 const CHECKS: Check[] = [
+  // --- a token is USDC because of its contract, not its name ---
+  ["the ERC-20 predeploy is recognised", () => isRecognisedUsdc(ARC_ERC20)],
+  ["the native entry is recognised", () => isRecognisedUsdc(ARC_NATIVE)],
+  ["an impostor is not", () => !isRecognisedUsdc(IMPOSTOR)],
+  [
+    "case does not matter in the address",
+    () =>
+      isRecognisedUsdc({
+        symbol: "USDC",
+        tokenAddress: arcUsdcAddress().toUpperCase().replace("0X", "0x"),
+        isNative: false,
+      }),
+  ],
+  [
+    "a token with another symbol is left alone",
+    () => isRecognisedUsdc({ symbol: "EURC", tokenAddress: "0xabc", isNative: false }),
+  ],
+  [
+    "an impostor is never spent from, however large",
+    () => pickSpendableUsdc([ARC_ERC20, IMPOSTOR], undefined).usdc?.tokenId === ARC_ERC20.tokenId,
+  ],
+  [
+    "a wallet holding only an impostor has nothing to spend",
+    () => pickSpendableUsdc([IMPOSTOR], undefined).usdc === null,
+  ],
+  [
+    "and pinning cannot select one either",
+    () => pickSpendableUsdc([IMPOSTOR], IMPOSTOR.tokenId).usdc?.available === 0,
+  ],
+
   // --- the bug, exactly as production hit it ---
   [
     "the Arc native/ERC-20 pair collapses to ONE line, not a sum",
@@ -129,11 +172,18 @@ const CHECKS: Check[] = [
  * user's money for what is a typo in an env var. `pinMissed` is what tells the
  * two apart, and the pair of cases below is the whole reason it exists.
  */
+// Both must be tokens the wallet could really hold: the ERC-20 predeploy and
+// the native asset. Made-up addresses were fine when USDC meant "anything
+// called USDC", and are now correctly refused.
 const USDC_A: RawBalance = {
-  symbol: "USDC", amount: 40, tokenId: "id-a", tokenAddress: "0xaaa",
+  symbol: "USDC",
+  amount: 40,
+  tokenId: "id-a",
+  tokenAddress: "0x3600000000000000000000000000000000000000",
+  isNative: false,
 };
 const USDC_B: RawBalance = {
-  symbol: "USDC", amount: 10, tokenId: "id-b", tokenAddress: "0xbbb",
+  symbol: "USDC", amount: 10, tokenId: "id-b", tokenAddress: null, isNative: true,
 };
 const EURC: RawBalance = {
   symbol: "EURC", amount: 99, tokenId: "id-eurc", tokenAddress: "0xccc",

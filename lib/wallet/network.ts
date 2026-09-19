@@ -44,3 +44,59 @@ export function explorerTxUrl(txHash: string): string {
   const base = process.env.ARC_EXPLORER_TX_URL || fallback;
   return `${base.replace(/\/$/, "")}/${txHash}`;
 }
+
+/**
+ * The USDC ERC-20 predeploy, which is the only contract address a "USDC"
+ * balance is allowed to have.
+ *
+ * Arc runs USDC as the native gas token AND as an ERC-20 view over the same
+ * asset, at this address on both networks (Circle's contract-address docs;
+ * confirmed against the mainnet explorer at explorer.arc.io). Circle reports
+ * one wallet's holding under both interfaces, which is why collapseBySymbol
+ * exists.
+ *
+ * WHY THIS IS NEEDED AT ALL. Before this, "is this USDC?" was answered by the
+ * token's own symbol() string. Nobody bothers to spoof that on a testnet. On
+ * mainnet anyone can deploy an ERC-20 that calls itself USDC and airdrop it
+ * to an address they read off the explorer — and because the larger balance
+ * wins, it would have displaced the real holding in the balance reply, in the
+ * "money received" card, and in the token a transfer actually draws on. The
+ * user would have been told they sent USDC while the recipient received a
+ * worthless token.
+ *
+ * Same value for both networks today. It stays a function rather than an
+ * exported constant so that a chain with a different predeploy is a one-line
+ * change here, switching on arcNetwork(), rather than a hunt through the
+ * money path.
+ */
+const USDC_PREDEPLOY = "0x3600000000000000000000000000000000000000";
+
+export function arcUsdcAddress(): string {
+  return USDC_PREDEPLOY;
+}
+
+/**
+ * Is this balance entry really USDC, rather than something that merely calls
+ * itself that?
+ *
+ * Accepts two shapes, both legitimate:
+ *   - the native asset, which Circle reports with isNative set and no
+ *     contract address;
+ *   - the ERC-20 view, at the predeploy address above.
+ *
+ * Anything else with symbol "USDC" is an impostor. Tokens with other symbols
+ * are none of this function's business and pass through untouched, because
+ * nothing spendable is keyed on them.
+ */
+export function isRecognisedUsdc(token: {
+  symbol: string;
+  tokenAddress: string | null;
+  isNative?: boolean;
+}): boolean {
+  if (token.symbol !== "USDC") return true;
+  if (token.isNative === true) return true;
+  // Circle reports the native entry with no contract address at all; an
+  // ERC-20, impostor or not, always carries one.
+  if (token.tokenAddress === null) return token.isNative !== false;
+  return token.tokenAddress.toLowerCase() === arcUsdcAddress();
+}

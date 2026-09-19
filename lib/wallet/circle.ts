@@ -1,5 +1,10 @@
 import { raiseAlert } from "@/lib/observability/alerts";
-import { arcNetwork, isMainnet, type ArcNetwork } from "@/lib/wallet/network";
+import {
+  arcNetwork,
+  isMainnet,
+  isRecognisedUsdc,
+  type ArcNetwork,
+} from "@/lib/wallet/network";
 import {
   initiateDeveloperControlledWalletsClient,
   ForbiddenError,
@@ -57,6 +62,19 @@ export async function createWalletForUser(userId: string): Promise<CreatedWallet
     );
   }
 
+  // Recorded from what Circle MADE, never from what we asked for. The
+  // blockchain comes back on the response and was being ignored, so an
+  // idempotency-key replay returning a wallet from another network would have
+  // been stamped with this deployment's network and waved through by
+  // gateProvisioned. The webhook already checks Circle's blockchain field the
+  // same way (app/api/circle-webhook/route.ts).
+  const created = wallet.blockchain as ArcNetwork | undefined;
+  if (created !== network) {
+    throw new Error(
+      `Circle returned a wallet on ${created ?? "an unstated network"}, expected ${network} (userId=${userId}). Likely an idempotency-key replay of a wallet created on another network.`,
+    );
+  }
+
   console.log("[circle] wallet created", {
     userId,
     walletId: wallet.id,
@@ -82,6 +100,12 @@ export interface RawBalance {
   amount: number;
   tokenId: string;
   tokenAddress: string | null;
+  /**
+   * Circle's own flag for the chain's native asset. Optional because rows
+   * built before this existed (and older test fixtures) do not carry it;
+   * isRecognisedUsdc falls back to "no contract address means native".
+   */
+  isNative?: boolean;
 }
 
 async function fetchRawBalances(walletId: string): Promise<RawBalance[]> {
@@ -93,9 +117,31 @@ async function fetchRawBalances(walletId: string): Promise<RawBalance[]> {
     amount: parseFloat(b.amount ?? "0"),
     tokenId: b.token?.id ?? "",
     tokenAddress: b.token?.tokenAddress ?? null,
+    isNative: b.token?.isNative,
   }));
 
-  return dedupeSameToken(balances);
+  // Dropped here, at the edge, rather than at each point of use. Everything
+  // downstream — the balance reply, the received-money card, the dedupe, the
+  // choice of token a transfer draws on — reads this one list, and a filter
+  // applied at only some of those is a filter that will be forgotten at the
+  // one that moves money.
+  const genuine = balances.filter((b) => {
+    if (isRecognisedUsdc(b)) return true;
+    console.warn("[circle] ignoring a token claiming to be USDC", {
+      walletId,
+      tokenId: b.tokenId,
+      tokenAddress: b.tokenAddress,
+    });
+    raiseAlert({
+      kind: "impostor_token",
+      message:
+        "A wallet holds a token whose symbol is USDC but whose contract is not Arc's. It is being ignored; someone may be attempting to have users spend or be credited with a worthless token.",
+      context: { tokenId: b.tokenId, tokenAddress: b.tokenAddress },
+    });
+    return false;
+  });
+
+  return dedupeSameToken(genuine);
 }
 
 /**
@@ -313,7 +359,12 @@ export function pickSpendableUsdc(
   raw: RawBalance[],
   pinned: string | undefined,
 ): SpendableDecision {
-  const usdc = raw.filter((b) => b.symbol === "USDC" && b.tokenId);
+  // isRecognisedUsdc again, though fetchRawBalances has already applied it.
+  // This function is the one that names the token a transfer spends from, and
+  // it is called with a caller-supplied list in tests and could be elsewhere
+  // tomorrow; the check costs nothing and the failure it prevents is paying
+  // someone in a token that merely calls itself USDC.
+  const usdc = raw.filter((b) => b.symbol === "USDC" && b.tokenId && isRecognisedUsdc(b));
 
   if (pinned) {
     const match = usdc.find((b) => b.tokenId === pinned);
@@ -371,10 +422,22 @@ export async function getTokenSymbol(tokenId: string): Promise<string> {
   try {
     const client = getCircleClient();
     const response = await client.getToken({ id: tokenId });
-    const symbol = response.data?.token?.symbol ?? "UNKNOWN";
+    const token = response.data?.token;
+    const symbol = token?.symbol ?? "UNKNOWN";
 
-    tokenSymbolCache.set(tokenId, symbol);
-    return symbol;
+    // This symbol goes straight into "💰 Received 5 USDC". A token that calls
+    // itself USDC without being Arc's is reported as UNKNOWN rather than
+    // credited by name — the notification is the whole point of the spoof.
+    const named = isRecognisedUsdc({
+      symbol,
+      tokenAddress: token?.tokenAddress ?? null,
+      isNative: token?.isNative,
+    })
+      ? symbol
+      : "UNKNOWN";
+
+    tokenSymbolCache.set(tokenId, named);
+    return named;
   } catch (err) {
     // Don't cache a failure, and don't let a Circle API hiccup take down
     // the whole "you received money" notification — worst case the user
