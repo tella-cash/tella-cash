@@ -55,7 +55,13 @@ async function resolveTargets(
   const verified = channels.filter((c) => c.verified_at !== null);
 
   if (verified.length === 0) {
-    return [legacyChannel(user)];
+    // The legacy shape is built from whatsapp_number, which a channel-rooted
+    // account does not have. For those the channel table is not a mirror of
+    // the columns, it is the only record — so an empty result here means
+    // genuinely unreachable, and inventing a target from a null id would send
+    // the message to the string "null".
+    const legacy = legacyChannel(user);
+    return legacy ? [legacy] : [];
   }
 
   if (scope === "primary") {
@@ -65,14 +71,16 @@ async function resolveTargets(
   return verified;
 }
 
-/** The pre-channel-table shape, synthesised so callers need no special case. */
-function legacyChannel(user: tellaUser): UserChannel {
+/** The pre-channel-table shape, or null when the account never had one. */
+function legacyChannel(user: tellaUser): UserChannel | null {
+  if (!user.whatsapp_number) return null;
   return {
     id: "legacy",
     user_id: user.id,
     provider: user.whatsapp_channel,
     external_id: user.whatsapp_number,
     display_name: null,
+    username: null,
     is_primary: true,
     verified_at: null,
     last_inbound_at: null,

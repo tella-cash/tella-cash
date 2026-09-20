@@ -80,5 +80,6 @@ export function isConfirmPayload(
   // off a shape that has neither. Dispatch is on `kind` and never reaches
   // that, but a type guard that is only correct because of where it is called
   // is a guard waiting to be called somewhere else.
-  return (payload as ConfirmPendingPayload).action === "freeze";
+  const action = (payload as ConfirmPendingPayload).action;
+  return action === "freeze" || action === "link_whatsapp";
 }

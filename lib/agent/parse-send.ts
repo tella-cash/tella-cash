@@ -12,6 +12,8 @@ export interface ParsedSendIntent {
     | { kind: "phone"; whatsappNumber: string }
     | { kind: "address"; address: string }
     | { kind: "label"; label: string }
+    /** A Telegram @handle. The only way to address an account with no phone. */
+    | { kind: "username"; username: string }
     /**
      * Looked like a phone number and wasn't a valid one. Distinct from
      * `label` because the reply has to be different: telling someone
@@ -45,8 +47,21 @@ function looksLikePhone(value: string): boolean {
  * only; whether a beneficiary by that name exists, or whether that number
  * belongs to a tella user, is startSendFlow's question.
  */
+/**
+ * Telegram's own rule: 5 to 32 characters, letters, digits and underscores,
+ * starting with a letter. Matched with the @ required, so a saved beneficiary
+ * called "ada" still resolves to the address book rather than to whoever
+ * holds @ada.
+ */
+const TELEGRAM_USERNAME = /^@([a-z][a-z0-9_]{4,31})$/i;
+
 export function classifyRecipient(raw: string): ParsedSendIntent["recipient"] {
   const trimmed = raw.trim();
+
+  const handle = TELEGRAM_USERNAME.exec(trimmed);
+  if (handle) {
+    return { kind: "username", username: handle[1].toLowerCase() };
+  }
 
   if (isEvmAddress(trimmed)) {
     return { kind: "address", address: trimmed.toLowerCase() };

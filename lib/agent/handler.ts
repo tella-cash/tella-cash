@@ -37,6 +37,8 @@ import {
 } from "@/lib/wallet/circle";
 import { arcNetwork, isMainnet } from "@/lib/wallet/network";
 import { inFactorChangeWindow, FACTOR_CHANGE_HOLD_HOURS } from "@/lib/sends/tiers";
+import { findChannelByUsername } from "@/lib/messaging/channels";
+import { SITE } from "@/lib/data/site";
 import { telegramDeepLink } from "@/lib/telegram/deep-link";
 import { getUsdToNgnRate, usdToNgn } from "@/lib/fx/naira";
 import { checkSendLimits, formatLimitFailure } from "@/lib/sends/limits";
@@ -1422,6 +1424,40 @@ async function startSendFlow({
     recipientName = recipient.profile_name;
     recipientUserId = recipient.id;
     recipientWhatsappNumber = intent.recipient.whatsappNumber;
+  } else if (intent.recipient.kind === "username") {
+    const handle = intent.recipient.username;
+    const channel = await findChannelByUsername("telegram", handle);
+    const recipient = channel ? await findUserById(channel.user_id) : null;
+
+    if (!recipient) {
+      return {
+        reply: [
+          `I don't know anyone on tella called @${handle} 👀`,
+          "",
+          "Telegram handles only work for people who use tella on Telegram. You can also send to a phone number or a wallet address.",
+        ].join("\n"),
+      };
+    }
+
+    if (recipient.id === user.id) {
+      return { reply: "That's your own handle — can't send to yourself." };
+    }
+
+    // Same gate, and the same reasoning, as the phone branch: the recipient's
+    // row, read for readiness only, never for whether they are frozen.
+    if (!gateWalletReady(recipient).ok || !recipient.wallet_address) {
+      return {
+        reply: `${recipient.profile_name ?? `@${handle}`} hasn't finished setting up their wallet yet. Try again in a moment.`,
+      };
+    }
+
+    recipientAddress = recipient.wallet_address;
+    // Shown on the confirm screen. Their own name plus the handle typed, so a
+    // handle that recently changed hands is visible as a different person
+    // before anything is authorized.
+    recipientName = recipient.profile_name ? `${recipient.profile_name} (@${handle})` : `@${handle}`;
+    recipientUserId = recipient.id;
+    recipientWhatsappNumber = recipient.whatsapp_number;
   } else {
     const beneficiary = await findBeneficiaryByLabel(user.id, intent.recipient.label);
 
@@ -1689,6 +1725,24 @@ async function resolvePendingConfirmation({
   // row that turns the user's next message into a second freeze attempt.
   await deletePending(pending.id);
 
+  if (pending.payload.action === "link_whatsapp") {
+    if (declined) {
+      return { reply: "No problem — nothing has changed.", choices: QUICK_CHOICES };
+    }
+
+    return {
+      reply: [
+        `Here's how, ${firstName(user)} 👇`,
+        "",
+        `1. Open WhatsApp and message tella: ${SITE.whatsappLink}`,
+        "2. Say *link telegram* there.",
+        "3. Tap the link it sends back and confirm it's you.",
+        "",
+        "Both chats then reach the same wallet, and a phone number is how other people can pay you.",
+      ].join("\n"),
+    };
+  }
+
   if (declined) {
     return {
       reply: [
@@ -1942,6 +1996,30 @@ async function handleTelegramLinkRequest(
         `Before I link another channel, ${name}, let's put a lock on this account.`,
         "",
         "Start a send and you'll be asked to set up Face ID or a PIN — it takes about ten seconds. Then say *link telegram* again.",
+      ].join("\n"),
+    };
+  }
+
+  if (origin === "telegram") {
+    // They are already here, so "link telegram" is almost always a person
+    // reaching for the OTHER channel. Asked rather than assumed: guessing
+    // wrong and silently doing nothing is how a request gets ignored twice.
+    try {
+      await createPending({
+        userId: user.id,
+        kind: "confirm",
+        payload: { action: "link_whatsapp" },
+        ttlMinutes: 10,
+      });
+    } catch (err) {
+      console.error("[telegram] link question could not be held", { userId: user.id, err });
+    }
+
+    return {
+      reply: [
+        `This Telegram chat is already connected, ${name}.`,
+        "",
+        "Did you mean to connect *WhatsApp* instead? Reply *yes* and I'll show you how.",
       ].join("\n"),
     };
   }

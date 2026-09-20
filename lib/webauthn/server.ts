@@ -54,7 +54,10 @@ export async function buildRegistrationOptions(user: tellaUser) {
     rpName,
     rpID,
     userID: textEncoder.encode(user.id),
-    userName: user.whatsapp_number,
+    // Shown by the authenticator when the user picks a passkey. The phone
+    // number is the clearest label where there is one; a channel-rooted
+    // account has none, and the name they gave is better than a raw uuid.
+    userName: user.whatsapp_number ?? user.profile_name ?? user.id,
     userDisplayName: user.profile_name ?? "tella",
     attestationType: "none",
     excludeCredentials: existing.map((c) => ({

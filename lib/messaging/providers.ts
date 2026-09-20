@@ -41,17 +41,21 @@ import {
  * feature on the day it is added, because none of those were ever written
  * against a channel.
  *
- * THE ONE ASYMMETRY, and it is not a preference: `selfEnrolling`.
+ * THE ONE ASYMMETRY, and it is not a preference: `identity`.
  *
- * A tella account is phone-rooted. tella_users.whatsapp_number is the
- * unique key, the Circle wallet provisions against it, recovery links
- * deliver to it, and sends resolve recipients through it. An inbound
- * WhatsApp message therefore carries enough to create an account; a
- * Telegram chat id does not, because there is no phone number inside one.
- * Non-self-enrolling channels are linked from an already-authenticated
- * channel, which is also what proves control of both ends at once.
+ * An account used to be phone-rooted, full stop: tella_users.whatsapp_number
+ * was the unique key, so a channel that carried no phone number could not
+ * create an account and a Telegram stranger was turned away and told to
+ * start on WhatsApp. That was a dead end at the top of the funnel, and it is
+ * gone — see migrations/0026_channel_rooted_identity.sql.
  *
- * After linking there is no difference. Same handler, same copy, same
+ * Every channel enrols now. What still differs is what the resulting account
+ * can be ADDRESSED by: a WhatsApp message carries a phone number, so those
+ * accounts can be paid by number; a Telegram chat id names its holder and
+ * nobody else, so those accounts are payable by wallet address only until
+ * they link a channel that has a number.
+ *
+ * Beyond that there is no difference. Same handler, same copy, same
  * capabilities.
  */
 
@@ -79,8 +83,18 @@ export interface Provider {
   id: MessageProvider;
   /** Human-readable, for copy that has to name the channel. */
   label: string;
-  /** Can an inbound message from an unrecognised id create an account? */
-  selfEnrolling: boolean;
+  /**
+   * What an account created from this channel is keyed on.
+   *
+   * "phone" — the message carries a phone number, so the account is rooted in
+   * one and can be paid by number like any other.
+   * "channel" — it carries only a channel id (a Telegram chat), so the
+   * channel row IS the identity and whatsapp_number stays null.
+   *
+   * Both create accounts. The distinction is what the account can be
+   * addressed by afterwards, not whether a stranger is welcome.
+   */
+  identity: "phone" | "channel";
   /**
    * What tella_users.frozen_source records for a freeze that came in here.
    *
@@ -120,7 +134,7 @@ export const PROVIDERS: Record<MessageProvider, Provider> = {
   meta: {
     id: "meta",
     label: "WhatsApp",
-    selfEnrolling: true,
+    identity: "phone",
     freezeSource: "whatsapp",
     // Meta delivers bare digits. Stored as `whatsapp:+E164`, the form the
     // users table has always held, so existing rows keep matching.
@@ -144,7 +158,7 @@ export const PROVIDERS: Record<MessageProvider, Provider> = {
   telegram: {
     id: "telegram",
     label: "Telegram",
-    selfEnrolling: false,
+    identity: "channel",
     freezeSource: "telegram",
     normalizeId: (raw) => raw,
     returnUrl: () => {

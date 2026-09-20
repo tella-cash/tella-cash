@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { upsertChannel } from "@/lib/messaging/channels";
+import { upsertChannel, findChannel } from "@/lib/messaging/channels";
+import type { MessageProvider } from "@/lib/messaging/processed-messages";
 import type { tellaUser, WhatsAppChannel } from "@/lib/supabase/types";
 import { arcNetwork, type ArcNetwork } from "@/lib/wallet/network";
 
@@ -101,7 +102,7 @@ export async function findOrCreateUser({
  */
 async function recordChannel(
   userId: string,
-  provider: WhatsAppChannel,
+  provider: MessageProvider,
   externalId: string,
   isPrimary: boolean,
   displayName?: string | null,
@@ -123,6 +124,102 @@ async function recordChannel(
   }
 }
 
+
+/**
+ * The same question as findOrCreateUser, asked of a channel that has no phone
+ * number to be keyed on.
+ *
+ * A Telegram chat id identifies a person perfectly well; what it cannot do is
+ * name them to anyone else, which is why phone-rooted accounts still exist
+ * alongside these. The channel row IS the identity here: it carries the
+ * unique (provider, external_id), so a returning chat resolves through it and
+ * a new one creates the account it belongs to.
+ *
+ * whatsapp_number is left null. That is the cost, and it is confined: these
+ * users cannot be paid by phone number and cannot use the panic-code page,
+ * which is keyed on one. Everything else — the wallet, sends, receiving by
+ * address, the freeze, recovery — never looked at the column.
+ *
+ * The user row is written BEFORE the channel row, and the channel insert is
+ * allowed to throw rather than being swallowed the way recordChannel's is: an
+ * account whose only identity failed to persist is an account nobody can ever
+ * reach again, and the next message would silently create a second one.
+ */
+export async function findOrCreateUserByChannel({
+  provider,
+  externalId,
+  profileName,
+  username,
+}: {
+  provider: MessageProvider;
+  externalId: string;
+  profileName?: string | null;
+  username?: string | null;
+}): Promise<{ user: tellaUser; isNew: boolean }> {
+  const supabase = getSupabaseAdmin();
+
+  const existingChannel = await findChannel(provider, externalId);
+  if (existingChannel) {
+    const user = await findUserById(existingChannel.user_id);
+    if (user) {
+      // Refreshed on the way past. A handle that changed hands since this
+      // person last wrote is corrected here, before anything can pay the
+      // previous holder by it. Best-effort: a failed refresh must not stop
+      // someone using their wallet.
+      if (username !== undefined && username !== existingChannel.username) {
+        try {
+          await upsertChannel({
+            userId: user.id,
+            provider,
+            externalId,
+            username,
+            ...(profileName ? { displayName: profileName } : {}),
+          });
+        } catch (err) {
+          console.error("[users] username refresh failed", { provider, err });
+        }
+      }
+      return { user, isNew: false };
+    }
+    // The channel points at a user that no longer exists. The row cascades on
+    // delete, so this should be unreachable; falling through to create a
+    // fresh account is better than answering nobody.
+    console.error("[users] channel row outlived its user", {
+      provider,
+      channelId: existingChannel.id,
+    });
+  }
+
+  const { data: created, error: createError } = await supabase
+    .from("tella_users")
+    .insert({
+      whatsapp_number: null,
+      whatsapp_channel: provider,
+      onboarding_step: "awaiting_name",
+    })
+    .select()
+    .single();
+
+  if (createError) {
+    throw new Error(`findOrCreateUserByChannel insert failed: ${createError.message}`, {
+      cause: createError,
+    });
+  }
+
+  const createdUser = created as tellaUser;
+
+  await upsertChannel({
+    userId: createdUser.id,
+    provider,
+    externalId,
+    isPrimary: true,
+    verified: true,
+    username,
+    ...(profileName ? { displayName: profileName } : {}),
+  });
+
+  return { user: createdUser, isNew: true };
+}
 
 export async function completeOnboarding({
   userId,

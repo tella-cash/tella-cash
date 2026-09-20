@@ -117,6 +117,10 @@ export async function POST(request: Request) {
         externalId: inbound.chatId,
         text: inbound.text,
         messageId: inbound.messageId,
+        // Telegram reports the handle on every update, so this is also how a
+        // change of handle reaches us: the next message the person sends.
+        username: inbound.username,
+        profileName: inbound.username,
       });
     } catch (err) {
       console.error("[telegram] inbound failed", { id: inbound.messageId, err });

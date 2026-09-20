@@ -22,6 +22,13 @@ export interface UserChannel {
   provider: MessageProvider;
   external_id: string;
   display_name: string | null;
+  /**
+   * The provider's handle for this person (@name on Telegram), lowercased.
+   * Unlike display_name this decides where money goes, so it is unique per
+   * provider and refreshed on every inbound message — see
+   * migrations/0027_channel_usernames.sql.
+   */
+  username: string | null;
   is_primary: boolean;
   verified_at: string | null;
   last_inbound_at: string | null;
@@ -90,6 +97,7 @@ export async function upsertChannel({
   provider,
   externalId,
   displayName,
+  username,
   isPrimary,
   verified,
 }: {
@@ -97,6 +105,7 @@ export async function upsertChannel({
   provider: MessageProvider;
   externalId: string;
   displayName?: string | null;
+  username?: string | null;
   isPrimary?: boolean;
   verified?: boolean;
 }): Promise<UserChannel> {
@@ -122,6 +131,9 @@ export async function upsertChannel({
     throw new ChannelOwnedByAnotherUserError(provider);
   }
 
+  const handle = username?.trim().replace(/^@/, "").toLowerCase() || null;
+  if (handle) await releaseUsername(provider, handle, externalId);
+
   const { data, error } = await supabase
     .from("tella_user_channel")
     .upsert(
@@ -130,6 +142,7 @@ export async function upsertChannel({
         provider,
         external_id: externalId,
         ...(displayName !== undefined ? { display_name: displayName } : {}),
+        ...(username !== undefined ? { username: handle } : {}),
         ...(isPrimary ? { is_primary: true } : {}),
         ...(verified ? { verified_at: now } : {}),
         last_inbound_at: now,
@@ -184,4 +197,68 @@ export async function unlinkChannel({
 
   if (error) throw new Error(`unlinkChannel failed: ${error.message}`);
   return true;
+}
+
+/**
+ * Take a username off whoever held it last.
+ *
+ * Telegram guarantees one holder at a time and nothing else: @ada can be
+ * dropped by one person and claimed by another the same afternoon. Whoever is
+ * presenting the handle to us right now is its current holder — Telegram
+ * said so in the message we are processing — so the older row must give it
+ * up, or the unique index would reject the newcomer and we would keep routing
+ * payments to the previous owner. The previous owner keeps their account,
+ * their wallet and their chat; they simply stop being reachable by a name
+ * that is no longer theirs.
+ */
+async function releaseUsername(
+  provider: MessageProvider,
+  handle: string,
+  keepExternalId: string,
+): Promise<void> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("tella_user_channel")
+    .update({ username: null })
+    .eq("provider", provider)
+    .ilike("username", handle)
+    .neq("external_id", keepExternalId)
+    .select("user_id");
+
+  if (error) {
+    console.error("[channels] releasing a username failed", { provider, error: error.message });
+    return;
+  }
+
+  for (const row of (data ?? []) as Array<{ user_id: string }>) {
+    console.warn("[channels] username moved to a new holder", {
+      provider,
+      previousUserId: row.user_id,
+    });
+  }
+}
+
+/**
+ * Who holds this handle right now, if anyone.
+ *
+ * Case-insensitive, and deliberately does NOT fall back to display_name: that
+ * column is decorative and duplicated, and a near-match is not a person.
+ */
+export async function findChannelByUsername(
+  provider: MessageProvider,
+  username: string,
+): Promise<UserChannel | null> {
+  const handle = username.trim().replace(/^@/, "").toLowerCase();
+  if (!handle) return null;
+
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("tella_user_channel")
+    .select("*")
+    .eq("provider", provider)
+    .ilike("username", handle)
+    .maybeSingle();
+
+  if (error) throw new Error(`findChannelByUsername failed: ${error.message}`);
+  return (data as UserChannel | null) ?? null;
 }

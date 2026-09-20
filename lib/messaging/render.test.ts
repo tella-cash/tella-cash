@@ -23,7 +23,7 @@ function fake(opts: {
   const provider = {
     id: "meta",
     label: "test",
-    selfEnrolling: true,
+    identity: "phone" as const,
     normalizeId: (r: string) => r,
     sendText: async ({ body }: { body: string }) => {
       sent.push({ kind: "text", body });

@@ -1,14 +1,12 @@
 import type { tellaUser } from "@/lib/supabase/types";
 import { handleIncomingMessage, type HandlerResult } from "@/lib/agent/handler";
-import { findOrCreateUser, findUserById } from "@/lib/users/repository";
-import { findChannel } from "./channels";
+import { findOrCreateUser, findOrCreateUserByChannel } from "@/lib/users/repository";
 import { claimMessage, releaseMessage, type MessageProvider } from "./processed-messages";
 import { providerFor, type Provider } from "./providers";
 import { renderResult } from "./render";
 import { provisionWalletForUser } from "@/lib/wallet/provision";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { QUICK_CHOICES } from "@/lib/agent/menus";
-import { SITE } from "@/lib/data/site";
 
 /**
  * The inbound pipeline, once.
@@ -31,6 +29,13 @@ export interface InboundMessage {
   text: string;
   /** Provider-unique, for the idempotency claim. */
   messageId: string;
+  /**
+   * The provider's handle for this sender (@name on Telegram), when it has
+   * one. Stored so other users can pay them by it, and refreshed on every
+   * message because a handle can change owner — see
+   * migrations/0027_channel_usernames.sql.
+   */
+  username?: string | null;
   /**
    * The display name the provider reports for this sender, if it gives one.
    *
@@ -81,7 +86,7 @@ async function process(message: InboundMessage): Promise<void> {
 
   let resolved: { user: tellaUser; isNew: boolean } | null;
   try {
-    resolved = await resolveUser(provider, to, message.profileName);
+    resolved = await resolveUser(provider, to, message.profileName, message.username);
   } catch (err) {
     console.error("[inbound] user lookup failed", { provider: provider.id, err });
     await safeSend(provider, to, FALLBACK_MESSAGE);
@@ -89,10 +94,14 @@ async function process(message: InboundMessage): Promise<void> {
   }
 
   if (!resolved) {
-    // A channel that cannot create accounts, reached by someone who has not
-    // linked one. Not an error — it is the entire population of a new social
-    // on day one, so it gets real instructions rather than a shrug.
-    await safeSend(provider, to, unlinkedMessage(provider));
+    // Every provider enrols now, so this is no longer the ordinary "you have
+    // not linked yet" case — it means a lookup returned nothing for a sender
+    // the provider vouched for, which is a bug rather than a state a person
+    // should be lectured about.
+    console.error("[inbound] no user resolved for a known sender", {
+      provider: provider.id,
+    });
+    await safeSend(provider, to, FALLBACK_MESSAGE);
     return;
   }
 
@@ -128,56 +137,42 @@ async function process(message: InboundMessage): Promise<void> {
 /**
  * Who sent this, and may they exist yet?
  *
- * The branch is `selfEnrolling` and nothing else — see providers.ts for why
- * that property is a fact about the wallet's identity model rather than a
+ * The branch is `identity` and nothing else — see providers.ts for why that
+ * property is a fact about what an account can be addressed by rather than a
  * ranking of channels.
  */
 async function resolveUser(
   provider: Provider,
   externalId: string,
   profileName?: string | null,
+  username?: string | null,
 ): Promise<{ user: tellaUser; isNew: boolean } | null> {
-  if (provider.selfEnrolling) {
+  if (provider.identity === "phone") {
     return findOrCreateUser({
       whatsappNumber: externalId,
       profileName,
-      // WhatsApp (Meta) is the only self-enrolling provider, so this cast is
+      // WhatsApp (Meta) is the only phone-rooted provider, so this cast is
       // exactly as narrow as the branch it sits in.
       channel: provider.id as "meta",
     });
   }
 
-  const channel = await findChannel(provider.id, externalId);
-  if (!channel || !channel.verified_at) return null;
-
-  const user = await findUserById(channel.user_id);
-  if (!user) return null;
-
-  return { user, isNew: false };
-}
-
-/**
- * The reply for someone the app has never seen, on a channel that cannot
- * create accounts.
- *
- * It carries the WhatsApp link rather than just naming WhatsApp, because
- * this is no longer only reached by people mid-setup: the landing page now
- * advertises a "Chat on Telegram" button, so a complete stranger can arrive
- * here first. Telling them to go find another app and type a phrase is a
- * dead end at the top of the funnel; a tappable link is one step.
- *
- * They still have to start on WhatsApp. That is the phone-rooted identity
- * model described in providers.ts, not a preference — and it is the reason
- * this message exists at all rather than an onboarding flow.
- */
-function unlinkedMessage(provider: Provider): string {
-  return [
-    `This ${provider.label} account isn't connected to a tella wallet yet.`,
-    "",
-    `Start on WhatsApp — ${SITE.whatsappLink}`,
-    "",
-    `Once you're set up, say "link ${provider.id}" there and I'll send you a link that connects the two.`,
-  ].join("\n");
+  // A channel-rooted provider. An existing chat resolves through its channel
+  // row; an unrecognised one gets an account, because a Telegram chat id
+  // identifies its holder as well as a phone number does. It simply cannot be
+  // handed out as a way for other people to pay them.
+  //
+  // Deliberately NOT gated on verified_at. A row this path created is
+  // verified by construction — the message arrived from that chat — and the
+  // only rows that are not are ones markChannelUnverified retired after the
+  // bot was blocked. Someone who blocked the bot and came back is the same
+  // person, and refusing them would strand an account with a wallet in it.
+  return findOrCreateUserByChannel({
+    provider: provider.id,
+    externalId,
+    profileName,
+    username,
+  });
 }
 
 /**

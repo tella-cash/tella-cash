@@ -7,8 +7,14 @@ export type WhatsAppChannel = "meta";
 
 export interface tellaUser {
   id: string;
-  whatsapp_number: string;
-  whatsapp_channel: WhatsAppChannel;
+  /**
+   * Null for accounts that started on a channel carrying no phone number
+   * (Telegram). Those users send and receive by address; nothing can pay them
+   * by number. See migrations/0026_channel_rooted_identity.sql.
+   */
+  whatsapp_number: string | null;
+  /** The user's PRIMARY channel, misnamed for historical reasons. */
+  whatsapp_channel: MessageProvider;
   profile_name: string | null;
   onboarding_step: OnboardingStep;
   circle_wallet_id: string | null;
@@ -86,11 +92,17 @@ export interface PendingAction {
  * entire point. The freeze confirmation has to work when the decoder is the
  * thing that is down. See lib/agent/confirm-action.ts.
  */
-export interface ConfirmPendingPayload {
-  action: "freeze";
-  source: FreezeSource;
-  reason: string;
-}
+/**
+ * A yes/no question the backend asked and is waiting on.
+ *
+ * A union rather than one shape with optional fields: the freeze carries the
+ * context the freeze needs, and a question about connecting WhatsApp carries
+ * nothing, so nothing has to pretend otherwise. isConfirmPayload matches on
+ * the literal action, so adding a member here means adding it there too.
+ */
+export type ConfirmPendingPayload =
+  | { action: "freeze"; source: FreezeSource; reason: string }
+  | { action: "link_whatsapp" };
 
 /**
  * The guided send, held one question at a time.

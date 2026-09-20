@@ -44,6 +44,32 @@ const CASES: Array<[DecodedIntent, unknown]> = [
     { ...base, amount: "5", recipient: "Chidi 2" },
     { amount: "5", token: "USDC", recipient: { kind: "label", label: "Chidi 2" } },
   ],
+  // --- Telegram handles, the only way to address a phone-less account ---
+  [
+    { ...base, amount: "5", recipient: "@ada_pays" },
+    { amount: "5", token: "USDC", recipient: { kind: "username", username: "ada_pays" } },
+  ],
+  [
+    // Case is not significant to Telegram, so it is not significant here.
+    { ...base, amount: "5", recipient: "@AdaPays" },
+    { amount: "5", token: "USDC", recipient: { kind: "username", username: "adapays" } },
+  ],
+  [
+    // No @, so it is a saved beneficiary. Someone's address book entry must
+    // never silently resolve to whoever holds the same word as a handle.
+    { ...base, amount: "5", recipient: "ada_pays" },
+    { amount: "5", token: "USDC", recipient: { kind: "label", label: "ada_pays" } },
+  ],
+  [
+    // Too short for Telegram (5 character minimum), so it is not a handle.
+    { ...base, amount: "5", recipient: "@ada" },
+    { amount: "5", token: "USDC", recipient: { kind: "label", label: "@ada" } },
+  ],
+  [
+    // Telegram handles cannot start with a digit.
+    { ...base, amount: "5", recipient: "@1adapays" },
+    { amount: "5", token: "USDC", recipient: { kind: "label", label: "@1adapays" } },
+  ],
   [{ ...base, amount: null, recipient: "Chidi" }, null],
   [{ ...base, amount: "0", recipient: "Chidi" }, null],
   [{ ...base, amount: "-5", recipient: "Chidi" }, null],
