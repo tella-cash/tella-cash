@@ -1,7 +1,7 @@
 import type { tellaUser } from "@/lib/supabase/types";
 import { TelegramBlockedError } from "@/lib/telegram/client";
 import { listChannels, markChannelUnverified, type UserChannel } from "./channels";
-import { PROVIDERS } from "./providers";
+import { PROVIDERS, type Provider } from "./providers";
 
 /**
  * Outbound messaging, across however many channels a user has linked.
@@ -137,20 +137,65 @@ export async function notifyUserPrimary({
   return countDelivered(user, targets, results, "text");
 }
 
+/**
+ * Send an image, or the words if the image can't be sent.
+ *
+ * This lives per channel rather than around the whole fan-out because the
+ * channels fail independently: WhatsApp can take the picture while Telegram,
+ * which has to fetch or receive it, cannot. Falling back only when every
+ * channel failed would leave the one that broke with nothing.
+ *
+ * A blocked chat is rethrown untouched. The text would be refused for the
+ * same reason, and countDelivered needs the original error to take the
+ * channel out of the fan-out.
+ */
+export async function sendImageOrText(
+  provider: Pick<Provider, "id" | "sendImage" | "sendText">,
+  {
+    to,
+    imageUrl,
+    caption,
+    fallbackBody,
+  }: { to: string; imageUrl: string; caption?: string; fallbackBody?: string },
+): Promise<string> {
+  try {
+    return await provider.sendImage({ to, imageUrl, caption });
+  } catch (err) {
+    if (err instanceof TelegramBlockedError) throw err;
+
+    const body = fallbackBody ?? caption;
+    if (!body) throw err;
+
+    console.error("[notify] image failed, sending text instead", {
+      provider: provider.id,
+      err,
+    });
+    return provider.sendText({ to, body });
+  }
+}
+
 export async function notifyUserWithImage({
   user,
   imageUrl,
   caption,
+  fallbackBody,
 }: {
   user: tellaUser;
   imageUrl: string;
   caption?: string;
+  /** What to send where the image can't be. Defaults to the caption. */
+  fallbackBody?: string;
 }): Promise<number> {
   const targets = await resolveTargets(user, "all");
 
   const results = await Promise.allSettled(
     targets.map((channel) =>
-      PROVIDERS[channel.provider].sendImage({ to: channel.external_id, imageUrl, caption }),
+      sendImageOrText(PROVIDERS[channel.provider], {
+        to: channel.external_id,
+        imageUrl,
+        caption,
+        fallbackBody,
+      }),
     ),
   );
 

@@ -41,12 +41,19 @@ interface TelegramResponse {
 
 async function callTelegram(
   method: string,
-  body: Record<string, unknown>,
+  body: Record<string, unknown> | FormData,
 ): Promise<string> {
+  // A FormData body must not be given a Content-Type: fetch sets
+  // multipart/form-data itself, boundary included, and a hand-written header
+  // has no boundary.
   const res = await fetch(`${API_BASE}/bot${botToken()}/${method}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    ...(body instanceof FormData
+      ? { body }
+      : {
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }),
   });
 
   const data = (await res.json()) as TelegramResponse;
@@ -205,6 +212,20 @@ export async function answerTelegramCallback(
   }
 }
 
+/** Long enough for a cold render of the notification card, short enough to fail before the function does. */
+const IMAGE_FETCH_TIMEOUT_MS = 15_000;
+
+/**
+ * Send a picture, as bytes we fetched ourselves.
+ *
+ * Handing sendPhoto a URL makes TELEGRAM fetch it, on its own short clock,
+ * and the notification card is rendered on demand: the first request for a
+ * given amount is a cold render. When Telegram gives up on that fetch the
+ * send fails with an error like "failed to get HTTP URL content", and the
+ * recipient hears nothing about money that arrived. Fetching here, with a
+ * timeout we choose, and uploading the result takes Telegram's fetch out of
+ * the path entirely.
+ */
 export async function sendTelegramImage({
   to,
   imageUrl,
@@ -214,11 +235,28 @@ export async function sendTelegramImage({
   imageUrl: string;
   caption?: string;
 }): Promise<string> {
-  return callTelegram("sendPhoto", {
-    chat_id: to,
-    photo: imageUrl,
-    ...(caption ? { caption: toTelegramHtml(caption), parse_mode: "HTML" } : {}),
+  const source = await fetch(imageUrl, {
+    signal: AbortSignal.timeout(IMAGE_FETCH_TIMEOUT_MS),
   });
+  if (!source.ok) {
+    throw new Error(`Telegram image source returned ${source.status}`);
+  }
+  const type = source.headers.get("content-type") ?? "";
+  if (!type.startsWith("image/")) {
+    // An error page served with a 200 would otherwise be uploaded as a photo
+    // and rejected by Telegram with a message that names neither cause.
+    throw new Error(`Telegram image source is not an image (${type || "no content-type"})`);
+  }
+
+  const form = new FormData();
+  form.set("chat_id", to);
+  form.set("photo", await source.blob(), "tella.png");
+  if (caption) {
+    form.set("caption", toTelegramHtml(caption));
+    form.set("parse_mode", "HTML");
+  }
+
+  return callTelegram("sendPhoto", form);
 }
 
 /**

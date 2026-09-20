@@ -245,10 +245,14 @@ async function handleInboundTransaction(
       `💰 Received ${amount} ${token} from ${sourceLabel}`,
       ...(explorerLink ? [explorerLink] : []),
     ].join("\n");
+    // notifyUserWithImage never throws over a failed send, so this catch
+    // only sees URL-building failures. A failed send falls back to
+    // fallbackText inside it, per channel.
     await notifyUserWithImage({
       user,
       imageUrl,
       caption,
+      fallbackBody: fallbackText,
     });
   } catch (err) {
     console.error("[circle-webhook] image notify failed, falling back to text", {
