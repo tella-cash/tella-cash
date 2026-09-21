@@ -1,4 +1,5 @@
 import { createWalletForUser } from "@/lib/wallet/circle";
+import { ensureChainWalletsForUser } from "@/lib/chains/wallets";
 import {
   markWalletPending,
   setWalletActive,
@@ -40,6 +41,23 @@ export async function provisionWalletForUser(
     const { walletId, address, network } = await createWalletForUser(userId);
 
     await setWalletActive({ userId, walletId, address, network });
+
+    // Their address on every other chain tella watches. After the Arc wallet
+    // is recorded, and outside its try, because the Arc wallet is what makes
+    // the account usable and a Base hiccup must not undo it. Anything missed
+    // is picked up by /api/cron/chain-wallets.
+    try {
+      await ensureChainWalletsForUser({
+        id: userId,
+        circle_wallet_id: walletId,
+        wallet_address: address,
+      });
+    } catch (err) {
+      console.error("[wallet] chain wallets deferred to the backfill job", {
+        userId,
+        err,
+      });
+    }
 
     return true;
   } catch (err) {

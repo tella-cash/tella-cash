@@ -3,12 +3,14 @@ import {
   arcNetwork,
   isMainnet,
   isRecognisedUsdc,
+  isRecognisedUsdcAt,
   type ArcNetwork,
 } from "@/lib/wallet/network";
 import {
   initiateDeveloperControlledWalletsClient,
   ForbiddenError,
   RatelimitError,
+  type EvmBlockchain,
   type TestnetBlockchain,
 } from "@circle-fin/developer-controlled-wallets";
 
@@ -108,7 +110,15 @@ export interface RawBalance {
   isNative?: boolean;
 }
 
-async function fetchRawBalances(walletId: string): Promise<RawBalance[]> {
+/**
+ * `usdcAddress` is set for a wallet on a chain other than Arc: the contract
+ * that counts as USDC there comes from tella_chains, and a native entry is
+ * never USDC. Left unset, the wallet is the user's Arc wallet.
+ */
+async function fetchRawBalances(
+  walletId: string,
+  usdcAddress?: string,
+): Promise<RawBalance[]> {
   const client = getCircleClient();
   const response = await client.getWalletTokenBalance({ id: walletId });
 
@@ -126,7 +136,9 @@ async function fetchRawBalances(walletId: string): Promise<RawBalance[]> {
   // applied at only some of those is a filter that will be forgotten at the
   // one that moves money.
   const genuine = balances.filter((b) => {
-    if (isRecognisedUsdc(b)) return true;
+    if (usdcAddress ? isRecognisedUsdcAt(b, usdcAddress) : isRecognisedUsdc(b)) {
+      return true;
+    }
     console.warn("[circle] ignoring a token claiming to be USDC", {
       walletId,
       tokenId: b.tokenId,
@@ -134,8 +146,7 @@ async function fetchRawBalances(walletId: string): Promise<RawBalance[]> {
     });
     raiseAlert({
       kind: "impostor_token",
-      message:
-        "A wallet holds a token whose symbol is USDC but whose contract is not Arc's. It is being ignored; someone may be attempting to have users spend or be credited with a worthless token.",
+      message: `A wallet holds a token whose symbol is USDC but whose contract is not ${usdcAddress ? "the one recorded for its chain" : "Arc's"}. It is being ignored; someone may be attempting to have users spend or be credited with a worthless token.`,
       context: { tokenId: b.tokenId, tokenAddress: b.tokenAddress },
     });
     return false;
@@ -220,6 +231,26 @@ export async function getWalletBalances(
   walletId: string,
 ): Promise<TokenBalance[]> {
   return collapseBySymbol(await fetchRawBalances(walletId));
+}
+
+/**
+ * A wallet's USDC on a chain other than Arc, as a display string ("0" if none).
+ *
+ * Only USDC, and only the contract recorded for that chain. Base wallets
+ * collect airdropped junk by the hundred, none of which is money and none of
+ * which belongs in a balance reply; the same reasoning that made Arc's
+ * balance USDC-by-contract applies, with the contract passed in.
+ *
+ * Same truncation to six places as everywhere else in this file.
+ */
+export async function getChainUsdcBalance(
+  walletId: string,
+  usdcAddress: string,
+): Promise<string> {
+  const raw = (await fetchRawBalances(walletId, usdcAddress)).filter(
+    (b) => b.symbol === "USDC",
+  );
+  return collapseBySymbol(raw)[0]?.amount ?? "0";
 }
 
 /**
@@ -415,36 +446,112 @@ export async function getFormattedBalanceLines(
  */
 const tokenSymbolCache = new Map<string, string>();
 
-export async function getTokenSymbol(tokenId: string): Promise<string> {
-  const cached = tokenSymbolCache.get(tokenId);
+export interface TokenInfo {
+  symbol: string;
+  /** Null for a native asset. */
+  tokenAddress: string | null;
+  isNative: boolean | undefined;
+}
+
+const tokenInfoCache = new Map<string, TokenInfo>();
+
+/**
+ * What Circle knows about a token id, or null if it could not be looked up.
+ *
+ * A chain deposit needs the contract address, not just the symbol: "is this
+ * USDC" is answered by the contract (see lib/wallet/network.ts), and a symbol
+ * alone is what an airdropped impostor supplies. Like the symbol, it never
+ * changes for a given id, so it is cached; a failure is not.
+ */
+export async function getTokenInfo(tokenId: string): Promise<TokenInfo | null> {
+  const cached = tokenInfoCache.get(tokenId);
   if (cached) return cached;
 
   try {
     const client = getCircleClient();
     const response = await client.getToken({ id: tokenId });
     const token = response.data?.token;
-    const symbol = token?.symbol ?? "UNKNOWN";
-
-    // This symbol goes straight into "💰 Received 5 USDC". A token that calls
-    // itself USDC without being Arc's is reported as UNKNOWN rather than
-    // credited by name — the notification is the whole point of the spoof.
-    const named = isRecognisedUsdc({
-      symbol,
-      tokenAddress: token?.tokenAddress ?? null,
-      isNative: token?.isNative,
-    })
-      ? symbol
-      : "UNKNOWN";
-
-    tokenSymbolCache.set(tokenId, named);
-    return named;
+    if (!token) return null;
+    const info: TokenInfo = {
+      symbol: token.symbol ?? "UNKNOWN",
+      tokenAddress: token.tokenAddress ?? null,
+      isNative: token.isNative,
+    };
+    tokenInfoCache.set(tokenId, info);
+    return info;
   } catch (err) {
-    // Don't cache a failure, and don't let a Circle API hiccup take down
-    // the whole "you received money" notification — worst case the user
-    // sees "UNKNOWN" instead of the real symbol, not silence.
-    console.error("[circle] getTokenSymbol lookup failed", { tokenId, err });
-    return "UNKNOWN";
+    console.error("[circle] getTokenInfo lookup failed", { tokenId, err });
+    return null;
   }
+}
+
+export async function getTokenSymbol(tokenId: string): Promise<string> {
+  const cached = tokenSymbolCache.get(tokenId);
+  if (cached) return cached;
+
+  const info = await getTokenInfo(tokenId);
+  // Don't cache a failure, and don't let a Circle API hiccup take down
+  // the whole "you received money" notification — worst case the user
+  // sees "UNKNOWN" instead of the real symbol, not silence.
+  if (!info) return "UNKNOWN";
+
+  // This symbol goes straight into "💰 Received 5 USDC". A token that calls
+  // itself USDC without being Arc's is reported as UNKNOWN rather than
+  // credited by name — the notification is the whole point of the spoof.
+  const named = isRecognisedUsdc(info) ? info.symbol : "UNKNOWN";
+
+  tokenSymbolCache.set(tokenId, named);
+  return named;
+}
+
+export interface DerivedWallet {
+  walletId: string;
+  address: string;
+}
+
+/**
+ * Adds a Circle wallet record on another chain for the SAME address as an
+ * existing wallet of the user's.
+ *
+ * Idempotent on Circle's side: if the target wallet already exists it is
+ * returned with its metadata updated, so a retry after a crash between this
+ * call and the row that records it is safe.
+ *
+ * Two things are checked on what comes back, because both would otherwise be
+ * wrong quietly. The blockchain must be the one asked for, and the address
+ * must be the one the user already has — the whole premise is that a user's
+ * address does not change, and a derive that returned a different one would
+ * mean telling them to receive somewhere they had not been told about.
+ */
+export async function deriveWalletOnChain(
+  sourceWalletId: string,
+  blockchain: string,
+  expectedAddress: string,
+): Promise<DerivedWallet> {
+  const client = getCircleClient();
+  const response = await client.deriveWallet({
+    id: sourceWalletId,
+    // The SDK types the codes it knew at release. A chain added later is
+    // valid to Circle and unknown to the union, and is checked by Circle.
+    blockchain: blockchain as EvmBlockchain,
+  });
+
+  const wallet = response.data?.wallet;
+  if (!wallet?.id || !wallet?.address) {
+    throw new Error(`Circle deriveWallet returned no wallet (blockchain=${blockchain})`);
+  }
+  if (wallet.blockchain !== blockchain) {
+    throw new Error(
+      `Circle derived a wallet on ${wallet.blockchain ?? "an unstated network"}, expected ${blockchain}`,
+    );
+  }
+  if (wallet.address.toLowerCase() !== expectedAddress.toLowerCase()) {
+    throw new Error(
+      `Circle derived a different address on ${blockchain} (${shortenForLog(wallet.address)} vs ${shortenForLog(expectedAddress)}); refusing to record it`,
+    );
+  }
+
+  return { walletId: wallet.id, address: wallet.address };
 }
 
 export interface SendUsdcArgs {

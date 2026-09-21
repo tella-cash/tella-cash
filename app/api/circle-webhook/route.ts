@@ -3,8 +3,11 @@ import { findUserByCircleWalletId, findUserByWalletAddress } from "@/lib/users/r
 import { notifyUser, notifyUserWithImage } from "@/lib/messaging/notify";
 import { recordTransaction, markOutboundComplete } from "@/lib/transactions/repository";
 import { getUsdToNgnRate, usdToNgn } from "@/lib/fx/naira";
-import { getTokenSymbol, getFormattedBalanceLines } from "@/lib/wallet/circle";
-import { arcNetwork, explorerTxUrl } from "@/lib/wallet/network";
+import { getTokenInfo, getTokenSymbol } from "@/lib/wallet/circle";
+import { arcNetwork, explorerTxUrl, isRecognisedUsdcAt } from "@/lib/wallet/network";
+import { loadPortfolio, portfolioLines } from "@/lib/wallet/portfolio";
+import { findChainByBlockchain } from "@/lib/chains/config";
+import { findChainWalletOwner } from "@/lib/chains/wallets";
 import { verifyCircleWebhook } from "@/lib/circle/verify-webhook";
 import {
   claimNotification,
@@ -74,14 +77,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  // A notification from another network is not about any wallet this
-  // deployment manages, whatever its walletId says. Acked so Circle stops
+  // A notification from a network this deployment does not watch is not about
+  // any wallet it manages, whatever its walletId says. Acked so Circle stops
   // retrying, and otherwise ignored.
-  if (payload.notification?.blockchain && payload.notification.blockchain !== arcNetwork()) {
-    console.warn("[circle-webhook] ignoring notification for another network", {
-      blockchain: payload.notification.blockchain,
-    });
-    return NextResponse.json({ received: true }, { status: 200 });
+  //
+  // "Watches" is Arc plus every chain in tella_chains. A lookup that FAILS is
+  // not the same as a chain that is not there: answering 200 to a deposit
+  // notification because the database blinked would drop it for good, so that
+  // case is a 500 and Circle tries again.
+  const blockchain = payload.notification?.blockchain;
+  if (blockchain && blockchain !== arcNetwork()) {
+    let watched = false;
+    try {
+      watched = (await findChainByBlockchain(blockchain)) !== null;
+    } catch (err) {
+      console.error("[circle-webhook] chain lookup failed", { blockchain, err });
+      return NextResponse.json({ error: "Lookup failed" }, { status: 500 });
+    }
+    if (!watched) {
+      console.warn("[circle-webhook] ignoring notification for another network", {
+        blockchain,
+      });
+      return NextResponse.json({ received: true }, { status: 200 });
+    }
   }
 
   console.log("[circle-webhook] received", {
@@ -187,6 +205,15 @@ async function processNotification(payload: CircleNotification) {
 async function handleInboundTransaction(
   notification: CircleNotification["notification"],
 ) {
+  // A deposit on a chain other than Arc. Kept apart rather than threaded
+  // through the Arc path below: the two answer "is this USDC" differently
+  // (a per-chain contract, and no native USDC), report different balances and
+  // link to different explorers, and the Arc path has been correct for a long
+  // time.
+  if (notification.blockchain !== arcNetwork()) {
+    return handleInboundChainDeposit(notification);
+  }
+
   const user = await findUserByCircleWalletId(notification.walletId);
   if (!user) {
     console.warn("[circle-webhook] no user for walletId", {
@@ -212,7 +239,9 @@ async function handleInboundTransaction(
   let balanceLines: string[] = [];
   try {
     if (user.circle_wallet_id) {
-      balanceLines = await getFormattedBalanceLines(user.circle_wallet_id);
+      // Arc and any other chain they hold USDC on, so the card agrees with
+      // what "balance" says.
+      balanceLines = portfolioLines(await loadPortfolio(user, user.circle_wallet_id));
     }
   } catch (err) {
     console.error("[circle-webhook] balance fetch for notification image failed", {
@@ -300,6 +329,122 @@ async function handleInboundTransaction(
 }
 
 /**
+ * Handle a completed inbound transfer on a chain other than Arc.
+ *
+ * Only genuine USDC is announced, and "genuine" means the contract recorded
+ * for that chain in tella_chains. Everything else — ETH for gas, airdropped
+ * tokens, a token that merely calls itself USDC — is logged and left alone.
+ * That is a policy, not a shortcut: anyone can send any token to any address
+ * on these chains, so announcing what arrives would let a stranger make the
+ * bot message a user with text of the stranger's choosing. The balance reply
+ * applies the same rule, so what is announced and what is shown agree.
+ *
+ * The money is in the user's wallet on that chain and counts towards what
+ * "balance" shows, but a send draws on Arc, and the message says so rather
+ * than implying it can be spent yet.
+ */
+async function handleInboundChainDeposit(
+  notification: CircleNotification["notification"],
+) {
+  const owner = await findChainWalletOwner(notification.walletId);
+  if (!owner) {
+    console.warn("[circle-webhook] no user for chain walletId", {
+      walletId: notification.walletId,
+      blockchain: notification.blockchain,
+    });
+    return;
+  }
+  const { user, chain } = owner;
+
+  // The wallet id and the blockchain on the notification must describe the
+  // same chain. They can only disagree if something upstream is wrong, and
+  // crediting against the wrong chain's contract is the failure that matters.
+  if (chain.blockchain !== notification.blockchain) {
+    console.error("[circle-webhook] chain wallet / blockchain mismatch", {
+      walletId: notification.walletId,
+      expected: chain.blockchain,
+      got: notification.blockchain,
+    });
+    return;
+  }
+
+  if (!notification.tokenId) {
+    console.warn("[circle-webhook] chain deposit with no token id, not announced");
+    return;
+  }
+
+  const token = await getTokenInfo(notification.tokenId);
+  if (!token) {
+    // Throwing releases the claim, so a later delivery can try again, and puts
+    // the failure in the error log rather than dropping a deposit silently.
+    throw new Error(`token lookup failed for chain deposit (tokenId=${notification.tokenId})`);
+  }
+
+  if (token.symbol !== "USDC" || !isRecognisedUsdcAt(token, chain.usdc_address)) {
+    console.log("[circle-webhook] non-USDC deposit on chain, not announced", {
+      blockchain: chain.blockchain,
+      symbol: token.symbol,
+    });
+    return;
+  }
+
+  const amount = notification.amounts?.[0] ?? "0";
+  if (!(parseFloat(amount) > 0)) return;
+
+  const senderUser = notification.sourceAddress
+    ? await findUserByWalletAddress(notification.sourceAddress)
+    : null;
+  const sourceLabel = senderUser?.profile_name ?? shortenAddress(notification.sourceAddress);
+
+  const explorerLink = notification.txHash
+    ? `${chain.explorer_tx_url}/${notification.txHash}`
+    : null;
+
+  await notifyUser({
+    user,
+    body: [
+      `💰 Received ${amount} USDC on ${chain.display_name}`,
+      "",
+      `From: ${sourceLabel}`,
+      ...(explorerLink ? ["", explorerLink] : []),
+      "",
+      `It's in your wallet on ${chain.display_name} and shows in your balance. Sends use your Arc balance for now, so it can't be sent from yet.`,
+      "",
+      `Ask me "what's my balance?" to see everything.`,
+    ].join("\n"),
+  });
+
+  try {
+    const rate = await getUsdToNgnRate();
+    await recordTransaction({
+      userId: user.id,
+      direction: "received",
+      amountUsdc: amount,
+      amountNgn: String(usdToNgn(parseFloat(amount), rate)),
+      token: "USDC",
+      counterpartyLabel: sourceLabel,
+      counterpartyAddress: notification.sourceAddress ?? null,
+      txHash: notification.txHash ?? null,
+      // Circle's transaction id, so the unique index from migration 0011 can
+      // refuse a second row for this same transfer, as it does on Arc.
+      circleTransactionId: notification.id,
+      status: "complete",
+      blockchain: chain.blockchain,
+    });
+  } catch (err) {
+    console.error("[circle-webhook] chain deposit record failed", { userId: user.id, err });
+  }
+
+  await maybeOfferAccountSecurity(user);
+
+  console.log("[circle-webhook] notified user of chain deposit", {
+    userId: user.id,
+    blockchain: chain.blockchain,
+    amount,
+  });
+}
+
+/**
  * Offer to secure the account, once, at the first moment the user has
  * something to lose.
  *
@@ -374,6 +519,16 @@ async function maybeOfferAccountSecurity(user: tellaUser): Promise<void> {
 async function handleOutboundTransaction(
   notification: CircleNotification["notification"],
 ) {
+  // tella sends only from Arc. An outbound on another chain is not one of
+  // ours to announce or record — and a user is never told they "sent" money
+  // they did not send.
+  if (notification.blockchain !== arcNetwork()) {
+    console.log("[circle-webhook] outbound on another network, not announced", {
+      blockchain: notification.blockchain,
+    });
+    return;
+  }
+
   if (!notification.txHash) {
     console.warn("[circle-webhook] outbound complete but no txHash", {
       walletId: notification.walletId,

@@ -2,7 +2,9 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { ADMIN_COOKIE_NAME, readAdminCookie } from "@/lib/admin/session";
 import { loadDashboard } from "@/lib/analytics/queries";
+import { currentChainNetwork, listAllChains } from "@/lib/chains/config";
 import { Dashboard } from "./dashboard";
+import type { ChainRow } from "./chains-card";
 
 export const dynamic = "force-dynamic";
 
@@ -35,5 +37,27 @@ export default async function AdminPage() {
   }
 
   const data = await loadDashboard();
-  return <Dashboard data={data} email={identity.email} />;
+
+  // Read separately from the analytics, and allowed to fail on its own: an
+  // unapplied migration must leave the dashboard's numbers on screen and say
+  // what is wrong in the one card that needs it, not take the whole page down.
+  const network = currentChainNetwork();
+  let chains: ChainRow[] | null = null;
+  try {
+    chains = (await listAllChains())
+      .filter((c) => c.network === network)
+      .map((c) => ({
+        id: c.id,
+        displayName: c.display_name,
+        blockchain: c.blockchain,
+        usdcAddress: c.usdc_address,
+        cctpDomain: c.cctp_domain,
+        addedBy: c.added_by,
+        createdAt: c.created_at,
+      }));
+  } catch (err) {
+    console.error("[admin] chains failed to load", err);
+  }
+
+  return <Dashboard data={data} email={identity.email} chains={chains} network={network} />;
 }

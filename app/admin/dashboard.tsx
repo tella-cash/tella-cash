@@ -1,5 +1,7 @@
 import type { DashboardData, DayPoint, FunnelStage } from "@/lib/analytics/queries";
 import { isMainnet } from "@/lib/wallet/network";
+import type { ChainNetwork } from "@/lib/chains/validate";
+import { ChainsCard, type ChainRow } from "./chains-card";
 
 /**
  * The dashboard, rendered server-side as plain HTML and SVG.
@@ -25,9 +27,13 @@ const SERIES = {
 export function Dashboard({
   data,
   email,
+  chains,
+  network,
 }: {
   data: DashboardData;
   email: string;
+  chains: ChainRow[] | null;
+  network: ChainNetwork;
 }) {
   const { headline, funnel, daily, channels, security } = data;
 
@@ -124,6 +130,8 @@ export function Dashboard({
             </Card>
           </div>
         </div>
+
+        <ChainsCard chains={chains} network={network} />
       </div>
     </div>
   );

@@ -35,7 +35,11 @@ export type AlertKind =
   // A wallet holds a token whose symbol claims to be USDC while its contract
   // is not Arc's. Ignored by the balance and send paths, and worth a look:
   // it is a deliberate act by somebody.
-  | "impostor_token";
+  | "impostor_token"
+  // An admin added a network tella now accepts deposits on. Permanent, and
+  // it changes what users are told to expect, so it is announced rather than
+  // left to be discovered in the table.
+  | "chain_added";
 
 interface AlertPayload {
   kind: AlertKind;

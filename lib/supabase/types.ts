@@ -327,5 +327,41 @@ export interface tellaTransaction {
   tx_hash: string | null;
   circle_transaction_id: string | null;
   status: TransactionStatus;
+  /**
+   * The chain a deposit arrived on, as Circle names it (BASE, BASE-SEPOLIA).
+   * Null means the deployment's Arc network, which is every row that predates
+   * migrations/0028_chains.sql.
+   */
+  blockchain: string | null;
+  created_at: string;
+}
+
+/**
+ * A network tella accepts deposits on besides Arc. Add-only — see
+ * migrations/0028_chains.sql for why, and lib/chains/config.ts for who reads it.
+ */
+export interface tellaChain {
+  id: string;
+  slug: string;
+  display_name: string;
+  network: "mainnet" | "testnet";
+  /** Circle's code for this network: BASE, BASE-SEPOLIA, ... */
+  blockchain: string;
+  /** Lowercased. The only contract on this chain that counts as USDC. */
+  usdc_address: string;
+  cctp_domain: number;
+  /** Prefix of a transaction link, no trailing slash. */
+  explorer_tx_url: string;
+  added_by: string | null;
+  created_at: string;
+}
+
+/** A user's Circle wallet record on one non-Arc chain. Same address as their Arc wallet. */
+export interface tellaUserChainWallet {
+  id: string;
+  user_id: string;
+  chain_id: string;
+  circle_wallet_id: string;
+  address: string;
   created_at: string;
 }

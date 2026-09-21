@@ -93,10 +93,35 @@ export function isRecognisedUsdc(token: {
   tokenAddress: string | null;
   isNative?: boolean;
 }): boolean {
+  return isRecognisedUsdcAt(token, arcUsdcAddress(), true);
+}
+
+/**
+ * The same question for a chain other than Arc, where the official USDC
+ * contract comes from tella_chains instead of the constant above.
+ *
+ * The rule is identical — a token is USDC because of its contract, not its
+ * name — with one difference: there is no such thing as native USDC. On Arc
+ * the gas token IS USDC, so a native entry with that symbol is real. On Base
+ * the native asset is ETH, so a native entry calling itself USDC is exactly
+ * the disguise this exists to catch, and allowNative is false.
+ *
+ * `allowNative` is a parameter rather than being inferred from the address so
+ * that the one place it is true (Arc, via isRecognisedUsdc) says so out loud.
+ */
+export function isRecognisedUsdcAt(
+  token: {
+    symbol: string;
+    tokenAddress: string | null;
+    isNative?: boolean;
+  },
+  usdcAddress: string,
+  allowNative = false,
+): boolean {
   if (token.symbol !== "USDC") return true;
-  if (token.isNative === true) return true;
+  if (token.isNative === true) return allowNative;
   // Circle reports the native entry with no contract address at all; an
   // ERC-20, impostor or not, always carries one.
-  if (token.tokenAddress === null) return token.isNative !== false;
-  return token.tokenAddress.toLowerCase() === arcUsdcAddress();
+  if (token.tokenAddress === null) return allowNative && token.isNative !== false;
+  return token.tokenAddress.toLowerCase() === usdcAddress.toLowerCase();
 }

@@ -11,7 +11,7 @@
  */
 
 import { collapseBySymbol, dedupeSameToken, type RawBalance, pickSpendableUsdc } from "./circle";
-import { isRecognisedUsdc, arcUsdcAddress } from "./network";
+import { isRecognisedUsdc, isRecognisedUsdcAt, arcUsdcAddress } from "./network";
 
 /** The real shape, from wallet 108aae8a on ARC-TESTNET. */
 const ARC_NATIVE: RawBalance = {
@@ -237,6 +237,58 @@ const PIN_CHECKS: Array<[string, () => boolean]> = [
 ];
 
 CHECKS.push(...PIN_CHECKS);
+
+/**
+ * Chains other than Arc. Base USDC is a plain ERC-20 whose contract comes from
+ * tella_chains; the native asset there is ETH, so a native entry calling
+ * itself USDC is a disguise, not the Arc case.
+ */
+const BASE_USDC = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913";
+
+const CHAIN_CHECKS: Check[] = [
+  [
+    "Base USDC is recognised at Base's recorded address",
+    () => isRecognisedUsdcAt({ symbol: "USDC", tokenAddress: BASE_USDC, isNative: false }, BASE_USDC),
+  ],
+  [
+    "the address match ignores case",
+    () =>
+      isRecognisedUsdcAt(
+        { symbol: "USDC", tokenAddress: "0x833589FCD6EDB6E08F4C7C32D4F71B54BDA02913", isNative: false },
+        BASE_USDC,
+      ),
+  ],
+  [
+    "an impostor on Base is not recognised",
+    () => !isRecognisedUsdcAt(IMPOSTOR, BASE_USDC),
+  ],
+  [
+    "Arc's USDC address is not Base's",
+    () =>
+      !isRecognisedUsdcAt(
+        { symbol: "USDC", tokenAddress: arcUsdcAddress(), isNative: false },
+        BASE_USDC,
+      ),
+  ],
+  [
+    "a native entry calling itself USDC is refused off Arc",
+    () => !isRecognisedUsdcAt({ symbol: "USDC", tokenAddress: null, isNative: true }, BASE_USDC),
+  ],
+  [
+    "a USDC entry with no address and no native flag is refused off Arc",
+    () => !isRecognisedUsdcAt({ symbol: "USDC", tokenAddress: null }, BASE_USDC),
+  ],
+  [
+    "the same native entry IS accepted on Arc (unchanged)",
+    () => isRecognisedUsdc({ symbol: "USDC", tokenAddress: null, isNative: true }),
+  ],
+  [
+    "other symbols are left alone on a chain",
+    () => isRecognisedUsdcAt({ symbol: "ETH", tokenAddress: null, isNative: true }, BASE_USDC),
+  ],
+];
+
+CHECKS.push(...CHAIN_CHECKS);
 
 let passed = 0;
 const failures: string[] = [];

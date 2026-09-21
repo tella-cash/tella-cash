@@ -12,6 +12,7 @@ export async function recordTransaction({
   txHash = null,
   circleTransactionId = null,
   status,
+  blockchain = null,
 }: {
   userId: string;
   direction: TransactionDirection;
@@ -23,6 +24,8 @@ export async function recordTransaction({
   txHash?: string | null;
   circleTransactionId?: string | null;
   status: "submitted" | "complete";
+  /** The chain a deposit arrived on; null for Arc. See migrations/0028. */
+  blockchain?: string | null;
 }): Promise<tellaTransaction> {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
@@ -38,6 +41,10 @@ export async function recordTransaction({
       tx_hash: txHash,
       circle_transaction_id: circleTransactionId,
       status,
+      // Only when set. Every Arc row leaves the column out, so an Arc receipt
+      // or send still records if this code is ever running ahead of migration
+      // 0028 — only a chain deposit needs the column to exist.
+      ...(blockchain ? { blockchain } : {}),
     })
     .select()
     .single();

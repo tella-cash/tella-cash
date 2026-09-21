@@ -29,13 +29,15 @@ import {
 } from "@/lib/beneficiaries/repository";
 import { listRecentTransactions } from "@/lib/transactions/repository";
 import {
-  getWalletBalances,
   requestFaucetTokens,
   FaucetForbiddenError,
   FaucetRateLimitedError,
   type FaucetAsset,
 } from "@/lib/wallet/circle";
 import { arcNetwork, isMainnet } from "@/lib/wallet/network";
+import { loadPortfolio, portfolioLines, portfolioNotes } from "@/lib/wallet/portfolio";
+import { listUserChainWallets } from "@/lib/chains/wallets";
+import { listActiveChains } from "@/lib/chains/config";
 import { inFactorChangeWindow, FACTOR_CHANGE_HOLD_HOURS } from "@/lib/sends/tiers";
 import { findChannelByUsername } from "@/lib/messaging/channels";
 import { SITE } from "@/lib/data/site";
@@ -884,7 +886,7 @@ async function handleOnboardedUser({
     case "BALANCE":
       return { ...(await getBalanceReply(user)), choices: QUICK_CHOICES };
     case "ADDRESS":
-      return { ...addressReply(user), choices: QUICK_CHOICES };
+      return { ...(await addressReply(user)), choices: QUICK_CHOICES };
     case "HISTORY":
       return { reply: await getHistoryReply(user), choices: QUICK_CHOICES };
     case "SEND":
@@ -1029,11 +1031,15 @@ async function cancelMostRecentPendingSend(user: tellaUser): Promise<HandlerResu
 // Reads deliberately ignore the freeze. A frozen user still needs their
 // receiving address and their balance, and needs them most right after
 // freezing, while working out what happened. See lib/users/wallet-gate.ts.
-function addressReply(user: tellaUser): Pick<HandlerResult, "reply" | "followUp"> {
+async function addressReply(
+  user: tellaUser,
+): Promise<Pick<HandlerResult, "reply" | "followUp">> {
   const name = firstName(user);
   if (gateWalletReady(user).ok && user.wallet_address) {
+    const base = pickReply(REPLIES.address, { name, address: user.wallet_address });
+    const others = await otherNetworksLine(user);
     return {
-      reply: pickReply(REPLIES.address, { name, address: user.wallet_address }),
+      reply: others ? `${base}\n\n${others}` : base,
       followUp: user.wallet_address,
     };
   }
@@ -1041,6 +1047,33 @@ function addressReply(user: tellaUser): Pick<HandlerResult, "reply" | "followUp"
     return { reply: pickReply(REPLIES.walletPending, { name }) };
   }
   return { reply: pickReply(REPLIES.walletNotReady, { name }) };
+}
+
+/**
+ * "You can also receive USDC on Base at this same address" — but only for
+ * chains where THIS user already has a wallet record.
+ *
+ * A chain in tella_chains is not enough. Until Circle has a record for the
+ * user there, a deposit is invisible: no announcement, and no balance either,
+ * because balances are read per wallet. Promising Base to someone whose
+ * record has not been created yet would be promising something that silently
+ * does not work; the backfill job will add them, and this line appears then.
+ *
+ * Any failure leaves the line out. The address itself is what matters here.
+ */
+async function otherNetworksLine(user: tellaUser): Promise<string | null> {
+  try {
+    const names = (await listUserChainWallets(user.id)).map((w) => w.chain.display_name);
+    if (names.length === 0) return null;
+    const list =
+      names.length === 1
+        ? names[0]
+        : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+    return `You can also receive USDC on ${list} at this same address. It shows in your balance, though sends use your Arc balance for now.`;
+  } catch (err) {
+    console.error("[address] other networks lookup failed", { userId: user.id, err });
+    return null;
+  }
 }
 
 /**
@@ -2064,25 +2097,34 @@ async function getBalanceReply(
     return { reply: pickReply(REPLIES.walletNotReady, { name }) };
   }
 
-  let balances;
+  let portfolio;
   try {
-    balances = await getWalletBalances(gate.walletId);
+    portfolio = await loadPortfolio(user, gate.walletId);
   } catch (err) {
     console.error("[balance] fetch failed", { userId: user.id, err });
     return { reply: pickReply(REPLIES.balanceError, { name }) };
   }
 
-  const nonZero = balances.filter((b) => parseFloat(b.amount) > 0);
-  if (nonZero.length === 0) {
+  const lines = portfolioLines(portfolio).map((l) => `• ${l}`);
+  const notes = portfolioNotes(portfolio);
+
+  if (lines.length === 0) {
+    // "You have nothing" is a claim. If a chain could not be read, it is one
+    // this reply cannot make, so say what could not be checked instead.
+    if (notes.length > 0) return { reply: notes.join("\n") };
     return {
       reply: pickReply(REPLIES.balanceEmpty, { name }),
       followUp: user.wallet_address ?? undefined,
     };
   }
 
-  const lines = nonZero.map((b) => `• ${b.amount} ${b.symbol}`);
   return {
-    reply: [pickReply(REPLIES.balanceIntro, { name }), "", ...lines].join("\n"),
+    reply: [
+      pickReply(REPLIES.balanceIntro, { name }),
+      "",
+      ...lines,
+      ...(notes.length > 0 ? ["", ...notes] : []),
+    ].join("\n"),
   };
 }
 
@@ -2105,11 +2147,18 @@ async function getHistoryReply(user: tellaUser): Promise<string> {
     minute: "2-digit",
   });
 
+  // A row with a chain on it is a deposit that arrived somewhere other than
+  // Arc, and reads differently for it. A failed lookup only costs the suffix.
+  const chainNames = new Map(
+    (await listActiveChains().catch(() => [])).map((c) => [c.blockchain, c.display_name]),
+  );
+
   const lines = transactions.map((t, i) => {
     const verb = t.direction === "sent" ? "Sent" : "Received";
     const counterparty = t.counterparty_label ?? "an external wallet";
     const preposition = t.direction === "sent" ? "to" : "from";
-    const amount = `${t.amount_usdc} USDC`;
+    const onChain = t.blockchain ? chainNames.get(t.blockchain) : undefined;
+    const amount = `${t.amount_usdc} USDC${onChain ? ` on ${onChain}` : ""}`;
     const when = dateFormatter.format(new Date(t.created_at));
     return [
       `${i + 1}️⃣ ${DIRECTION_ICON[t.direction]} ${verb} ${amount} ${preposition} ${counterparty}`,

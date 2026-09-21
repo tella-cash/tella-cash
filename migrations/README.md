@@ -478,6 +478,34 @@ Moves any `twilio` rows in `tella_users.whatsapp_channel` and
 `tella_user_channel.provider` to `meta` and sets the column default to `meta`.
 WhatsApp runs only on the Meta Cloud API now.
 
+### `0028_chains.sql` — apply BEFORE the code that uses it
+
+Lets a user be paid on chains other than Arc, at the same address.
+
+- `tella_chains`: the networks tella watches besides Arc (Base is seeded, for
+  mainnet and testnet). **Add-only**: a trigger refuses `UPDATE` and `DELETE`,
+  and `usdc_address` — the one contract counted as USDC on that chain — is
+  security-critical, so a row is permanent once written. New rows come from the
+  admin dashboard's Networks card. To correct a row deliberately, disable the
+  `tella_chains_immutable` trigger, fix it, and enable it again (the header of
+  the file has the statements). A chain that any user holds a wallet on cannot
+  be deleted even then.
+- `tella_user_chain_wallets`: one Circle wallet record per user per chain. Same
+  address as the Arc wallet; the record is what lets Circle report a balance and
+  fire a webhook on that chain.
+- `tella_users_missing_chain_wallet(chain, wallet_network, limit)`: drives the
+  backfill. Service role only.
+- `tella_transactions.blockchain`: which chain a deposit arrived on; null is Arc.
+
+Deploying the code without it breaks the Networks card (it says so and the rest
+of the dashboard is unaffected) and chain deposits; balance, Arc receipts and
+sends keep working, because the new column is only written for a chain deposit.
+
+After applying, the new `chain-wallets` cron job (every 30 minutes, see
+`.github/workflows/cron.yml`) gives every existing user a wallet record on Base.
+Until it has reached a user, a deposit to them on Base is on chain but not
+announced and not in their balance.
+
 ### Environment added alongside 0007–0015
 
 ```

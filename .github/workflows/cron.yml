@@ -33,6 +33,13 @@ on:
     # a user waiting on a wallet notices minutes, not seconds.
     - cron: "7,37 * * * *"
 
+    # Gives every user a wallet record on each chain tella watches besides
+    # Arc, including a chain an admin added after they signed up. Every 30
+    # minutes, offset from retry-wallets so the two never hit Circle at once;
+    # a deposit made before this runs is still on chain and is found by the
+    # balance, it just was not announced.
+    - cron: "11,41 * * * *"
+
     # Deletes expired rows: pending sends, challenges, dedupe keys, old
     # tokens. Daily at 03:17 UTC, matching what vercel.json did.
     - cron: "17 3 * * *"
@@ -49,6 +56,7 @@ on:
         options:
           - release-holds
           - retry-wallets
+          - chain-wallets
           - cleanup
 
 # Two runs of the same job overlapping would be harmless (every route claims
@@ -69,6 +77,7 @@ jobs:
           case "${{ github.event.schedule }}" in
             "3,13,23,33,43,53 * * * *") JOB=release-holds ;;
             "7,37 * * * *")             JOB=retry-wallets ;;
+            "11,41 * * * *")            JOB=chain-wallets ;;
             "17 3 * * *")               JOB=cleanup ;;
             *)                          JOB="${{ inputs.job }}" ;;
           esac
