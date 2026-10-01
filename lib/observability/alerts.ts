@@ -39,7 +39,14 @@ export type AlertKind =
   // An admin added a network tella now accepts deposits on. Permanent, and
   // it changes what users are told to expect, so it is announced rather than
   // left to be discovered in the table.
-  | "chain_added";
+  | "chain_added"
+  // A sweep cannot move on without a person: the user's USDC is in tella's
+  // sweeper wallet, or burned and not minted. Money in limbo, so never quiet.
+  | "sweep_stuck"
+  // A burn has been in flight longer than Circle normally takes. Not yet a
+  // failure — Circle's mint has lagged before — but the point at which
+  // someone should look at Arc.
+  | "sweep_stalled";
 
 interface AlertPayload {
   kind: AlertKind;

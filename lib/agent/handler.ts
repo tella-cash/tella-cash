@@ -44,6 +44,8 @@ import { SITE } from "@/lib/data/site";
 import { telegramDeepLink } from "@/lib/telegram/deep-link";
 import { getUsdToNgnRate, usdToNgn } from "@/lib/fx/naira";
 import { checkSendLimits, formatLimitFailure } from "@/lib/sends/limits";
+import { quoteSweepFunding } from "@/lib/sweeps/fund";
+import { sweepInsufficientText, sweepQuoteLines } from "@/lib/sweeps/messages";
 import { isResetRequest } from "@/lib/agent/detect-reset-request";
 import { isFreezeRequest } from "@/lib/agent/detect-freeze-request";
 import { isUnfreezeRequest } from "@/lib/agent/detect-unfreeze-request";
@@ -1529,8 +1531,23 @@ async function startSendFlow({
   // balance" after tapping through a biometric prompt is a worse experience
   // than being told now. executePendingSend re-checks authoritatively.
   const limits = await checkSendLimits({ user, amount: intent.amount });
+  // Short on Arc is not the end when the user holds the rest on another
+  // chain: say what moving it would cost, then mint the link as usual. Only
+  // for a shortfall, and quoteSweepFunding is null whenever sweeps are off or
+  // anything is in doubt, which leaves the ordinary refusal.
+  let sweepNote: string[] | null = null;
   if (!limits.ok) {
-    return { reply: formatLimitFailure(limits.failure), choices: QUICK_CHOICES };
+    const quote =
+      limits.failure.kind === "insufficient"
+        ? await quoteSweepFunding({ user, amount: intent.amount })
+        : null;
+    if (quote?.kind === "sweep") {
+      sweepNote = sweepQuoteLines(quote, recipientName ?? recipientAddress);
+    } else if (quote?.kind === "insufficient") {
+      return { reply: sweepInsufficientText(quote), choices: QUICK_CHOICES };
+    } else {
+      return { reply: formatLimitFailure(limits.failure), choices: QUICK_CHOICES };
+    }
   }
 
   const rate = await getUsdToNgnRate();
@@ -1551,7 +1568,8 @@ async function startSendFlow({
     },
   });
 
-  return confirmResult(pending);
+  const confirm = confirmResult(pending);
+  return sweepNote ? { ...confirm, reply: [...sweepNote, "", confirm.reply].join("\n") } : confirm;
 }
 
 /**

@@ -2,6 +2,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { FreezeSource, PendingSend } from "@/lib/supabase/types";
 import { revokeAllSecurityTokens } from "@/lib/security/reset-tokens";
 import { cancelAllHeldSends } from "@/lib/held_sends/repository";
+import { cancelSweepingSendsForUser } from "@/lib/sweeps/send-repository";
 import { deletePending, getActivePending } from "@/lib/pending_actions/repository";
 import { raiseAlert } from "@/lib/observability/alerts";
 
@@ -82,6 +83,22 @@ export async function freezeAccount({
     raiseAlert({
       kind: "account_frozen",
       message: "Account frozen but queued transfers could not be cancelled. Check tella_held_send.",
+      context: { source },
+      force: true,
+    });
+  }
+
+  // Sends parked behind a sweep are queued transfers too: the money is on its
+  // way to Arc and the send fires when it lands. The settle job re-checks the
+  // freeze before sending, so this is belt and braces for the same reason as
+  // above, and it is what lets the user see them stop.
+  try {
+    await cancelSweepingSendsForUser(userId, "freeze");
+  } catch (err) {
+    console.error("[freeze] cancelling sends parked behind a sweep failed", { userId, err });
+    raiseAlert({
+      kind: "account_frozen",
+      message: "Account frozen but sends waiting on a sweep could not be cancelled. Check tella_sweep_send.",
       context: { source },
       force: true,
     });

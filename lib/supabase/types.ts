@@ -365,3 +365,68 @@ export interface tellaUserChainWallet {
   address: string;
   created_at: string;
 }
+
+/**
+ * Where a sweep has got to. See migrations/0029_sweeps.sql for what each state
+ * means and, more to the point, which two are terminal and which one is a
+ * person's problem.
+ */
+export type SweepStatus =
+  | "created"
+  | "pull_submitted"
+  | "pulled"
+  | "approve_submitted"
+  | "approved"
+  | "burn_submitted"
+  | "burned"
+  | "delivered"
+  | "failed"
+  | "stuck";
+
+/** One move of a user's USDC from another chain onto Arc, over CCTP. */
+export interface tellaSweep {
+  id: string;
+  user_id: string;
+  chain_id: string;
+  status: SweepStatus;
+  /** Integer micro-USDC as text. Parse with microFromDb, never Number(). */
+  amount_micro: string;
+  max_fee_micro: string;
+  finality_threshold: 1000 | 2000;
+  address: string;
+  auth_nonce: string;
+  auth_valid_before: string;
+  pull_circle_tx_id: string | null;
+  approve_circle_tx_id: string | null;
+  burn_circle_tx_id: string | null;
+  burn_tx_hash: string | null;
+  forward_tx_hash: string | null;
+  /** Set once, by the webhook, when the Arc mint has been matched to this sweep. */
+  mint_matched_at: string | null;
+  /** The parked send this leg is funding, if any. See migrations/0031_sweep_sends.sql. */
+  sweep_send_id: string | null;
+  detail: string | null;
+  created_at: string;
+  updated_at: string;
+  /** When the CURRENT step began. Not bumped by a poll that found nothing new. */
+  progressed_at: string;
+}
+
+export type SweepSendState = "sweeping" | "executing" | "sent" | "failed" | "unknown" | "cancelled";
+
+/**
+ * A confirmed send waiting for the sweep that will fund it. `quote` is the
+ * snapshot the user was shown (see lib/sweeps/snapshot.ts), executed from as
+ * written.
+ */
+export interface tellaSweepSend {
+  id: string;
+  user_id: string;
+  payload: SendPayload;
+  quote: unknown;
+  state: SweepSendState;
+  detail: string | null;
+  circle_transaction_id: string | null;
+  created_at: string;
+  updated_at: string;
+}

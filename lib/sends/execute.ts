@@ -18,6 +18,8 @@ import {
   attachCircleTransactionId,
 } from "@/lib/transactions/repository";
 import { DAILY_WINDOW_HOURS } from "./limits";
+import { fundSendBySweep } from "@/lib/sweeps/fund";
+import { sweepStartedText } from "@/lib/sweeps/messages";
 
 export type ExecuteSendResult =
   | {
@@ -39,6 +41,12 @@ export type ExecuteSendResult =
   // must not tell the user their balance is unchanged.
   | { ok: false; reason: "transfer_unknown" }
   | { ok: false; reason: "limit"; failure: LimitFailure }
+  /**
+   * Authorized, and Arc is short, but the user holds enough on another chain.
+   * A sweep is moving it and the send runs when it lands. Like "held", not a
+   * failure: the user proved their factor and the money is on its way.
+   */
+  | { ok: false; reason: "sweeping"; amount: string; recipientLabel: string }
   /**
    * Authorized, but above the hold threshold, so it executes later.
    *
@@ -121,6 +129,19 @@ export async function executePendingSend({
   // balance can drop and other sends can eat the daily allowance.
   const limits = await checkSendLimits({ user, amount: p.amount });
   if (!limits.ok) {
+    // Short on Arc but not necessarily short: USDC the user holds on another
+    // chain can be moved over first. Only ever tried for a shortfall, only
+    // when sweeps are switched on, and a null answer is the old refusal.
+    if (limits.failure.kind === "insufficient") {
+      const funded = await fundSendBySweep({ user, pending: claimed });
+      if (funded) {
+        // The parked send is now the record of this one. Retired like a held
+        // send's link, for the same reason: a live link for a send that is
+        // already waiting would let a second tap park it twice.
+        await deletePendingSend(claimed.id);
+        return { ok: false, reason: "sweeping", amount: p.amount, recipientLabel: recipientLabelFor(p) };
+      }
+    }
     // Nothing was sent, so the link is safely retired rather than left
     // claimed-but-unresolved.
     await deletePendingSend(claimed.id);
@@ -388,6 +409,9 @@ export function sendFailureStatus(
       // Not 403: the request is well-formed and the caller is authorized.
       // The account's own state forbids it, which is what 409 is for.
       return 409;
+    case "sweeping":
+      // 202 for the same reason as "held": accepted, and it will happen.
+      return 202;
     case "held":
       // 202: accepted, and it will happen. The confirm page reads this as a
       // success with a different message, not as a rejection.
@@ -415,6 +439,8 @@ export function formatSendResultForChat(result: ExecuteSendResult): string {
           "",
           'Reply *cancel send* any time before then and nothing moves.',
         ].join("\n");
+      case "sweeping":
+        return sweepStartedText(result.amount, result.recipientLabel);
       case "frozen":
         return [
           "Your account is frozen, so I didn't send that.",

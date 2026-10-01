@@ -8,6 +8,9 @@ import { arcNetwork, explorerTxUrl, isRecognisedUsdcAt } from "@/lib/wallet/netw
 import { loadPortfolio, portfolioLines } from "@/lib/wallet/portfolio";
 import { findChainByBlockchain } from "@/lib/chains/config";
 import { findChainWalletOwner } from "@/lib/chains/wallets";
+import { isSweeperWalletId } from "@/lib/sweeps/sweeper";
+import { claimSweepMint } from "@/lib/sweeps/mint-match";
+import { parseMicroTruncating } from "@/lib/sweeps/micro";
 import { verifyCircleWebhook } from "@/lib/circle/verify-webhook";
 import {
   claimNotification,
@@ -205,6 +208,16 @@ async function processNotification(payload: CircleNotification) {
 async function handleInboundTransaction(
   notification: CircleNotification["notification"],
 ) {
+  // tella's own sweeper wallet receiving a user's pull is plumbing, not a
+  // deposit. Checked before anything looks the wallet up, so it is never
+  // mistaken for a user's and never logged as an unknown one.
+  if (isSweeperWalletId(notification.walletId)) {
+    console.log("[circle-webhook] sweeper wallet inbound, not announced", {
+      blockchain: notification.blockchain,
+    });
+    return;
+  }
+
   // A deposit on a chain other than Arc. Kept apart rather than threaded
   // through the Arc path below: the two answer "is this USDC" differently
   // (a per-chain contract, and no native USDC), report different balances and
@@ -230,6 +243,38 @@ async function handleInboundTransaction(
     tokenId: notification.tokenId,
     resolvedSymbol: token,
   });
+
+  // Only USDC is announced. Anyone can send any token to any address, and a
+  // message that repeats what a stranger's token is called is a channel for
+  // whatever that name says. `token` is "USDC" only when the contract is Arc's
+  // (getTokenSymbol), so a token that merely claims the name lands here too.
+  // The balance reply follows the same rule, so what is announced and what is
+  // shown agree.
+  if (token !== "USDC") {
+    console.log("[circle-webhook] non-USDC inbound on Arc, not announced", {
+      resolvedSymbol: token,
+    });
+    return;
+  }
+
+  // The mint that ends a sweep is the user's own money arriving from another
+  // chain, already accounted for by the send that asked for it. A lookup that
+  // fails throws, releasing the claim: guessing "not a sweep" is how a false
+  // "Received" gets sent.
+  const amountMicro = parseMicroTruncating(amount);
+  if (amountMicro !== null) {
+    const swept = await claimSweepMint(user.id, {
+      amountMicro,
+      txHash: notification.txHash ?? null,
+      now: Date.now(),
+    });
+    if (swept) {
+      console.log("[circle-webhook] inbound is the mint of a sweep, not announced", {
+        sweepId: swept.id,
+      });
+      return;
+    }
+  }
 
   const senderUser = notification.sourceAddress
     ? await findUserByWalletAddress(notification.sourceAddress)
@@ -291,11 +336,9 @@ async function handleInboundTransaction(
     await notifyUser({ user, body: fallbackText });
   }
 
-  // tella's money-tracking (history, Naira conversion) is USDC-only by
-  // design — a EURC/cirBTC receipt still gets the WhatsApp notification
-  // above (accurately labeled), just not a transaction-history row shaped
-  // for a currency it isn't.
-  if (token === "USDC") {
+  // tella's money-tracking (history, Naira conversion) is USDC-only, and so
+  // is everything that reaches this point.
+  {
     try {
       const rate = await getUsdToNgnRate();
       await recordTransaction({
@@ -526,6 +569,11 @@ async function handleOutboundTransaction(
     console.log("[circle-webhook] outbound on another network, not announced", {
       blockchain: notification.blockchain,
     });
+    return;
+  }
+
+  if (isSweeperWalletId(notification.walletId)) {
+    console.log("[circle-webhook] sweeper wallet outbound, not announced");
     return;
   }
 

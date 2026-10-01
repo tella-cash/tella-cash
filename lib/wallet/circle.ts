@@ -554,6 +554,101 @@ export async function deriveWalletOnChain(
   return { walletId: wallet.id, address: wallet.address };
 }
 
+/**
+ * A Circle wallet's address and chain, by id. Used to learn the sweeper's own
+ * address, which the user's authorisation must name as its recipient.
+ */
+export async function getWalletInfo(
+  walletId: string,
+): Promise<{ address: string; blockchain: string }> {
+  const response = await getCircleClient().getWallet({ id: walletId });
+  const wallet = response.data?.wallet;
+  if (!wallet?.address || !wallet?.blockchain) {
+    throw new Error(`Circle getWallet returned no wallet (id=${shortenForLog(walletId)})`);
+  }
+  return { address: wallet.address, blockchain: wallet.blockchain };
+}
+
+/**
+ * Have a wallet sign EIP-712 typed data. `data` is the JSON payload as a
+ * string, including its EIP712Domain type.
+ */
+export async function signTypedDataWith(walletId: string, data: string, memo?: string): Promise<string> {
+  const response = await getCircleClient().signTypedData({ walletId, data, memo });
+  const signature = response.data?.signature;
+  if (!signature) throw new Error("Circle signTypedData returned no signature");
+  return signature;
+}
+
+export interface ContractCall {
+  walletId: string;
+  contractAddress: string;
+  /** e.g. "approve(address,uint256)". */
+  abiFunctionSignature: string;
+  abiParameters: Array<string | number | boolean>;
+  /** Stable per step: Circle dedupes on it, so a replay is not a second call. */
+  idempotencyKey: string;
+}
+
+/**
+ * Submit a contract call from one of tella's own wallets. Returns Circle's
+ * transaction id; the outcome arrives by polling getCircleTransaction.
+ *
+ * No `fee` is passed for a smart-contract wallet: with a Gas Station policy on
+ * its wallet set, Circle sponsors the gas and picks the fee level itself.
+ */
+export async function executeContractCall(call: ContractCall): Promise<{ transactionId: string }> {
+  const response = await getCircleClient().createContractExecutionTransaction({
+    walletId: call.walletId,
+    contractAddress: call.contractAddress,
+    abiFunctionSignature: call.abiFunctionSignature,
+    abiParameters: call.abiParameters,
+    idempotencyKey: call.idempotencyKey,
+    fee: { type: "level", config: { feeLevel: "MEDIUM" } },
+  });
+  const id = response.data?.id;
+  if (!id) throw new Error("Circle createContractExecutionTransaction returned no transaction ID");
+  return { transactionId: id };
+}
+
+export type CircleTxOutcome = "pending" | "complete" | "failed";
+
+export interface CircleTxStatus {
+  outcome: CircleTxOutcome;
+  /** Circle's own state name, for logs and the sweep's detail column. */
+  state: string;
+  txHash: string | null;
+  reason: string | null;
+}
+
+/**
+ * Where a Circle transaction has got to, reduced to what a saga needs.
+ *
+ * COMPLETE is the only success: CONFIRMED means mined but not yet final on
+ * Circle's books, and a sweep must not build the next step on a transaction
+ * that could still be reorganised out. FAILED, DENIED and CANCELLED are
+ * definite; STUCK is not — Circle can unstick it — so it stays pending and
+ * the caller's own age limit decides when a person needs to look.
+ */
+export async function getCircleTransaction(id: string): Promise<CircleTxStatus> {
+  const response = await getCircleClient().getTransaction({ id });
+  const tx = response.data?.transaction;
+  if (!tx) throw new Error(`Circle getTransaction returned nothing (id=${shortenForLog(id)})`);
+
+  const state = String(tx.state);
+  const outcome: CircleTxOutcome =
+    state === "COMPLETE" ? "complete"
+    : state === "FAILED" || state === "DENIED" || state === "CANCELLED" ? "failed"
+    : "pending";
+
+  return {
+    outcome,
+    state,
+    txHash: tx.txHash ?? null,
+    reason: [tx.errorReason, tx.errorDetails].filter(Boolean).join(": ") || null,
+  };
+}
+
 export interface SendUsdcArgs {
   fromWalletId: string;
   toAddress: string;

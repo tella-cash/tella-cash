@@ -8,7 +8,7 @@
  * read must be said out loud rather than quietly leaving the total smaller.
  */
 
-import { portfolioLines, portfolioNotes, type Portfolio } from "./portfolio";
+import { arcUsdcHoldings, portfolioLines, portfolioNotes, type Portfolio } from "./portfolio";
 import type { tellaChain } from "@/lib/supabase/types";
 
 const BASE = {
@@ -62,6 +62,21 @@ const CHECKS: Check[] = [
       });
       return lines[0].endsWith("Base") && lines[1].endsWith("Arbitrum");
     },
+  ],
+  [
+    "Arc shows USDC and nothing else",
+    () => {
+      const kept = arcUsdcHoldings([
+        { symbol: "USDC", amount: "5", tokenAddress: null },
+        { symbol: "EURC", amount: "3", tokenAddress: "0x1" },
+        { symbol: "Visit scam.example to claim", amount: "1000", tokenAddress: "0x2" },
+      ]);
+      return kept.length === 1 && kept[0].symbol === "USDC";
+    },
+  ],
+  [
+    "a zero USDC balance is not listed",
+    () => arcUsdcHoldings([{ symbol: "USDC", amount: "0", tokenAddress: null }]).length === 0,
   ],
   ["no notes when everything is on Arc", () => portfolioNotes(EMPTY).length === 0],
   [

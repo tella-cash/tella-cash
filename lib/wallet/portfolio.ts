@@ -27,6 +27,23 @@ import { getChainUsdcBalance, getWalletBalances, type TokenBalance } from "@/lib
  * reported in `unavailable` for the caller to say out loud.
  */
 
+/**
+ * The Arc balances worth showing: USDC, and nothing else.
+ *
+ * By symbol, which is safe HERE and only here. fetchRawBalances has already
+ * dropped every token that claims to be USDC without the right contract, so a
+ * "USDC" that reaches this filter is real. Every other symbol is dropped
+ * without asking whether it is genuine — on mainnet anyone can airdrop a token
+ * with any name into any address, some of them shaped like instructions, and
+ * a balance reply that repeats them is a channel for whoever sent them. It is
+ * also the rule the other chains already follow (getChainUsdcBalance).
+ *
+ * Nothing spendable is lost: sends draw on USDC alone.
+ */
+export function arcUsdcHoldings(balances: TokenBalance[]): TokenBalance[] {
+  return balances.filter((b) => b.symbol === "USDC" && parseFloat(b.amount) > 0);
+}
+
 export interface ChainHolding {
   chain: tellaChain;
   /** Six-decimal string, already known to be non-zero. */
@@ -34,7 +51,7 @@ export interface ChainHolding {
 }
 
 export interface Portfolio {
-  /** Non-zero Arc balances. */
+  /** Non-zero USDC on Arc. */
   arc: TokenBalance[];
   /** Non-zero USDC on other chains. */
   chains: ChainHolding[];
@@ -51,8 +68,7 @@ export async function loadPortfolio(
   user: Pick<tellaUser, "id">,
   arcWalletId: string,
 ): Promise<Portfolio> {
-  const arcAll = await getWalletBalances(arcWalletId);
-  const arc = arcAll.filter((b) => parseFloat(b.amount) > 0);
+  const arc = arcUsdcHoldings(await getWalletBalances(arcWalletId));
 
   const chains: ChainHolding[] = [];
   const unavailable: string[] = [];
