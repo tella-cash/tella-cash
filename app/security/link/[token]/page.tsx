@@ -45,7 +45,13 @@ export default async function LinkPage({
     <ConfirmShell>
       <LinkClient
         token={token}
-        kind={ctx.token.kind === "link_google" ? "google" : "telegram"}
+        kind={
+          ctx.token.kind === "link_google"
+            ? "google"
+            : ctx.token.kind === "link_whatsapp"
+              ? "whatsapp"
+              : "telegram"
+        }
         hasPin={factors.pin}
         hasPasskey={factors.passkey}
       />

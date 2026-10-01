@@ -1,7 +1,7 @@
 import type { MessageProvider } from "@/lib/messaging/processed-messages";
 import type { ArcNetwork } from "@/lib/wallet/network";
 
-export type OnboardingStep = "awaiting_name" | "completed";
+export type OnboardingStep = "awaiting_channel_check" | "awaiting_name" | "completed";
 export type WalletStatus = "none" | "pending" | "active" | "failed";
 export type WhatsAppChannel = "meta";
 

@@ -16,6 +16,12 @@ const COPY = {
     cta: "Open Telegram",
     after: "Tap below, then press Start in Telegram to finish.",
   },
+  whatsapp: {
+    heading: "Connect WhatsApp",
+    intro: "Confirm it's you before this WhatsApp number gets access to your wallet.",
+    cta: "Open WhatsApp",
+    after: "Tap below, then send the message WhatsApp fills in to finish.",
+  },
   google: {
     heading: "Connect Google",
     intro: "Confirm it's you before a Google account is connected to your wallet.",
@@ -37,7 +43,7 @@ export function LinkClient({
   hasPasskey,
 }: {
   token: string;
-  kind: "telegram" | "google";
+  kind: "telegram" | "whatsapp" | "google";
   hasPin: boolean;
   hasPasskey: boolean;
 }) {

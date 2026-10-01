@@ -16,6 +16,7 @@ export type SecurityTokenKind =
   | "pin_reset"
   | "link_telegram"
   | "link_google"
+  | "link_whatsapp"
   | "unfreeze";
 
 const TTL_MINUTES = 10;
@@ -258,7 +259,7 @@ const UUID_LENGTH = 36;
  */
 export async function loadAuthorizedLink(
   handoff: string,
-  kind: "link_telegram" | "link_google",
+  kind: "link_telegram" | "link_google" | "link_whatsapp",
 ): Promise<ResetContext | null> {
   if (handoff.length <= UUID_LENGTH + 1 || handoff[UUID_LENGTH] !== HANDOFF_SEPARATOR) {
     return null;
@@ -277,11 +278,12 @@ export async function loadAuthorizedLink(
   return ctx;
 }
 
-/** Resolve a link token of either kind. */
+/** Resolve a link token of any kind. */
 export async function loadLinkContext(token: string): Promise<ResetContext | null> {
   return (
     (await loadResetContext(token, "link_telegram")) ??
-    (await loadResetContext(token, "link_google"))
+    (await loadResetContext(token, "link_google")) ??
+    (await loadResetContext(token, "link_whatsapp"))
   );
 }
 

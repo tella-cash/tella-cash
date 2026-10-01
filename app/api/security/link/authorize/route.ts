@@ -7,6 +7,8 @@ import { proveFactor } from "@/lib/auth/prove-factor";
 import { isFrozen } from "@/lib/users/wallet-gate";
 import { inFactorChangeWindow, FACTOR_CHANGE_HOLD_HOURS } from "@/lib/sends/tiers";
 import { telegramDeepLink } from "@/lib/telegram/deep-link";
+import { whatsappMessageLink } from "@/lib/whatsapp/deep-link";
+import { whatsappHandoffMessage } from "@/lib/linking/whatsapp-link";
 
 export const dynamic = "force-dynamic";
 
@@ -102,6 +104,10 @@ export async function POST(request: Request) {
       );
     }
     next = deepLink;
+  } else if (ctx.token.kind === "link_whatsapp") {
+    // The prefilled message is what proves control of the number: it can only
+    // be sent from the WhatsApp account being linked.
+    next = whatsappMessageLink(whatsappHandoffMessage(handoff));
   } else {
     const base = process.env.APP_BASE_URL;
     if (!base) {

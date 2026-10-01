@@ -5,6 +5,7 @@ import {
   answerTelegramCallback,
 } from "@/lib/telegram/client";
 import { handleInbound } from "@/lib/messaging/inbound";
+import { LINK_WHATSAPP_START } from "@/lib/linking/whatsapp-link";
 import { titleForCallbackData } from "@/lib/agent/menus";
 import { upsertChannel, ChannelOwnedByAnotherUserError } from "@/lib/messaging/channels";
 import { loadAuthorizedLink, consumeResetToken } from "@/lib/security/reset-tokens";
@@ -101,6 +102,25 @@ export async function POST(request: Request) {
     // Clears the button's spinner. Done first because Telegram gives it only
     // a few seconds, and the agent can take longer than that.
     if (inbound.callbackId) await answerTelegramCallback(inbound.callbackId);
+
+    // The link a new WhatsApp number was given: not a token, just "I'd like to
+    // connect WhatsApp". Handled as the ordinary request, so it gets the same
+    // gates (a factor first, then the PIN on the web) as typing it would.
+    if (inbound.startToken === LINK_WHATSAPP_START) {
+      try {
+        await handleInbound({
+          provider: "telegram",
+          externalId: inbound.chatId,
+          text: "link whatsapp",
+          messageId: inbound.messageId,
+          username: inbound.username,
+          profileName: inbound.username,
+        });
+      } catch (err) {
+        console.error("[telegram] link whatsapp start failed", { id: inbound.messageId, err });
+      }
+      return;
+    }
 
     if (inbound.startToken) {
       await linkAccount({

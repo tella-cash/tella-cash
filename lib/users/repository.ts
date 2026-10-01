@@ -402,3 +402,25 @@ export async function markFactorsChanged(userId: string): Promise<void> {
     .eq("id", userId);
   if (error) throw new Error(`markFactorsChanged failed: ${error.message}`);
 }
+
+/**
+ * Move a user between onboarding steps, reporting rather than throwing.
+ *
+ * Returns false when the database refuses the new value. That is the case on a
+ * deployment that has run ahead of migration 0032, where the question being
+ * asked is simply skipped instead of breaking onboarding.
+ */
+export async function setOnboardingStep(
+  userId: string,
+  step: tellaUser["onboarding_step"],
+): Promise<boolean> {
+  const { error } = await getSupabaseAdmin()
+    .from("tella_users")
+    .update({ onboarding_step: step })
+    .eq("id", userId);
+  if (error) {
+    console.error("[onboarding] could not set step", { step, error: error.message });
+    return false;
+  }
+  return true;
+}

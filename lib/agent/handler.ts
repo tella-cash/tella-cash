@@ -9,7 +9,21 @@ import {
   completeOnboarding,
   findUserById,
   findUserByWhatsApp,
+  setOnboardingStep,
 } from "@/lib/users/repository";
+import {
+  CHANNEL_CHECK_CHOICES,
+  NEW_WALLET_PROMPT,
+  channelCheckPrompt,
+  classifyChannelAnswer,
+  connectExistingText,
+} from "@/lib/linking/channel-check";
+import { handleWhatsappLinkHandoff } from "@/lib/linking/handoff";
+import {
+  LINK_WHATSAPP_START,
+  isWhatsappLinkRequest,
+  parseWhatsappLinkHandoff,
+} from "@/lib/linking/whatsapp-link";
 import {
   getActivePending,
   deletePending,
@@ -185,7 +199,42 @@ export async function handleIncomingMessage(
   // default for a caller that does not say: it is where they were last seen.
   const origin: MessageProvider = message.origin ?? user.whatsapp_channel;
 
+  // The handshake that ends "link whatsapp": a prefilled message from the
+  // number being linked. Before the new-user branch on purpose, because that
+  // number is usually a brand-new sender and would otherwise be greeted.
+  const handoff = origin === "meta" ? parseWhatsappLinkHandoff(text) : null;
+  if (handoff) {
+    return { reply: await handleWhatsappLinkHandoff({ sender: user, handoff }), choices: QUICK_CHOICES };
+  }
+
   if (isNew) {
+    // Someone who answered "yes, I have a Telegram account" and pressed Start
+    // on a chat that has none yet. They were sent here to join an account that
+    // does not exist; say so rather than greet them as if they had chosen this.
+    if (origin === "telegram" && isWhatsappLinkRequest(text)) {
+      return {
+        reply: [
+          "I don't see a tella account on this Telegram yet.",
+          "",
+          "Go back to WhatsApp and reply *no* to create a new wallet there, or tell me your name here and I'll set one up on Telegram instead.",
+          "",
+          "What should I call you?",
+        ].join("\n"),
+      };
+    }
+
+    // Before a wallet exists, ask whether this person already has one on the
+    // other app. Only on a phone-rooted channel (the Telegram side is a later
+    // step), only when the Telegram bot is configured so the answer can lead
+    // somewhere, and only if the question can be recorded: on a deployment
+    // that has run ahead of migration 0032 the step is refused and onboarding
+    // carries on exactly as it did.
+    if (origin === "meta" && telegramDeepLink(LINK_WHATSAPP_START)) {
+      if (await setOnboardingStep(user.id, "awaiting_channel_check")) {
+        return { reply: channelCheckPrompt("Telegram"), choices: CHANNEL_CHECK_CHOICES };
+      }
+    }
+
     return {
       reply: [
         "👋 Welcome to tella!",
@@ -197,6 +246,10 @@ export async function handleIncomingMessage(
         "(Just reply with your name)",
       ].join("\n"),
     };
+  }
+
+  if (user.onboarding_step === "awaiting_channel_check") {
+    return handleChannelCheck({ user, text });
   }
 
   if (user.onboarding_step === "awaiting_name") {
@@ -227,7 +280,7 @@ export async function handleIncomingMessage(
   // at all — see lib/agent/confirm-action.ts for why that is not an
   // optimisation but a requirement.
   if (pending?.kind === "confirm") {
-    const resolution = await resolvePendingConfirmation({ user, pending, text });
+    const resolution = await resolvePendingConfirmation({ user, pending, text, origin });
     if (resolution) return resolution;
     // Fell through: the message was not an answer. The row is gone and the
     // message gets handled normally below, rather than being scolded for
@@ -245,6 +298,8 @@ export async function handleIncomingMessage(
   if (isUnfreezeRequest(command)) return handleUnfreezeRequest(user, origin);
 
   if (isTelegramLinkRequest(command)) return handleTelegramLinkRequest(user, origin);
+
+  if (isWhatsappLinkRequest(command)) return handleWhatsappLinkRequest(user, origin);
 
   if (isGoogleLinkRequest(command)) return handleGoogleLinkRequest(user, origin);
 
@@ -1751,10 +1806,12 @@ async function resolvePendingConfirmation({
   user,
   pending,
   text,
+  origin,
 }: {
   user: tellaUser;
   pending: PendingAction;
   text: string;
+  origin: MessageProvider;
 }): Promise<HandlerResult | null> {
   if (!isConfirmPayload(pending.payload)) {
     // Kind and payload disagree. Drop it rather than act on a shape we
@@ -1781,17 +1838,9 @@ async function resolvePendingConfirmation({
       return { reply: "No problem — nothing has changed.", choices: QUICK_CHOICES };
     }
 
-    return {
-      reply: [
-        `Here's how, ${firstName(user)} 👇`,
-        "",
-        `1. Open WhatsApp and message tella: ${SITE.whatsappLink}`,
-        "2. Say *link telegram* there.",
-        "3. Tap the link it sends back and confirm it's you.",
-        "",
-        "Both chats then reach the same wallet, and a phone number is how other people can pay you.",
-      ].join("\n"),
-    };
+    // They meant WhatsApp. This used to describe the steps and stop; it now
+    // does them, from the channel they are already on.
+    return handleWhatsappLinkRequest(user, origin);
   }
 
   if (declined) {
@@ -2101,6 +2150,110 @@ async function handleTelegramLinkRequest(
       "You'll confirm with your Face ID, fingerprint or PIN, then open Telegram. The link works once and expires in 10 minutes.",
       "",
       "Once linked, Telegram works just like this chat — balance, sends and freeze — and you'll get alerts in both places.",
+    ].join("\n"),
+  };
+}
+
+/**
+ * The answer to "do you already have a tella account on Telegram?".
+ *
+ * "yes" sends them to Telegram to join it; "no" (or "new", after saying yes)
+ * moves on to the name step, which is where onboarding always went next.
+ * Anything else repeats the question, because a guess here either abandons a
+ * wallet someone already has or sends someone with none on a pointless trip.
+ */
+async function handleChannelCheck({
+  user,
+  text,
+}: {
+  user: tellaUser;
+  text: string;
+}): Promise<HandlerResult> {
+  const answer = classifyChannelAnswer(text);
+
+  if (answer === "no") {
+    if (!(await setOnboardingStep(user.id, "awaiting_name"))) {
+      return { reply: "I couldn't save that just now. Say *no* again in a moment." };
+    }
+    return { reply: NEW_WALLET_PROMPT };
+  }
+
+  if (answer === "yes") {
+    const url = telegramDeepLink(LINK_WHATSAPP_START);
+    if (!url) {
+      // Not configured; the question should not have been asked. Carry on.
+      await setOnboardingStep(user.id, "awaiting_name");
+      return { reply: NEW_WALLET_PROMPT };
+    }
+    return {
+      reply: connectExistingText("Telegram"),
+      link: { label: "Open Telegram", url },
+    };
+  }
+
+  return { reply: channelCheckPrompt("Telegram"), choices: CHANNEL_CHECK_CHOICES };
+}
+
+/**
+ * "link whatsapp", typed on Telegram (or arrived at by tapping Start on the
+ * link a new WhatsApp number was given).
+ *
+ * The mirror of handleTelegramLinkRequest, and gated the same way: attaching a
+ * new way into a wallet is a money-grade action, so it needs an existing
+ * factor and then the PIN or passkey on the web before anything completes.
+ */
+async function handleWhatsappLinkRequest(
+  user: tellaUser,
+  origin: MessageProvider,
+): Promise<HandlerResult> {
+  const name = firstName(user);
+
+  if (isFrozen(user)) {
+    return { reply: "Your account is frozen, so I can't link a new channel to it right now." };
+  }
+
+  if (origin === "meta") {
+    return {
+      reply: `You're already on WhatsApp, ${name}. To connect Telegram instead, say *link telegram*.`,
+      choices: QUICK_CHOICES,
+    };
+  }
+
+  if (user.whatsapp_number) {
+    return { reply: "A WhatsApp number is already connected to this wallet.", choices: QUICK_CHOICES };
+  }
+
+  if ((await factorCount(user)) === 0) {
+    return {
+      reply: [
+        `Before I link another channel, ${name}, let's put a lock on this account.`,
+        "",
+        "Start a send and you'll be asked to set up Face ID or a PIN — it takes about ten seconds. Then say *link whatsapp* again.",
+      ].join("\n"),
+    };
+  }
+
+  const paused = linkPausedReply(user);
+  if (paused) return paused;
+
+  let url: string;
+  try {
+    const token = await createResetToken(user.id, "link_whatsapp", origin);
+    url = buildLinkUrl(token.id);
+  } catch (err) {
+    console.error("[whatsapp-link] token creation failed", { userId: user.id, err });
+    return { reply: "I couldn't start that just now. Try again in a moment." };
+  }
+
+  return {
+    reply: [
+      "Tap this to connect WhatsApp:",
+      "",
+      url,
+      "",
+      "You'll confirm with your Face ID, fingerprint or PIN, then open WhatsApp and send the message it fills in. The link works once and expires in 10 minutes.",
+      "",
+      "Once linked, WhatsApp works just like this chat, and people can pay you by phone number.",
     ].join("\n"),
   };
 }

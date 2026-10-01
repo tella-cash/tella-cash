@@ -51,11 +51,22 @@ export const FREEZE_CHOICES: Choice[] = [
   { id: "cancel", title: "Not now" },
 ];
 
+/**
+ * Offered once, to a new number, before it has a wallet. Titles double as the
+ * inbound text, so they must read as a plain yes and no
+ * (lib/linking/channel-check.ts classifies them).
+ */
+export const CHANNEL_CHECK_CHOICES: Choice[] = [
+  { id: "chk_yes", title: "Yes" },
+  { id: "chk_no", title: "No" },
+];
+
 /** Every choice this app can render, for the inbound title lookup. */
 export const ALL_CHOICES: Choice[] = [
   ...QUICK_CHOICES,
   ...MENU_CHOICES,
   ...FREEZE_CHOICES,
+  ...CHANNEL_CHECK_CHOICES,
 ];
 
 /**
