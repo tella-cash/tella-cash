@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
-import { Inter, Instrument_Serif, JetBrains_Mono, Newsreader } from "next/font/google";
+import { Geist, Inter, Instrument_Serif, JetBrains_Mono, Newsreader } from "next/font/google";
 import "@/app/globals.css";
 import { SmoothScroll } from "@/components/interactive/smooth-scroll";
-import { CustomCursor } from "@/components/interactive/custom-cursor";
 
 /**
  * Inter — body text. Variable weight so we don't need to load multiple
@@ -11,6 +10,12 @@ import { CustomCursor } from "@/components/interactive/custom-cursor";
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-sans",
+  display: "swap",
+});
+
+const geist = Geist({
+  subsets: ["latin"],
+  variable: "--font-geist",
   display: "swap",
 });
 
@@ -59,7 +64,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${instrumentSerif.variable} ${jetbrainsMono.variable} ${newsreader.variable}`}
+      className={`${geist.variable} ${inter.variable} ${instrumentSerif.variable} ${jetbrainsMono.variable} ${newsreader.variable}`}
     >
       <head>
         <meta
@@ -68,10 +73,7 @@ export default function RootLayout({
         />
       </head>
       <body className="relative min-h-screen overflow-x-hidden">
-        <SmoothScroll>
-          <CustomCursor />
-          {children}
-        </SmoothScroll>
+        <SmoothScroll>{children}</SmoothScroll>
       </body>
     </html>
   );

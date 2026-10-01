@@ -29,6 +29,7 @@
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
   --font-works: "Newsreader", "Suisse Works", ui-serif, serif;
+  --font-geist: "Geist", ui-sans-serif, system-ui, sans-serif;
 
   /* Radii — restrained */
   --radius-sm: 0.375rem;
@@ -64,19 +65,6 @@ h1, h2, h3 {
 h4, h5, h6 {
   letter-spacing: -0.015em;
   font-weight: 500;
-}
-
-.has-custom-cursor,
-.has-custom-cursor * {
-  cursor: none !important;
-}
-
-@media (pointer: coarse) {
-  /* Touch devices — never hide the system cursor / interactions. */
-  .has-custom-cursor,
-  .has-custom-cursor * {
-    cursor: auto !important;
-  }
 }
 
 /* Selection styling — picks up the accent color */

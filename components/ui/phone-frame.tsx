@@ -45,7 +45,7 @@ export function PhoneFrame({ children, className }: PhoneFrameProps) {
 
           {/* iOS-style status bar — time on the left, signal/wifi/battery on the right */}
           <div className="pointer-events-none absolute inset-x-0 top-2 z-20 flex h-6 items-center justify-between bg-[#1F2C34] px-4 text-[11px] font-semibold text-white">
-            <span>{new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+            <span>9:41</span>
             <div className="flex items-center gap-[7px]">
               <Image src={cellularIcon} alt="Cellular signal" className="h-3 w-auto" />
               <Image src={wifiIcon} alt="Wi-Fi" className="h-3 w-auto" />
