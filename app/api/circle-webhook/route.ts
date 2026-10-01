@@ -8,7 +8,7 @@ import { arcNetwork, explorerTxUrl, isRecognisedUsdcAt } from "@/lib/wallet/netw
 import { loadPortfolio, portfolioLines } from "@/lib/wallet/portfolio";
 import { findChainByBlockchain } from "@/lib/chains/config";
 import { findChainWalletOwner } from "@/lib/chains/wallets";
-import { isSweeperWalletId } from "@/lib/sweeps/sweeper";
+import { isSweeperWalletId, sweepsConfigured } from "@/lib/sweeps/sweeper";
 import { claimSweepMint } from "@/lib/sweeps/mint-match";
 import { parseMicroTruncating } from "@/lib/sweeps/micro";
 import { verifyCircleWebhook } from "@/lib/circle/verify-webhook";
@@ -261,7 +261,9 @@ async function handleInboundTransaction(
   // chain, already accounted for by the send that asked for it. A lookup that
   // fails throws, releasing the claim: guessing "not a sweep" is how a false
   // "Received" gets sent.
-  const amountMicro = parseMicroTruncating(amount);
+  // Skipped while no sweeper is configured: no sweep can exist, and the lookup
+  // would otherwise be a query against a table that may not be there yet.
+  const amountMicro = sweepsConfigured() ? parseMicroTruncating(amount) : null;
   if (amountMicro !== null) {
     const swept = await claimSweepMint(user.id, {
       amountMicro,

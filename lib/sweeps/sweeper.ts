@@ -37,3 +37,17 @@ export function isSweeperWalletId(walletId: string | undefined | null, env: Reco
   }
   return false;
 }
+
+/**
+ * True if any sweeper wallet is configured.
+ *
+ * Sweeps cannot exist without one, so code that only matters once a sweep
+ * exists (matching a mint, cancelling a parked send on freeze) asks this first
+ * and does nothing otherwise. That is what lets the code be deployed BEFORE
+ * migrations 0029 to 0031 are applied: until a sweeper is configured, no path
+ * touches those tables, so an unapplied migration cannot break a deposit
+ * notification or a freeze.
+ */
+export function sweepsConfigured(env: Record<string, string | undefined> = process.env): boolean {
+  return Object.entries(env).some(([key, value]) => key.startsWith(PREFIX) && !!value?.trim());
+}

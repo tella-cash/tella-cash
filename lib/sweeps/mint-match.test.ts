@@ -5,7 +5,7 @@
 
 import type { tellaSweep } from "@/lib/supabase/types";
 import { DELIVERED_MATCH_WINDOW_MS, pickSweepForMint } from "./mint-match";
-import { isSweeperWalletId, sweeperEnvName } from "./sweeper";
+import { isSweeperWalletId, sweeperEnvName, sweepsConfigured } from "./sweeper";
 
 const NOW = Date.parse("2026-09-30T12:00:00Z");
 const iso = (offsetMs: number) => new Date(NOW + offsetMs).toISOString();
@@ -77,6 +77,8 @@ const CHECKS: Check[] = [
   ["recognised on any chain's variable", () => isSweeperWalletId("w-2", { TELLA_SWEEPER_WALLET_ID_BASE: "w-1", TELLA_SWEEPER_WALLET_ID_OP: " w-2 " })],
   ["a user wallet id is not a sweeper", () => !isSweeperWalletId("user-wallet", { TELLA_SWEEPER_WALLET_ID_BASE: "w-1" })],
   ["an unrelated variable holding the id does not count", () => !isSweeperWalletId("w-1", { SOMETHING_ELSE: "w-1" })],
+  ["no sweeper variable means sweeps are not configured", () => !sweepsConfigured({}) && !sweepsConfigured({ TELLA_SWEEPER_WALLET_ID_BASE: "  " })],
+  ["any sweeper variable means they are", () => sweepsConfigured({ TELLA_SWEEPER_WALLET_ID_BASE: "w-1" })],
   ["empty or missing ids are never sweepers", () => !isSweeperWalletId("", { TELLA_SWEEPER_WALLET_ID_BASE: "" }) && !isSweeperWalletId(undefined, {})],
 ];
 

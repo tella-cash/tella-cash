@@ -3,6 +3,7 @@ import type { FreezeSource, PendingSend } from "@/lib/supabase/types";
 import { revokeAllSecurityTokens } from "@/lib/security/reset-tokens";
 import { cancelAllHeldSends } from "@/lib/held_sends/repository";
 import { cancelSweepingSendsForUser } from "@/lib/sweeps/send-repository";
+import { sweepsConfigured } from "@/lib/sweeps/sweeper";
 import { deletePending, getActivePending } from "@/lib/pending_actions/repository";
 import { raiseAlert } from "@/lib/observability/alerts";
 
@@ -93,7 +94,9 @@ export async function freezeAccount({
   // freeze before sending, so this is belt and braces for the same reason as
   // above, and it is what lets the user see them stop.
   try {
-    await cancelSweepingSendsForUser(userId, "freeze");
+    // Nothing can be parked until a sweeper is configured, and before then the
+    // table may not exist yet.
+    if (sweepsConfigured()) await cancelSweepingSendsForUser(userId, "freeze");
   } catch (err) {
     console.error("[freeze] cancelling sends parked behind a sweep failed", { userId, err });
     raiseAlert({
