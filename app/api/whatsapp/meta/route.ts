@@ -44,6 +44,18 @@ export async function GET(request: Request) {
     });
   }
 
+  // Why the handshake was refused, without the token. A failed verification
+  // looks the same from outside whether the token is wrong, has stray
+  // whitespace, or the request was never a handshake, and each has a
+  // different fix. Lengths and booleans only: nothing here can be replayed.
+  console.warn("[meta] verification refused", {
+    modeIsSubscribe: mode === "subscribe",
+    hasChallenge: Boolean(challenge),
+    hasToken: token !== null,
+    tokenLength: token?.length ?? 0,
+    expectedLength: expected.length,
+    matchesIgnoringWhitespace: token !== null && token.trim() === expected.trim(),
+  });
   return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 }
 
