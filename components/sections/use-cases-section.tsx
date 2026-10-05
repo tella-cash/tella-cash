@@ -1,367 +1,249 @@
-"use client";
-
-import { useEffect, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import {
+  ArrowRight01Icon,
+  Briefcase01Icon,
+  ShoppingBag01Icon,
+  TrendingUpIcon,
+  UserIcon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import Image from "next/image";
-import { Reveal } from "@/components/interactive/reveal";
-import { MaskReveal } from "@/components/interactive/mask-reveal";
-import { PhoneFrame } from "@/components/ui/phone-frame";
-import { ChatScreen, StaticBubble } from "@/components/ui/chat-mockup";
-import { EASE } from "@/lib/animation/variants";
-import { cn } from "@/lib/utils/cn";
+import type { ReactNode } from "react";
 
-interface UseCase {
-  id: string;
-  label: string;
-  amount: string;
-  sentLabel: string;
-  photos: [PhotoCard, PhotoCard];
-  messages: Message[];
-}
-
-interface PhotoCard {
+interface UseCaseItemProps {
+  image: string;
+  imageAlt: string;
+  imagePosition?: string;
   title: string;
-  subtitle: string;
-  src: string;
-  placement: string;
-  objectPosition?: string;
+  description: string;
+  children: ReactNode;
 }
 
-interface Message {
-  side: "in" | "out";
-  text: string;
-  time: string;
-  receipt?: {
-    status: string;
-    amount: string;
-    detail: string;
-  };
-}
-
-const USE_CASES: UseCase[] = [
-  {
-    id: "freelance",
-    label: "Freelancers",
-    amount: "₦ 1,200,000",
-    sentLabel: "invoice paid",
-    photos: [
-      {
-        title: "Client call",
-        subtitle: "Remote work",
-        src: "/Images/Freelancer 1.png",
-        placement: "left-0 top-[330px] h-[250px] w-[246px] lg:left-[5%] lg:top-[330px] lg:h-[321px] lg:w-[307px]",
-        objectPosition: "object-center",
-      },
-      {
-        title: "Studio desk",
-        subtitle: "Paid today",
-        src: "/Images/Freelancer 2.png",
-        placement: "right-2 top-20 h-[230px] w-[220px] lg:right-[7%] lg:top-0 lg:h-[321px] lg:w-[307px]",
-        objectPosition: "object-center",
-      },
-    ],
-    messages: [
-      { side: "out", text: "Invoice Nova Studio for ₦ 1,200,000", time: "10:14" },
-      { side: "in", text: "Invoice ready. Send payment link to Nova Studio?", time: "10:14" },
-      { side: "out", text: "yes", time: "10:15" },
-      {
-        side: "in",
-        text: "Payment received.",
-        time: "10:42",
-        receipt: {
-          status: "Paid",
-          amount: "₦ 1,200,000",
-          detail: "from Nova Studio",
-        },
-      },
-    ],
-  },
-  {
-    id: "night-out",
-    label: "Night Out",
-    amount: "₦ 32,000",
-    sentLabel: "split settled",
-    photos: [
-      {
-        title: "Dinner table",
-        subtitle: "Five friends",
-        src: "/Images/nightout.jpg",
-        placement: "right-0 top-[330px] h-[250px] w-[246px] lg:right-[4%] lg:top-[342px] lg:h-[321px] lg:w-[307px]",
-        objectPosition: "object-center",
-      },
-      {
-        title: "Late receipt",
-        subtitle: "Share paid",
-        src: "/Images/nightout 1.jpg",
-        placement: "left-2 top-16 h-[230px] w-[220px] lg:left-[8%] lg:top-4 lg:h-[300px] lg:w-[286px]",
-        objectPosition: "object-center",
-      },
-    ],
-    messages: [
-      { side: "out", text: "Split dinner with Tobi, Ada, and Kunle", time: "21:08" },
-      { side: "in", text: "Total bill is ₦ 128,000. Everyone pays ₦ 32,000.", time: "21:08" },
-      { side: "out", text: "send my share now", time: "21:09" },
-      {
-        side: "in",
-        text: "Your share is settled.",
-        time: "21:09",
-        receipt: {
-          status: "Sent",
-          amount: "₦ 32,000",
-          detail: "to dinner split",
-        },
-      },
-    ],
-  },
-  {
-    id: "families",
-    label: "Families",
-    amount: "₦ 300,000",
-    sentLabel: "family support",
-    photos: [
-      {
-        title: "Home errand",
-        subtitle: "Sent to sibling",
-        src: "/Images/families 1.jpg",
-        placement: "left-3 top-20 h-[240px] w-[228px] lg:left-[12%] lg:top-[52px] lg:h-[321px] lg:w-[307px]",
-        objectPosition: "object-center",
-      },
-      {
-        title: "Weekend visit",
-        subtitle: "Balance clear",
-        src: "/Images/families 2.jpg",
-        placement: "right-0 top-[380px] h-[240px] w-[228px] lg:right-[8%] lg:top-[332px] lg:h-[310px] lg:w-[300px]",
-        objectPosition: "object-center",
-      },
-    ],
-    messages: [
-      { side: "out", text: "Send ₦ 300,000 to Amara for school fees", time: "08:31" },
-      { side: "in", text: "Sending ₦ 300,000 to Amara Okeke. Confirm?", time: "08:31" },
-      { side: "out", text: "confirm", time: "08:32" },
-      {
-        side: "in",
-        text: "Transfer complete.",
-        time: "08:32",
-        receipt: {
-          status: "Sent",
-          amount: "₦ 300,000",
-          detail: "to Amara Okeke",
-        },
-      },
-    ],
-  },
-  {
-    id: "small-business",
-    label: "Small business Owners",
-    amount: "₦ 450,000",
-    sentLabel: "vendor paid",
-    photos: [
-      {
-        title: "Shop counter",
-        subtitle: "Vendor day",
-        src: "/Images/small business owner 1.jpg",
-        placement: "right-4 top-12 h-[240px] w-[230px] lg:right-[13%] lg:top-[18px] lg:h-[321px] lg:w-[307px]",
-        objectPosition: "object-center",
-      },
-      {
-        title: "Stock run",
-        subtitle: "Receipt logged",
-        src: "/Images/small business owner 2.jpg",
-        placement: "left-0 top-[392px] h-[240px] w-[230px] lg:left-[6%] lg:top-[360px] lg:h-[310px] lg:w-[300px]",
-        objectPosition: "object-center",
-      },
-    ],
-    messages: [
-      { side: "out", text: "Pay ₦ 450,000 to Ayo Supplies", time: "15:26" },
-      { side: "in", text: "Ayo Supplies is in your saved vendors. Send ₦ 450,000?", time: "15:26" },
-      { side: "out", text: "yes and save receipt", time: "15:27" },
-      {
-        side: "in",
-        text: "Vendor paid and receipt saved.",
-        time: "15:27",
-        receipt: {
-          status: "Paid",
-          amount: "₦ 450,000",
-          detail: "to Ayo Supplies",
-        },
-      },
-    ],
-  },
-];
-
-export function UseCasesSection() {
-  const [activeIndex, setActiveIndex] = useState(0);
-  const activeCase = USE_CASES[activeIndex];
-
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      setActiveIndex((current) => (current + 1) % USE_CASES.length);
-    }, 15_000);
-
-    return () => clearTimeout(timeout);
-  }, [activeIndex]);
-
+function UseCaseItem({
+  image,
+  imageAlt,
+  imagePosition = "center",
+  title,
+  description,
+  children,
+}: UseCaseItemProps) {
   return (
-    <section id="use-cases" className="relative overflow-hidden bg-white px-3 py-16 sm:px-[72px] md:py-24">
-      <div className="mx-auto max-w-[1296px]">
-        <div className="flex flex-col items-center gap-6 text-center">
-          <div className="flex flex-col items-center">
-            <MaskReveal
-              as="h2"
-              text="Move money directly from chat"
-              accent="from chat"
-              className="justify-center font-display text-[32px] md:text-[52px] lg:text-[60px] font-medium leading-[1.04] tracking-[-0.02em] text-black"
-            />
-            <Reveal delay={0.15}>
-              <p className="mt-4 text-base leading-relaxed text-ink-700 md:text-xl">
-                How tella becomes part of everyday life
-              </p>
-            </Reveal>
-          </div>
-
-          <Reveal delay={0.2}>
-            <div
-              className="flex w-full max-w-full flex-wrap content-start items-start gap-1.5 rounded-2xl bg-[#F5F5F5] p-2 md:w-auto md:flex-nowrap md:overflow-x-auto"
-              role="tablist"
-              aria-label="Use case examples"
-            >
-              {USE_CASES.map((useCase, index) => {
-                const isActive = index === activeIndex;
-
-                return (
-                  <button
-                    key={useCase.id}
-                    type="button"
-                    role="tab"
-                    aria-selected={isActive}
-                    aria-controls={`use-case-panel-${useCase.id}`}
-                    className={cn(
-                      "relative shrink-0 rounded-xl px-4 py-2.5 text-sm leading-5 transition-colors md:px-5 md:py-3 md:text-lg",
-                      isActive ? "text-black" : "text-ink-500 hover:text-black",
-                    )}
-                    onClick={() => setActiveIndex(index)}
-                  >
-                    {isActive && (
-                      <motion.span
-                        layoutId="usecase-tab"
-                        className="absolute inset-0 -z-10 rounded-xl bg-white shadow-soft"
-                        transition={{ type: "spring", stiffness: 380, damping: 32 }}
-                      />
-                    )}
-                    {useCase.label}
-                  </button>
-                );
-              })}
-            </div>
-          </Reveal>
-        </div>
-
-        <Reveal delay={0.1}>
-          <div
-            id={`use-case-panel-${activeCase.id}`}
-            role="tabpanel"
-            className="relative mt-8 min-h-[760px] sm:mt-12 lg:min-h-[700px]"
-          >
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={activeCase.id}
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -16 }}
-                transition={{ duration: 0.5, ease: EASE }}
-                className="absolute inset-0 flex items-center justify-center py-[60px]"
-              >
-                {activeCase.photos.map((photo, index) => (
-                  <PersonaPhoto
-                    key={`${activeCase.id}-${photo.title}`}
-                    photo={photo}
-                    index={index}
-                  />
-                ))}
-
-                <div className="relative z-10">
-                  <PhoneFrame className="!w-[303px] lg:!w-[330px]">
-                    <ChatSurface useCase={activeCase} />
-                  </PhoneFrame>
-                </div>
-              </motion.div>
-            </AnimatePresence>
-          </div>
-        </Reveal>
+    <article className="flex min-w-0 flex-col gap-2.5">
+      <div className="relative flex h-[430px] items-end justify-center overflow-hidden p-4 sm:h-[500px] sm:p-5">
+        <Image
+          src={image}
+          alt={imageAlt}
+          fill
+          sizes="(min-width: 768px) 50vw, 100vw"
+          className="object-cover"
+          style={{ objectPosition: imagePosition }}
+        />
+        {children}
       </div>
-    </section>
+      <div className="space-y-1">
+        <h3 className="text-lg font-bold leading-7 text-[#111827]">{title}</h3>
+        <p className="text-base leading-[1.6] text-[#6b7280]">{description}</p>
+      </div>
+    </article>
   );
 }
 
-function PersonaPhoto({ photo, index }: { photo: PhotoCard; index: number }) {
-  const mobilePlacement =
-    index === 0
-      ? "left-[-8px] top-[630px] h-[126px] w-[120px]"
-      : "left-[253px] top-[-13px] h-[124px] w-[118px]";
-  const desktopPlacement =
-    index === 0
-      ? "lg:left-[14px] lg:top-[383px] lg:h-[321px] lg:w-[307px]"
-      : "lg:left-[959px] lg:top-0 lg:h-[321px] lg:w-[307px]";
-
+function DetailRow({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div
-      className={cn(
-        "absolute z-20 rounded-[6px] bg-[#F5F5F5] p-[3px] shadow-soft transition-all duration-700 md:z-0 md:rounded-2xl md:p-2",
-        mobilePlacement,
-        desktopPlacement,
-      )}
-      aria-label={`${photo.title}: ${photo.subtitle}`}
-      role="img"
-    >
-      <div className="relative h-full w-full overflow-hidden rounded-[5px] bg-[#F5F5F5] md:rounded-xl">
-        <Image
-          src={photo.src}
-          alt={`${photo.title} - ${photo.subtitle}`}
-          fill
-          sizes="(min-width: 1024px) 307px, (min-width: 768px) 246px, 120px"
-          className={cn("object-cover", photo.objectPosition)}
-        />
-        <div className="absolute inset-x-4 bottom-4 hidden rounded-lg bg-white/80 p-3 backdrop-blur-sm md:block">
-          <p className="text-sm font-medium leading-5 text-black">{photo.title}</p>
-          <p className="text-xs leading-4 text-ink-500">{photo.subtitle}</p>
-        </div>
-      </div>
+    <div className="flex items-center justify-between gap-3 text-xs leading-5">
+      <span className="text-[#94a3b8]">{label}</span>
+      <span className="font-semibold text-[#334155]">{children}</span>
     </div>
   );
 }
 
-function ChatSurface({ useCase }: { useCase: UseCase }) {
+function Divider() {
+  return <div className="h-px w-full bg-[#e2e8f0]" aria-hidden="true" />;
+}
+
+function TransactionCard({ children }: { children: ReactNode }) {
   return (
-    <ChatScreen variant="compact" subtitle={useCase.label} align="end">
-      {useCase.messages.map((message) => (
-        <ChatMessage key={`${useCase.id}-${message.time}-${message.text}`} message={message} />
-      ))}
-    </ChatScreen>
+    <div className="relative z-10 w-full max-w-[300px] rounded-[20px] bg-white p-4 shadow-[0_18px_45px_rgba(15,23,42,0.14)]">
+      {children}
+    </div>
   );
 }
 
-function ChatMessage({ message }: { message: Message }) {
+function CardHeading({
+  label,
+  icon,
+  iconColor,
+  iconBackground,
+}: {
+  label: string;
+  icon: typeof Briefcase01Icon;
+  iconColor: string;
+  iconBackground: string;
+}) {
   return (
-    <StaticBubble side={message.side === "out" ? "out" : "in"} time={message.time}>
-      <p>{message.text}</p>
-      {message.receipt && (
-        <div className="mt-2 rounded-xl bg-[#F5F5F5] p-2 text-ink-900">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-[9px] font-medium uppercase tracking-wider text-ink-500">
-              {message.receipt.status}
-            </span>
-            <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[8px] font-medium text-emerald-700">
-              Confirmed
-            </span>
-          </div>
-          <p className="mt-1 font-sans text-xl font-semibold leading-none tabular-nums text-black">
-            {message.receipt.amount}
-          </p>
-          <p className="mt-1 text-[10px] text-ink-500">
-            {message.receipt.detail}
+    <div className="flex items-center gap-2.5">
+      <span
+        className="flex size-9 shrink-0 items-center justify-center rounded-full"
+        style={{ backgroundColor: iconBackground, color: iconColor }}
+      >
+        <HugeiconsIcon icon={icon} size={16} strokeWidth={1.8} aria-hidden="true" />
+      </span>
+      <span className="text-sm font-semibold text-[#0f172a]">{label}</span>
+    </div>
+  );
+}
+
+function CardFooter({
+  label,
+  pill,
+  pillClassName,
+  completed = false,
+}: {
+  label: string;
+  pill: string;
+  pillClassName: string;
+  completed?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 pt-3 text-[11px] font-semibold leading-4">
+      <span className="flex items-center gap-1 text-[#64748b]">
+        {label}
+        {completed ? (
+          <span className="flex size-3.5 items-center justify-center rounded-full bg-[#10b981] text-[9px] text-white">
+            ✓
+          </span>
+        ) : null}
+      </span>
+      <span className={`rounded-full px-2.5 py-1 ${pillClassName}`}>{pill}</span>
+    </div>
+  );
+}
+
+export function UseCasesSection() {
+  return (
+    <section id="use-cases" className="scroll-mt-24 bg-white px-4 pb-[60px] pt-10 font-geist sm:px-8 lg:px-[72px]">
+      <div className="mx-auto max-w-[1296px]">
+        <div className="text-center">
+          <h2 className="text-[32px] font-medium leading-[1.22] tracking-[-0.02em] text-[#0f172a] sm:text-4xl sm:leading-[44px]">
+            Move money directly from chat
+          </h2>
+          <p className="mt-2 text-lg leading-7 text-[#64748b] sm:text-xl sm:leading-[30px]">
+            How Tellecash becomes part of everyday life
           </p>
         </div>
-      )}
-    </StaticBubble>
+
+        <div className="mt-10 grid grid-cols-1 gap-x-8 gap-y-5 md:grid-cols-2">
+          <UseCaseItem
+            image="/figma/use-cases/freelancer.png"
+            imageAlt="Freelancer working at a desk"
+            imagePosition="center 44%"
+            title="Freelancers"
+            description="Get paid by international clients in USDC and convert to Naira."
+          >
+            <TransactionCard>
+              <CardHeading
+                label="Freelance Invoice"
+                icon={Briefcase01Icon}
+                iconColor="#0057ff"
+                iconBackground="#e6eeff"
+              />
+              <div className="mt-3 space-y-2.5 rounded-2xl border border-[#f1f5f9] bg-[#f8fafc] p-[18px]">
+                <DetailRow label="Sender">Acme Studio</DetailRow>
+                <Divider />
+                <DetailRow label="Status">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="size-1.5 rounded-full bg-[#10b981]" /> Cleared
+                  </span>
+                </DetailRow>
+              </div>
+              <div className="mt-3">
+                <p className="text-[13px] leading-5 text-[#64748b]">Client payment received</p>
+                <p className="mt-0.5 text-[32px] font-bold leading-10 tracking-[-0.03em] text-[#10b981]">+850 USDC</p>
+              </div>
+              <CardFooter label="Invoice #042" pill="USDC Network" pillClassName="bg-[#eff6ff] text-[#0057ff]" />
+            </TransactionCard>
+          </UseCaseItem>
+
+          <UseCaseItem
+            image="/figma/use-cases/remote-workers.png"
+            imageAlt="Remote worker using a laptop"
+            imagePosition="center 38%"
+            title="Remote Workers"
+            description="Receive salary from anywhere in the world, instantly and securely."
+          >
+            <TransactionCard>
+              <CardHeading
+                label="Payroll Deposit"
+                icon={TrendingUpIcon}
+                iconColor="#059669"
+                iconBackground="#e6fbf3"
+              />
+              <div className="mt-3 space-y-2.5 rounded-2xl border border-[#f1f5f9] bg-[#f8fafc] p-[18px]">
+                <DetailRow label="Employer">RemoteCo Inc.</DetailRow>
+                <Divider />
+                <DetailRow label="Period">August Payroll</DetailRow>
+              </div>
+              <div className="mt-3">
+                <p className="text-[13px] leading-5 text-[#64748b]">Salary received</p>
+                <p className="mt-0.5 text-[32px] font-bold leading-10 tracking-[-0.03em] text-[#10b981]">+2,400 USDC</p>
+              </div>
+              <CardFooter label="Paid by RemoteCo" pill="Direct Deposit" pillClassName="bg-[#ecfdf5] text-[#059669]" />
+            </TransactionCard>
+          </UseCaseItem>
+
+          <UseCaseItem
+            image="/figma/use-cases/friends-family.png"
+            imageAlt="Family sharing a moment together"
+            imagePosition="center 42%"
+            title="Friends & Family"
+            description="Send money home or split expenses with friends — right from chat."
+          >
+            <TransactionCard>
+              <CardHeading label="Peer Transfer" icon={UserIcon} iconColor="#9333ea" iconBackground="#f3e8ff" />
+              <div className="mt-3 rounded-2xl border border-[#f1f5f9] bg-[#f8fafc] p-[18px]">
+                <div className="flex items-center justify-between text-xs font-semibold text-[#334155]">
+                  <span>London</span>
+                  <HugeiconsIcon icon={ArrowRight01Icon} size={16} strokeWidth={1.8} aria-hidden="true" />
+                  <span>Lagos</span>
+                </div>
+                <div className="my-2.5 h-px w-full bg-[#e2e8f0]" aria-hidden="true" />
+                <DetailRow label="From"><span className="text-[#9333ea]">Mum</span></DetailRow>
+              </div>
+              <div className="mt-3">
+                <p className="text-[13px] leading-5 text-[#64748b]">You received 150 USDC</p>
+                <p className="mt-0.5 text-[32px] font-bold leading-10 tracking-[-0.03em] text-[#10b981]">+150 USDC</p>
+              </div>
+              <CardFooter label="Completed" pill="Instant" pillClassName="bg-[#faf5ff] text-[#9333ea]" completed />
+            </TransactionCard>
+          </UseCaseItem>
+
+          <UseCaseItem
+            image="/figma/use-cases/businesses.png"
+            imageAlt="Business owner serving a customer"
+            imagePosition="center 46%"
+            title="Businesses"
+            description="Accept stablecoin payments and manage business cash flow with ease."
+          >
+            <TransactionCard>
+              <CardHeading
+                label="Merchant Sale"
+                icon={ShoppingBag01Icon}
+                iconColor="#ea580c"
+                iconBackground="#ffedd5"
+              />
+              <div className="mt-3 space-y-2.5 rounded-2xl border border-[#f1f5f9] bg-[#f8fafc] p-[18px]">
+                <DetailRow label="Customer">Daniel K.</DetailRow>
+                <Divider />
+                <DetailRow label="Order ID"><span className="text-[#ea580c]">#1048</span></DetailRow>
+              </div>
+              <div className="mt-3">
+                <p className="text-[13px] leading-5 text-[#64748b]">Payment received</p>
+                <p className="mt-0.5 text-[32px] font-bold leading-10 tracking-[-0.03em] text-[#0f172a]">320 USDC</p>
+              </div>
+              <CardFooter label="Order Paid" pill="Storefront" pillClassName="bg-[#fff7ed] text-[#ea580c]" />
+            </TransactionCard>
+          </UseCaseItem>
+        </div>
+      </div>
+    </section>
   );
 }

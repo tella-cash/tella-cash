@@ -1,13 +1,12 @@
 "use client";
 
+import { ArrowRight01Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { motion, useScroll, useTransform } from "framer-motion";
+import Image from "next/image";
 import { useRef } from "react";
 import { MagneticCta } from "@/components/ui/magnetic-cta";
-import { MaskReveal } from "@/components/interactive/mask-reveal";
-import { Reveal } from "@/components/interactive/reveal";
 import { SITE } from "@/lib/data/site";
-import Image from "next/image";
-import telegramIcon from "@/public/icons/telegram.svg";
 
 export function ClosingCta() {
   const ref = useRef<HTMLDivElement | null>(null);
@@ -19,65 +18,71 @@ export function ClosingCta() {
   const scale = useTransform(scrollYProgress, [0, 0.5, 1], [0.96, 1, 1.02]);
 
   return (
-    <section ref={ref} className="relative px-3 py-[60px] md:px-[72px]" style={{ backgroundImage: "url('/closing-cta-bg.png')", backgroundSize: "cover", backgroundPosition: "center" }}>
-      <div className="px-[20px] py-[80px] rounded-[32px] bg-white md:py-[120px]">
-        <motion.div style={{ scale }} className="flex flex-col items-center">
-          <MaskReveal
-            as="h2"
-            text="Open a chat. Send a message. That's it."
-            accent="Send a message."
-            className="max-w-[820px] justify-center text-center text-[40px] sm:text-[60px] lg:text-[80px] font-semibold leading-[1.02] tracking-[-0.02em] text-ink-900"
-          />
-
-          <Reveal delay={0.15}>
-            <p className="mt-6 max-w-lg mx-auto text-lg md:text-xl leading-relaxed text-center text-ink-700">
-              No download. No signup form. No menus to memorize. Your wallet
-              comes online the moment you say hello, on whichever app you
-              already have open.
-            </p>
-          </Reveal>
-
-          <Reveal delay={0.25}>
-            <div className="group mt-12 flex w-fit flex-col items-center justify-center gap-[10px] rounded-[18px] bg-[#0057FF] p-4 transition-transform duration-300 hover:-translate-y-1 hover:shadow-[0_20px_50px_-12px_rgb(0_71_255/0.55)]">
-              <div className="overflow-hidden rounded-lg bg-white p-2 transition-transform duration-300 group-hover:scale-[1.03]">
-                <Image src="/qrcode.svg" alt="Scan to open tella on WhatsApp" width={180} height={180} />
-              </div>
-              <p className="text-lg text-white">Scan to start</p>
-            </div>
-          </Reveal>
-
-          <Reveal delay={0.35}>
-            <div className="mt-12 flex mx-auto w-fit flex-wrap items-center justify-center gap-5">
-              <MagneticCta
-                href={SITE.whatsappLink}
-                target="_blank"
-                rel="noopener"
-                className="group relative isolate overflow-hidden !bg-black rounded-full text-base md:text-lg md:!px-9 md:!py-4 text-white transition-transform duration-300 hover:-translate-y-0.5"
-              >
-                <span
-                  aria-hidden
-                  className="pointer-events-none absolute inset-0 -z-10 -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-700 ease-out group-hover:translate-x-full"
+    <section
+      ref={ref}
+      className="relative bg-cover bg-center px-3 py-10 sm:px-8 sm:py-[60px] lg:px-[72px]"
+      style={{ backgroundImage: "url('/closing-cta-bg.png')" }}
+    >
+      <div className="overflow-hidden rounded-[32px] bg-white/95 px-5 py-10 backdrop-blur-[33.2px] sm:px-8 sm:py-[60px]">
+        <motion.div style={{ scale }}>
+          <h2 className="text-center font-display font-normal text-black">
+            <span className="flex items-center justify-center gap-2.5 text-[30px] leading-[38px] sm:text-[42px] sm:leading-[50px]">
+              <span>Open WhatsApp</span>
+              <span className="inline-flex size-16 rotate-[10deg] items-center justify-center rounded-[12px] bg-[#f5f5f5] p-2">
+                <Image
+                  src="/figma/closing-cta/whatsapp.svg"
+                  alt=""
+                  width={48}
+                  height={47.8413}
                 />
-                Start on WhatsApp
-              </MagneticCta>
+              </span>
+            </span>
+            <span className="mt-2 block text-[36px] leading-[44px] tracking-[-0.72px] sm:text-[48px] sm:leading-[56px]">
+              <span className="text-[#0057ff]">Send a message.</span>{" "}
+              <span>That&apos;s it.</span>
+            </span>
+          </h2>
 
-              {SITE.telegramLink && (
-                <MagneticCta
-                  href={SITE.telegramLink}
-                  target="_blank"
-                  rel="noopener"
-                  className="group relative isolate overflow-hidden flex items-center gap-2.5 rounded-full text-base md:text-lg md:!px-9 md:!py-4 shadow-accent transition-transform duration-300 hover:-translate-y-0.5"
-                >
-                  <span
-                    aria-hidden
-                    className="pointer-events-none absolute inset-0 -z-10 -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-700 ease-out group-hover:translate-x-full"
-                  />
-                  <Image src={telegramIcon} alt="" width={18} height={18} />
-                  Start on Telegram
-                </MagneticCta>
-              )}
-            </div>
-          </Reveal>
+          <p className="mx-auto mt-4 max-w-[329px] text-center font-geist text-sm leading-5 text-black sm:max-w-md sm:text-base sm:leading-relaxed">
+            <span className="block">No download. No signup form. No menus to memorize.</span>
+            <span className="mt-4 block sm:mt-0">
+              Your wallet comes online the moment you say hello.
+            </span>
+          </p>
+
+          <div className="mx-auto mt-8 flex w-fit flex-col items-center justify-center gap-2.5 rounded-2xl bg-[#0057ff] p-2.5 shadow-[0_4px_0_#000] sm:mt-10 sm:p-3">
+            <Image
+              src="/qrcode.svg"
+              alt="Scan to start with Tella on WhatsApp"
+              width={120}
+              height={120}
+              className="rounded-xl"
+            />
+            <p className="font-geist text-base leading-6 text-white">Try it Now</p>
+          </div>
+
+          <div className="mx-auto mt-8 flex w-fit flex-col items-center gap-3 sm:mt-10 sm:flex-row sm:gap-5">
+            <MagneticCta
+              href={SITE.whatsappLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex h-[46px] min-w-[132px] items-center justify-center gap-2 !rounded-full bg-black px-5 py-0 font-geist text-[13px] font-medium leading-none text-white hover:bg-black/80 md:px-5 md:py-0 md:text-[13px]"
+            >
+              <span>Start now</span>
+              <HugeiconsIcon
+                icon={ArrowRight01Icon}
+                size={18}
+                strokeWidth={1.8}
+                aria-hidden="true"
+              />
+            </MagneticCta>
+            <span className="font-geist text-[10px] uppercase leading-4 tracking-[0.18em] text-[#737373]">
+              First time? Send{" "}
+              <span className="font-mono lowercase tracking-normal text-black">
+                join oil-needs
+              </span>
+            </span>
+          </div>
         </motion.div>
       </div>
     </section>

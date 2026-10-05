@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Instrument_Serif, JetBrains_Mono, Newsreader } from "next/font/google";
-import { MotionConfig } from "framer-motion";
+import { Geist, Inter, Instrument_Serif, JetBrains_Mono, Newsreader } from "next/font/google";
 import "@/app/globals.css";
 import { SmoothScroll } from "@/components/interactive/smooth-scroll";
 
@@ -11,6 +10,12 @@ import { SmoothScroll } from "@/components/interactive/smooth-scroll";
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-sans",
+  display: "swap",
+});
+
+const geist = Geist({
+  subsets: ["latin"],
+  variable: "--font-geist",
   display: "swap",
 });
 
@@ -45,27 +50,10 @@ const newsreader = Newsreader({
   display: "swap",
 });
 
-const title = "Tella - Stablecoin payments, by message";
-const description =
-  "A messaging-based payment interface. Send and manage USDC straight from WhatsApp or Telegram - no app to install, no menus to learn. Just write.";
-
 export const metadata: Metadata = {
-  metadataBase: process.env.APP_BASE_URL
-    ? new URL(process.env.APP_BASE_URL)
-    : undefined,
-  title,
-  description,
-  openGraph: {
-    title,
-    description,
-    type: "website",
-    siteName: "tella",
-  },
-  twitter: {
-    card: "summary",
-    title,
-    description,
-  },
+  title: "Tella — USDC to Naira, by message",
+  description:
+    "Send USDC and receive Naira straight from a WhatsApp chat. No app to install, no menus to learn — just write.",
 };
 
 export default function RootLayout({
@@ -76,21 +64,16 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${instrumentSerif.variable} ${jetbrainsMono.variable} ${newsreader.variable}`}
+      className={`${geist.variable} ${inter.variable} ${instrumentSerif.variable} ${jetbrainsMono.variable} ${newsreader.variable}`}
     >
       <head>
         <meta
           name="facebook-domain-verification"
           content="a29vfcnfljyix4jzf8nj06d2ulnh8m"
         />
-        <meta name="facebook-domain-verification" content="nam5vl9755j1i63x1s6ziul42qp2p9" />
       </head>
       <body className="relative min-h-screen overflow-x-hidden">
-        <MotionConfig reducedMotion="user">
-          <SmoothScroll>
-            {children}
-          </SmoothScroll>
-        </MotionConfig>
+        <SmoothScroll>{children}</SmoothScroll>
       </body>
     </html>
   );
