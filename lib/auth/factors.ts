@@ -55,6 +55,29 @@ export async function canEnrollFromConfirmLink(user: tellaUser): Promise<boolean
 }
 
 /**
+ * What a fresh PASSKEY enrollment from a confirm link needs, given what the
+ * account already holds.
+ *
+ *   open       nothing yet: the bootstrap path, sound because there is nothing
+ *              to bypass. The enrollment gesture doubles as the authorization.
+ *   needs_pin  a PIN and nothing else: the owner may add Face ID / fingerprint,
+ *              but only by proving the PIN in the same request. The PIN is the
+ *              existing factor authorizing the new one, which is the invariant
+ *              above, so holding the link alone still gets an attacker nothing.
+ *   refused    a passkey (or anything else) already exists: adding another
+ *              device still goes through recovery, exactly as before.
+ *
+ * Pure so the rule can be tested without a database.
+ */
+export type EnrollmentGate = "open" | "needs_pin" | "refused";
+
+export function enrollmentGateFor(factors: FactorSet): EnrollmentGate {
+  if (!factors.pin && !factors.passkey && !factors.totp) return "open";
+  if (factors.pin && !factors.passkey && !factors.totp) return "needs_pin";
+  return "refused";
+}
+
+/**
  * Does this account hold a factor that existed BEFORE the given moment?
  *
  * The question unfreezing actually has to ask. "Do they know the PIN" is not

@@ -92,13 +92,18 @@ export function ConfirmClient({
   // ceremonies (and two send attempts) before the UI swaps to "working".
   const busyRef = useRef(false);
 
-  // Biometric is offered when the user already has a passkey (authenticate),
-  // or when they have no factor at all (first enrollment). It is NOT offered
-  // to a PIN-only account: the register routes now refuse enrollment once a
-  // factor exists, because a fresh passkey ceremony proves possession of the
-  // link, not of the account. Adding a device goes through recovery instead.
+  // Biometric is offered as the PRIMARY path when the user already has a
+  // passkey (authenticate), or when they have no factor at all (first
+  // enrollment). It is not offered up front to a PIN-only account: a fresh
+  // passkey ceremony proves possession of the link, not of the account.
   const canUseBiometric = hasPasskey || !hasPin;
   const biometricAvailable = webauthnReady && canUseBiometric;
+
+  // A PIN-only account CAN add Face ID / fingerprint, but only by proving the
+  // PIN in the same request, so it is offered from inside the PIN form (where
+  // the PIN has just been typed) and never as a standalone button. The server
+  // enforces this independently (lib/confirm/enroll-gate.ts).
+  const canAddBiometric = webauthnReady && hasPin && !hasPasskey;
 
   // The mirror of the rule above. Setting a PIN is only legitimate while the
   // account has no factor at all — the setup route refuses once a passkey
@@ -138,7 +143,7 @@ export function ConfirmClient({
     setStage(biometricAvailable ? { kind: "choose" } : fallbackStage);
   }
 
-  async function runBiometric() {
+  async function runBiometric(pinProof?: string) {
     if (busyRef.current) return;
     busyRef.current = true;
     try {
@@ -161,15 +166,19 @@ export function ConfirmClient({
           label: "Setting up Face ID / fingerprint…",
           phase: "auth",
         });
+        // An account that already has a PIN sends it with both calls; the
+        // server checks it each time. A first-time user has none to send.
+        const pinField = pinProof ? { pin: pinProof } : {};
         const options = await postJson<PublicKeyCredentialCreationOptionsJSON>(
           "/api/confirm/webauthn/register/options",
-          { token },
+          { token, ...pinField },
         );
         const attestation = await startRegistration({ optionsJSON: options });
         setStage({ kind: "working", label: "Sending…", phase: "sending" });
         const outcome = await postConfirm("/api/confirm/webauthn/register/verify", {
           token,
           response: attestation,
+          ...pinField,
         });
         setStage(stageFor(outcome));
       }
@@ -275,6 +284,11 @@ export function ConfirmClient({
                     ? () => setStage({ kind: "choose" })
                     : undefined
                 }
+                onAddBiometric={
+                  canAddBiometric && effectiveStage.mode === "verify"
+                    ? (pin) => void runBiometric(pin)
+                    : undefined
+                }
               />
             )}
           </motion.div>
@@ -340,11 +354,14 @@ function PinForm({
   mode,
   onStageChange,
   onUseBiometric,
+  onAddBiometric,
 }: {
   token: string;
   mode: "setup" | "verify";
   onStageChange: (next: Stage) => void;
   onUseBiometric?: () => void;
+  /** Confirm with this PIN AND enroll Face ID / fingerprint. Verify mode only. */
+  onAddBiometric?: (pin: string) => void;
 }) {
   const [pin, setPin] = useState("");
   const [pin2, setPin2] = useState("");
@@ -480,6 +497,31 @@ function PinForm({
       >
         {busy ? "Working…" : isSetup ? "Save PIN & send" : "Confirm send"}
       </button>
+      {onAddBiometric && !busy && (
+        <div className="space-y-1.5 pt-1">
+          <button
+            type="button"
+            onClick={() => {
+              if (busyRef.current) return;
+              if (!/^\d{4,8}$/.test(pin)) {
+                rejectInPlace("Enter your PIN first, then add Face ID.");
+                return;
+              }
+              setValidationMessage(null);
+              busyRef.current = true;
+              setBusy(true);
+              onAddBiometric(pin);
+            }}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl border border-ink-200 bg-surface-0 px-6 py-3.5 text-sm font-medium text-ink-900 transition-colors hover:border-accent-500 hover:text-accent-600 active:scale-[0.98]"
+          >
+            <FingerprintIcon className="h-4 w-4" />
+            Confirm &amp; add Face ID / fingerprint
+          </button>
+          <p className="text-center text-xs leading-relaxed text-ink-400">
+            Next time, approve sends with a touch instead of typing your PIN.
+          </p>
+        </div>
+      )}
       {onUseBiometric && !busy && (
         <button
           type="button"

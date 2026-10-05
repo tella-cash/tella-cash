@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { loadConfirmContext } from "@/lib/confirm/context";
-import { canEnrollFromConfirmLink } from "@/lib/auth/factors";
+import { authorizeEnrollment } from "@/lib/confirm/enroll-gate";
 import { readJson } from "@/lib/http/json";
 import { buildRegistrationOptions } from "@/lib/webauthn/server";
 import { saveChallenge } from "@/lib/webauthn/repository";
@@ -14,9 +14,12 @@ export const dynamic = "force-dynamic";
  * passes to `startRegistration`, and stashes the challenge for the verify
  * step. Tied to an active confirm token so enrollment can only happen in
  * the context of a real pending send.
+ *
+ * An account with a PIN may add Face ID / fingerprint only by sending that PIN
+ * here (and again to /register/verify); see lib/confirm/enroll-gate.ts.
  */
 export async function POST(request: Request) {
-  const parsed = await readJson<{ token?: string }>(request);
+  const parsed = await readJson<{ token?: string; pin?: string }>(request);
   if (!parsed.ok) return parsed.response;
   const body = parsed.body;
   if (!body.token) {
@@ -32,11 +35,15 @@ export async function POST(request: Request) {
   }
 
   // Same guard as register/verify, applied here so the ceremony never even
-  // starts for an account that already has a factor.
-  if (!(await canEnrollFromConfirmLink(ctx.user))) {
+  // starts for an account that has not earned it.
+  const auth = await authorizeEnrollment(ctx.user, body.pin);
+  if (!auth.ok) {
     return NextResponse.json(
-      { error: "This account already has a confirmation method set up." },
-      { status: 409 },
+      { error: auth.error, ...(auth.retryAfter ? { retryAfter: auth.retryAfter } : {}) },
+      {
+        status: auth.status,
+        ...(auth.retryAfter ? { headers: { "Retry-After": String(auth.retryAfter) } } : {}),
+      },
     );
   }
 
