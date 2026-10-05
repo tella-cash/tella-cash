@@ -6,6 +6,7 @@ import heroPhone from "@/public/figma/hero/hero-phone.png";
 import lightningIcon from "@/public/figma/hero/lightning.svg";
 import lightningYellowIcon from "@/public/figma/hero/lightning-yellow.svg";
 import lockIcon from "@/public/figma/hero/lock.svg";
+import telegramIcon from "@/public/figma/hero/telegram.svg";
 import whatsappIcon from "@/public/figma/hero/whatsapp.svg";
 
 const trustItems = [
@@ -23,10 +24,12 @@ export function Hero() {
             <div className="max-w-[632px]">
               <h1 className="text-[40px] font-semibold leading-[1.12] tracking-[-0.96px] text-black sm:text-[48px] sm:leading-[60px]">
                 Send USDC and Receive Naira on WhatsApp
+                {SITE.telegramLink ? " or Telegram" : ""}
               </h1>
               <p className="mt-4 text-base leading-7 text-black sm:text-xl sm:leading-[30px]">
-                Send, receive, and manage stablecoins directly in WhatsApp. No
-                apps. No learning curve. Just type.
+                Send, receive, and manage stablecoins directly in WhatsApp
+                {SITE.telegramLink ? " or Telegram" : ""}. No apps. No learning
+                curve. Just type.
               </p>
             </div>
 
@@ -41,6 +44,18 @@ export function Hero() {
                 <Image src={whatsappIcon} alt="" width={24} height={24} />
                 <span>Start on whatsapp</span>
               </a>
+              {SITE.telegramLink && (
+                <a
+                  href={SITE.telegramLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-cursor="grow"
+                  className="flex items-center justify-center gap-2 rounded-full border border-[#0057ff] bg-white p-[15px] text-base leading-6 text-[#0057ff] transition-colors hover:bg-[#f0f5ff]"
+                >
+                  <Image src={telegramIcon} alt="" width={24} height={24} />
+                  <span>Chat on Telegram</span>
+                </a>
+              )}
               <a
                 href="#features"
                 data-cursor="grow"
@@ -50,6 +65,12 @@ export function Hero() {
                 <Image src={arrowRightIcon} alt="" width={24} height={24} />
               </a>
             </div>
+
+            {SITE.telegramLink && (
+              <p className="mt-4 text-sm leading-6 text-black/60">
+                Same wallet either way, nothing to reconnect.
+              </p>
+            )}
 
             <div className="mt-12 flex flex-wrap items-center gap-4 text-base leading-6 text-black">
               {trustItems.map((item) => (

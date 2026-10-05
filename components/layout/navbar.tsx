@@ -104,15 +104,18 @@ export function Navbar() {
         </nav>
 
         <div className="hidden items-center gap-1 md:flex">
-          <button
-            type="button"
-            disabled
-            title="Telegram access coming soon"
-            className="flex items-center justify-center gap-1.5 rounded-full bg-[#e6eeff] px-5 py-2 text-[13px] leading-[19.5px] tracking-[-0.0762px] text-[#003eb5]"
-          >
-            <Image src={telegramIcon} alt="" width={20} height={20} />
-            <span>Try on Telegram</span>
-          </button>
+          {SITE.telegramLink && (
+            <a
+              href={SITE.telegramLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-cursor="grow"
+              className="flex items-center justify-center gap-1.5 rounded-full bg-[#e6eeff] px-5 py-2 text-[13px] leading-[19.5px] tracking-[-0.0762px] text-[#003eb5] transition-colors hover:bg-[#d6e3ff]"
+            >
+              <Image src={telegramIcon} alt="" width={20} height={20} />
+              <span>Try on Telegram</span>
+            </a>
+          )}
           <a
             href={SITE.whatsappLink}
             target="_blank"
