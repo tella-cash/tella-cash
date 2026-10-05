@@ -5,14 +5,22 @@ import {
   answerTelegramCallback,
 } from "@/lib/telegram/client";
 import { handleInbound } from "@/lib/messaging/inbound";
-import { LINK_WHATSAPP_START } from "@/lib/linking/whatsapp-link";
+import {
+  LINK_WHATSAPP_START,
+  isAbandonableAccount,
+  removeAbandonedPlaceholder,
+} from "@/lib/linking/whatsapp-link";
 import { titleForCallbackData } from "@/lib/agent/menus";
-import { upsertChannel, ChannelOwnedByAnotherUserError } from "@/lib/messaging/channels";
+import {
+  upsertChannel,
+  findChannel,
+  ChannelOwnedByAnotherUserError,
+} from "@/lib/messaging/channels";
 import { loadAuthorizedLink, consumeResetToken } from "@/lib/security/reset-tokens";
 import { notifyUser } from "@/lib/messaging/notify";
 import { emailLinkedGoogle } from "@/lib/email/security-notice";
-import { markFactorsChanged } from "@/lib/users/repository";
-import { FACTOR_CHANGE_HOLD_HOURS, inFactorChangeWindow } from "@/lib/sends/tiers";
+import { findUserById, markFactorsChanged } from "@/lib/users/repository";
+import { HOLD_HOURS, FACTOR_CHANGE_HOLD_HOURS, inFactorChangeWindow } from "@/lib/sends/tiers";
 import { raiseAlert } from "@/lib/observability/alerts";
 
 export const dynamic = "force-dynamic";
@@ -255,12 +263,43 @@ async function linkAccount({
     return;
   }
 
+  // Who already holds this chat. A person who answered "yes, I have a WhatsApp
+  // account" to the first-contact question was given a placeholder account on
+  // this chat before they could answer, so the chat is usually not free. A
+  // placeholder that has never held anything is replaced; anything else is a
+  // real wallet and is refused. Checked BEFORE the token is spent, so refusing
+  // does not cost the person a fresh link.
+  const holder = await findChannel("telegram", chatId);
+  let placeholderId: string | null = null;
+  if (holder && holder.user_id !== ctx.user.id) {
+    const holderUser = await findUserById(holder.user_id);
+    if (!holderUser || !(await isAbandonableAccount(holderUser))) {
+      await sendTelegramMessage({
+        to: chatId,
+        body: [
+          "This Telegram account is already connected to a different tella wallet.",
+          "",
+          "Unlink it from that wallet first, then ask for a new link here.",
+        ].join("\n"),
+      });
+      return;
+    }
+    placeholderId = holderUser.id;
+  }
+
   // Single-use, atomically. Two taps on the same deep link resolve to one
   // winner, the same way a confirm link does.
   const consumed = await consumeResetToken(ctx.token.id);
   if (!consumed) {
     await sendTelegramMessage({ to: chatId, body: "That link has already been used." });
     return;
+  }
+
+  if (placeholderId) {
+    // Re-checked inside, right before the delete that cascades. If it refuses,
+    // the upsert below hits the ordinary "owned by another account" branch.
+    const holderUser = await findUserById(placeholderId);
+    if (holderUser) await removeAbandonedPlaceholder(holderUser);
   }
 
   try {
@@ -326,7 +365,7 @@ async function linkAccount({
       body: [
         "🔗 A Telegram account was just linked to your tella wallet.",
         "",
-        `For the next ${FACTOR_CHANGE_HOLD_HOURS} hours every send waits 24 hours before it goes out.`,
+        `For the next ${FACTOR_CHANGE_HOLD_HOURS} hours every send waits ${HOLD_HOURS} hours before it goes out.`,
         "",
         "If this wasn't you, reply *freeze* immediately.",
       ].join("\n"),
@@ -340,7 +379,7 @@ async function linkAccount({
       lines: [
         "A Telegram account was just linked to your tella wallet. It can check the balance, send and freeze.",
         "",
-        `For the next ${FACTOR_CHANGE_HOLD_HOURS} hours every send waits 24 hours before it goes out.`,
+        `For the next ${FACTOR_CHANGE_HOLD_HOURS} hours every send waits ${HOLD_HOURS} hours before it goes out.`,
         "",
         "If this wasn't you, freeze your wallet now: message tella and say freeze, or use the freeze page with this Google account.",
       ],

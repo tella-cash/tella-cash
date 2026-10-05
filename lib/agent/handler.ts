@@ -17,7 +17,9 @@ import {
   channelCheckPrompt,
   classifyChannelAnswer,
   connectExistingText,
+  otherAppFor,
 } from "@/lib/linking/channel-check";
+import { LINK_TELEGRAM_TEXT, whatsappMessageLink } from "@/lib/whatsapp/deep-link";
 import { handleWhatsappLinkHandoff } from "@/lib/linking/handoff";
 import {
   LINK_WHATSAPP_START,
@@ -52,7 +54,7 @@ import { arcNetwork, isMainnet } from "@/lib/wallet/network";
 import { loadPortfolio, portfolioLines, portfolioNotes } from "@/lib/wallet/portfolio";
 import { listUserChainWallets } from "@/lib/chains/wallets";
 import { listActiveChains } from "@/lib/chains/config";
-import { inFactorChangeWindow, FACTOR_CHANGE_HOLD_HOURS } from "@/lib/sends/tiers";
+import { HOLD_HOURS, inFactorChangeWindow, FACTOR_CHANGE_HOLD_HOURS } from "@/lib/sends/tiers";
 import { findChannelByUsername } from "@/lib/messaging/channels";
 import { SITE } from "@/lib/data/site";
 import { telegramDeepLink } from "@/lib/telegram/deep-link";
@@ -235,6 +237,16 @@ export async function handleIncomingMessage(
       }
     }
 
+    // The mirror, for a new Telegram chat: ask whether they already have a
+    // WhatsApp account before giving them a wallet here. The wa.me link needs
+    // no configuration beyond the site's WhatsApp number, so unlike the
+    // Telegram side there is no "bot not set up" case to guard.
+    if (origin === "telegram") {
+      if (await setOnboardingStep(user.id, "awaiting_channel_check")) {
+        return { reply: channelCheckPrompt("WhatsApp"), choices: CHANNEL_CHECK_CHOICES };
+      }
+    }
+
     return {
       reply: [
         "👋 Welcome to tella!",
@@ -249,7 +261,7 @@ export async function handleIncomingMessage(
   }
 
   if (user.onboarding_step === "awaiting_channel_check") {
-    return handleChannelCheck({ user, text });
+    return handleChannelCheck({ user, text, origin });
   }
 
   if (user.onboarding_step === "awaiting_name") {
@@ -1053,7 +1065,7 @@ async function startPinReset(
       "",
       url,
       "",
-      `It works once and expires in ${RESET_TTL_MINUTES} minutes. After a reset, sends wait 24 hours before going out for the next ${FACTOR_CHANGE_HOLD_HOURS} hours — that's what stops someone else who gets hold of this chat.`,
+      `It works once and expires in ${RESET_TTL_MINUTES} minutes. After a reset, sends wait ${HOLD_HOURS} hours before going out for the next ${FACTOR_CHANGE_HOLD_HOURS} hours — that's what stops someone else who gets hold of this chat.`,
       "",
       "If you didn't ask for this, ignore it — nothing changes until someone opens that link and sets a new PIN.",
     ].join("\n"),
@@ -2155,20 +2167,24 @@ async function handleTelegramLinkRequest(
 }
 
 /**
- * The answer to "do you already have a tella account on Telegram?".
+ * The answer to "do you already have a tella account on the other app?" —
+ * Telegram when asked on WhatsApp, WhatsApp when asked on Telegram.
  *
- * "yes" sends them to Telegram to join it; "no" (or "new", after saying yes)
- * moves on to the name step, which is where onboarding always went next.
+ * "yes" sends them to the other app to join it; "no" (or "new", after saying
+ * yes) moves on to the name step, which is where onboarding always went next.
  * Anything else repeats the question, because a guess here either abandons a
  * wallet someone already has or sends someone with none on a pointless trip.
  */
 async function handleChannelCheck({
   user,
   text,
+  origin,
 }: {
   user: tellaUser;
   text: string;
+  origin: MessageProvider;
 }): Promise<HandlerResult> {
+  const otherApp = otherAppFor(origin);
   const answer = classifyChannelAnswer(text);
 
   if (answer === "no") {
@@ -2179,19 +2195,25 @@ async function handleChannelCheck({
   }
 
   if (answer === "yes") {
-    const url = telegramDeepLink(LINK_WHATSAPP_START);
+    // From WhatsApp the existing account is on Telegram: its start link asks
+    // for a "link whatsapp". From Telegram the existing account is on WhatsApp:
+    // a prefilled "link telegram", sent from that account.
+    const url =
+      otherApp === "Telegram"
+        ? telegramDeepLink(LINK_WHATSAPP_START)
+        : whatsappMessageLink(LINK_TELEGRAM_TEXT);
     if (!url) {
       // Not configured; the question should not have been asked. Carry on.
       await setOnboardingStep(user.id, "awaiting_name");
       return { reply: NEW_WALLET_PROMPT };
     }
     return {
-      reply: connectExistingText("Telegram"),
-      link: { label: "Open Telegram", url },
+      reply: connectExistingText(otherApp),
+      link: { label: `Open ${otherApp}`, url },
     };
   }
 
-  return { reply: channelCheckPrompt("Telegram"), choices: CHANNEL_CHECK_CHOICES };
+  return { reply: channelCheckPrompt(otherApp), choices: CHANNEL_CHECK_CHOICES };
 }
 
 /**

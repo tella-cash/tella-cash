@@ -5,14 +5,19 @@
  */
 
 import type { tellaUser } from "@/lib/supabase/types";
-import { classifyChannelAnswer } from "./channel-check";
+import {
+  channelCheckPrompt,
+  classifyChannelAnswer,
+  connectExistingText,
+  otherAppFor,
+} from "./channel-check";
 import {
   isWhatsappLinkRequest,
   looksUnused,
   parseWhatsappLinkHandoff,
   whatsappHandoffMessage,
 } from "./whatsapp-link";
-import { whatsappMessageLink } from "@/lib/whatsapp/deep-link";
+import { LINK_TELEGRAM_TEXT, whatsappMessageLink } from "@/lib/whatsapp/deep-link";
 
 const ID = "0f8fad5b-d9cb-469f-a165-70867728950e";
 const SECRET = "abcdefghijklmnopqrstuvwx";
@@ -40,6 +45,21 @@ const CHECKS: Check[] = [
   ["no, in the ways people say it", () => ["no", "No", "nope", "nah", "new", "I'm new", "im new", "none", "I don't", "no thanks", "start fresh"].every((t) => classifyChannelAnswer(t) === "no")],
   ["anything else asks again", () => ["", "maybe", "what is telegram", "hello", "10", "send 5 to bob"].every((t) => classifyChannelAnswer(t) === "other")],
   ["a tap on the Yes and No buttons classifies", () => classifyChannelAnswer("Yes") === "yes" && classifyChannelAnswer("No") === "no"],
+
+  // the question is asked in both directions
+  ["a WhatsApp number is asked about Telegram, a Telegram chat about WhatsApp", () =>
+    otherAppFor("meta") === "Telegram" && otherAppFor("telegram") === "WhatsApp"],
+  ["the prompt names the app it asks about", () =>
+    channelCheckPrompt("WhatsApp").includes("account on WhatsApp") && channelCheckPrompt("Telegram").includes("account on Telegram")],
+  ["connecting from Telegram points at WhatsApp and offers a way out", () => {
+    const t = connectExistingText("WhatsApp");
+    return t.includes("WhatsApp") && t.includes("Telegram chat joins") && t.includes("Reply *new*");
+  }],
+  ["connecting from WhatsApp is unchanged", () => connectExistingText("Telegram").includes("Your number joins your existing wallet")],
+  ["the Telegram side's prefilled WhatsApp message is a plain link telegram", () => {
+    const url = whatsappMessageLink(LINK_TELEGRAM_TEXT);
+    return LINK_TELEGRAM_TEXT === "link telegram" && url.startsWith("https://wa.me/") && url.endsWith("?text=link%20telegram");
+  }],
 
   // the typed command
   ["link whatsapp, however it is phrased", () => ["link whatsapp", "connect WhatsApp", "add whatsapp", "use whatsapp", "whatsapp link", "link my whatsapp"].every(isWhatsappLinkRequest)],

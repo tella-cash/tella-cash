@@ -100,6 +100,28 @@ export async function isAbandonableAccount(user: tellaUser): Promise<boolean> {
   return hasNoOwnedRows(user.id);
 }
 
+/**
+ * Remove an account that has never held anything, so its chat can be attached
+ * to a real one. The Telegram side of the same merge: a new Telegram chat is
+ * given a placeholder on first contact, and answering "yes, I have a WhatsApp
+ * account" leaves that placeholder owning the chat the link needs to claim.
+ *
+ * The chat's channel row cascades with the user. Checked again here, right
+ * before the delete that cascades, and fails closed exactly like the number
+ * merge: false means nothing was deleted.
+ */
+export async function removeAbandonedPlaceholder(placeholder: tellaUser): Promise<boolean> {
+  if (!(await isAbandonableAccount(placeholder))) return false;
+
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase.from("tella_users").delete().eq("id", placeholder.id);
+  if (error) {
+    console.error("[link-telegram] removing the placeholder failed", { error: error.message });
+    return false;
+  }
+  return true;
+}
+
 export type MergeResult =
   | { ok: true }
   | { ok: false; reason: "not_empty" | "phone_taken" | "failed" };
