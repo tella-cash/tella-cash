@@ -103,17 +103,25 @@ export function Navbar() {
           </ul>
         </nav>
 
-        <div className="hidden items-center gap-1 md:flex">
+        <div className="hidden items-center gap-2 md:flex">
           {SITE.telegramLink && (
             <a
               href={SITE.telegramLink}
               target="_blank"
               rel="noopener noreferrer"
               data-cursor="grow"
-              className="flex items-center justify-center gap-1.5 rounded-full bg-[#e6eeff] px-5 py-2 text-[13px] leading-[19.5px] tracking-[-0.0762px] text-[#003eb5] transition-colors hover:bg-[#d6e3ff]"
+              className="flex items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-black px-5 py-2 text-[13px] leading-[19.5px] tracking-[-0.0762px] text-[#fffcfa] transition-colors hover:bg-[#262626]"
             >
-              <Image src={telegramIcon} alt="" width={20} height={20} />
-              <span>Try on Telegram</span>
+              <Image
+                src={telegramIcon}
+                alt=""
+                width={20}
+                height={20}
+                className="brightness-0 invert"
+              />
+              <span>
+                <span className="hidden lg:inline">Start on </span>Telegram
+              </span>
             </a>
           )}
           <a
@@ -121,10 +129,12 @@ export function Navbar() {
             target="_blank"
             rel="noopener noreferrer"
             data-cursor="grow"
-            className="flex items-center justify-center gap-1.5 rounded-full bg-[#0057ff] px-5 py-2 text-[13px] leading-[19.5px] tracking-[-0.0762px] text-[#fffcfa] transition-colors hover:bg-[#004de0]"
+            className="flex items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-[#0057ff] px-5 py-2 text-[13px] leading-[19.5px] tracking-[-0.0762px] text-[#fffcfa] transition-colors hover:bg-[#004de0]"
           >
             <Image src={whatsappIcon} alt="" width={20} height={20} />
-            <span>Get Started</span>
+            <span>
+              <span className="hidden lg:inline">Start on </span>WhatsApp
+            </span>
           </a>
         </div>
 
@@ -174,15 +184,34 @@ export function Navbar() {
                 </li>
               ))}
             </ul>
-            <a
-              href={SITE.whatsappLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex w-full items-center justify-center gap-2 rounded-full bg-[#0057ff] p-4 text-white"
-            >
-              <Image src={whatsappIcon} alt="" width={24} height={24} />
-              Get Started
-            </a>
+            <div className="flex flex-col gap-3">
+              <a
+                href={SITE.whatsappLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex w-full items-center justify-center gap-2 rounded-full bg-[#0057ff] p-4 text-white"
+              >
+                <Image src={whatsappIcon} alt="" width={24} height={24} />
+                Start on WhatsApp
+              </a>
+              {SITE.telegramLink && (
+                <a
+                  href={SITE.telegramLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex w-full items-center justify-center gap-2 rounded-full bg-black p-4 text-white"
+                >
+                  <Image
+                    src={telegramIcon}
+                    alt=""
+                    width={24}
+                    height={24}
+                    className="brightness-0 invert"
+                  />
+                  Start on Telegram
+                </a>
+              )}
+            </div>
           </motion.nav>
         )}
       </AnimatePresence>
