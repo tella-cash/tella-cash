@@ -189,7 +189,7 @@ not resolve to "so use the generous ones".
 ### `0015_held_sends.sql` — apply BEFORE the code that uses it
 
 `tella_held_send`: sends that were authorized on a normal confirm link and
-then embargoed for the hold period (`HOLD_HOURS` in `lib/sends/tiers.ts`; was 24 hours, now 6).
+then embargoed for the hold period (`HOLD_HOURS` in `lib/sends/tiers.ts`, currently 24 hours).
 
 **Not** an extension of `tella_pending_send`, for three reasons. That table's
 5-minute TTL is a security property (the row id IS a bearer confirm URL
@@ -458,8 +458,8 @@ the migration refuses every send.
   `ARC_NETWORK`, and pending/held sends carry the network they were composed
   on, so a switch to mainnet can never pay into a testnet-entity address.
 - `tella_users.factors_changed_at`. Set by a PIN reset or passkey removal
-  (linking Telegram, WhatsApp or Google no longer sets it). For 6 hours afterwards (was 48) every send is held for 6
-  hours (was 24) and new links are refused.
+  (linking Telegram, WhatsApp or Google no longer sets it). For 24 hours afterwards every send is held for 24
+  hours and new links are refused.
 - Revokes `EXECUTE` on `tella_record_auth_attempt` / `tella_reset_auth_attempts`
   from `public`, `anon` and `authenticated`.
 

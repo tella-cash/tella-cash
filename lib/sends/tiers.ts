@@ -20,7 +20,7 @@ import type { ResolvedLimits } from "./limits";
 export type SendTier = "normal" | "hold";
 
 /** How long a held send waits. Long enough to sleep through and notice. */
-export const HOLD_HOURS = 6;
+export const HOLD_HOURS = 24;
 
 /**
  * The hold threshold, from the environment. Infinity means no holds.
@@ -69,13 +69,13 @@ export function holdThreshold(limits: ResolvedLimits): number {
  * Google account does NOT start it: those links already need the account's own
  * PIN or passkey on the web, and the owner is notified.
  *
- * Was 48, now equal to HOLD_HOURS (both were cut: the window from 48 to 6, the
- * hold from 24 to 6). A send made inside the window is held for HOLD_HOURS, one
- * made after it is not held at all, so this is how long someone holding the
- * chat has to wait before a send goes out normally, and how long the owner has
- * to notice and freeze before then.
+ * History: 48, then 6, now 24, equal to HOLD_HOURS (the hold was 24, then 6, now
+ * 24 again). A send made inside the window is held for HOLD_HOURS, one made
+ * after it is not held at all, so this is how long someone holding the chat has
+ * to wait before a send goes out normally, and how long the owner has to notice
+ * and freeze before then.
  */
-export const FACTOR_CHANGE_HOLD_HOURS = 6;
+export const FACTOR_CHANGE_HOLD_HOURS = 24;
 
 /** True while a recent security change puts every send on hold. */
 export function inFactorChangeWindow(
