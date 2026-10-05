@@ -23,8 +23,7 @@ export function Hero() {
           <div className="w-full">
             <div className="max-w-[632px]">
               <h1 className="text-[40px] font-semibold leading-[1.12] tracking-[-0.96px] text-black sm:text-[48px] sm:leading-[60px]">
-                Send USDC and Receive Naira on WhatsApp
-                {SITE.telegramLink ? " or Telegram" : ""}
+                Stablecoin payments, as simple as a message
               </h1>
               <p className="mt-4 text-base leading-7 text-black sm:text-xl sm:leading-[30px]">
                 Send, receive, and manage stablecoins directly in WhatsApp
@@ -42,7 +41,7 @@ export function Hero() {
                 className="flex items-center justify-center gap-2 rounded-full bg-[#0057ff] p-4 text-base leading-6 text-white transition-colors hover:bg-[#004de0]"
               >
                 <Image src={whatsappIcon} alt="" width={24} height={24} />
-                <span>Start on whatsapp</span>
+                <span>Start on WhatsApp</span>
               </a>
               {SITE.telegramLink && (
                 <a
@@ -50,10 +49,16 @@ export function Hero() {
                   target="_blank"
                   rel="noopener noreferrer"
                   data-cursor="grow"
-                  className="flex items-center justify-center gap-2 rounded-full border border-[#0057ff] bg-white p-[15px] text-base leading-6 text-[#0057ff] transition-colors hover:bg-[#f0f5ff]"
+                  className="flex items-center justify-center gap-2 rounded-full bg-black p-4 text-base leading-6 text-white transition-colors hover:bg-[#262626]"
                 >
-                  <Image src={telegramIcon} alt="" width={24} height={24} />
-                  <span>Chat on Telegram</span>
+                  <Image
+                    src={telegramIcon}
+                    alt=""
+                    width={24}
+                    height={24}
+                    className="brightness-0 invert"
+                  />
+                  <span>Start on Telegram</span>
                 </a>
               )}
               <a
