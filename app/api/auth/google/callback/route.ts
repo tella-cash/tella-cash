@@ -17,7 +17,7 @@ import { factorsPredating } from "@/lib/auth/factors";
 import { notifyUser } from "@/lib/messaging/notify";
 import { sendSecurityEmail } from "@/lib/email/client";
 import { adminCookieOptions, isAdminSub, issueAdminCookie } from "@/lib/admin/session";
-import { findUserById, markFactorsChanged } from "@/lib/users/repository";
+import { findUserById } from "@/lib/users/repository";
 import { inFactorChangeWindow } from "@/lib/sends/tiers";
 import type { ResultErrorCode } from "@/lib/security/result-errors";
 
@@ -193,11 +193,9 @@ async function handleLink(
 
   await linkGoogleIdentity({ userId: ctx.user.id, identity });
 
-  try {
-    await markFactorsChanged(ctx.user.id);
-  } catch (err) {
-    console.error("[google] marking factors changed failed", { userId: ctx.user.id, err });
-  }
+  // No markFactorsChanged: linking Google does not start the post-change send
+  // hold (a PIN reset or passkey removal still does). The link already needed
+  // the account's own PIN or passkey, and both addresses are emailed below.
 
   const replaced = previous && previous.google_sub !== identity.sub ? previous : null;
 

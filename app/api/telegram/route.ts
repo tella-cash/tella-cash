@@ -19,8 +19,8 @@ import {
 import { loadAuthorizedLink, consumeResetToken } from "@/lib/security/reset-tokens";
 import { notifyUser } from "@/lib/messaging/notify";
 import { emailLinkedGoogle } from "@/lib/email/security-notice";
-import { findUserById, markFactorsChanged } from "@/lib/users/repository";
-import { HOLD_HOURS, FACTOR_CHANGE_HOLD_HOURS, inFactorChangeWindow } from "@/lib/sends/tiers";
+import { findUserById } from "@/lib/users/repository";
+import { FACTOR_CHANGE_HOLD_HOURS, inFactorChangeWindow } from "@/lib/sends/tiers";
 import { raiseAlert } from "@/lib/observability/alerts";
 
 export const dynamic = "force-dynamic";
@@ -347,14 +347,9 @@ async function linkAccount({
     ].join("\n"),
   });
 
-  // A new way into the account starts the post-change hold window, so a
-  // link made by someone holding the phone cannot be followed by an
-  // immediate send from the new chat. See lib/sends/tiers.ts.
-  try {
-    await markFactorsChanged(ctx.user.id);
-  } catch (err) {
-    console.error("[telegram] marking factors changed failed", { userId: ctx.user.id, err });
-  }
+  // No markFactorsChanged: linking a channel does not start the post-change
+  // send hold (a PIN reset still does). The link already required the account's
+  // own PIN or passkey on the web, and the owner is told below.
 
   // Announced everywhere, not just the primary chat: whoever linked this
   // holds the primary chat, and could delete a notice sent only there. The
@@ -364,8 +359,6 @@ async function linkAccount({
       user: ctx.user,
       body: [
         "🔗 A Telegram account was just linked to your tella wallet.",
-        "",
-        `For the next ${FACTOR_CHANGE_HOLD_HOURS} hours every send waits ${HOLD_HOURS} hours before it goes out.`,
         "",
         "If this wasn't you, reply *freeze* immediately.",
       ].join("\n"),
@@ -378,8 +371,6 @@ async function linkAccount({
       subject: "A Telegram account was linked to your tella wallet",
       lines: [
         "A Telegram account was just linked to your tella wallet. It can check the balance, send and freeze.",
-        "",
-        `For the next ${FACTOR_CHANGE_HOLD_HOURS} hours every send waits ${HOLD_HOURS} hours before it goes out.`,
         "",
         "If this wasn't you, freeze your wallet now: message tella and say freeze, or use the freeze page with this Google account.",
       ],

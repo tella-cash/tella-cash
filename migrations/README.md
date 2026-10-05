@@ -457,8 +457,8 @@ the migration refuses every send.
   wallet. The wallet gate refuses any wallet whose network is not
   `ARC_NETWORK`, and pending/held sends carry the network they were composed
   on, so a switch to mainnet can never pay into a testnet-entity address.
-- `tella_users.factors_changed_at`. Set by a PIN reset, passkey removal, or a
-  Telegram/Google link. For 6 hours afterwards (was 48) every send is held for 6
+- `tella_users.factors_changed_at`. Set by a PIN reset or passkey removal
+  (linking Telegram, WhatsApp or Google no longer sets it). For 6 hours afterwards (was 48) every send is held for 6
   hours (was 24) and new links are refused.
 - Revokes `EXECUTE` on `tella_record_auth_attempt` / `tella_reset_auth_attempts`
   from `public`, `anon` and `authenticated`.

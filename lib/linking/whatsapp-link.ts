@@ -2,7 +2,6 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import type { tellaUser } from "@/lib/supabase/types";
 import { factorCount } from "@/lib/auth/factors";
 import { upsertChannel } from "@/lib/messaging/channels";
-import { markFactorsChanged } from "@/lib/users/repository";
 
 /**
  * Attaching a WhatsApp number to a Telegram account, and the rule that makes it
@@ -179,6 +178,9 @@ export async function mergePlaceholderIntoAccount(args: {
     verified: true,
   });
 
-  await markFactorsChanged(target.id);
+  // Deliberately no markFactorsChanged here: linking a channel does not start
+  // the post-change send hold (a PIN reset still does). The link was already
+  // gated on the account's own PIN or passkey on the web, and the owner is told
+  // on every channel by the notice in lib/linking/handoff.ts.
   return { ok: true };
 }

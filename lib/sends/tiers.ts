@@ -64,8 +64,10 @@ export function holdThreshold(limits: ResolvedLimits): number {
  * Telegram account IS the recovery factor. So the PIN protects nothing
  * against someone holding the chat unless there is a gap between "set a new
  * PIN" and "money moves" in which the owner can hear about it and freeze.
- * This is that gap. Passkey removal and linking a new channel count too:
- * each is something an attacker holding the chat does on the way to a drain.
+ * This is that gap. Passkey removal counts too: it is something an attacker
+ * holding the chat does on the way to a drain. Linking a Telegram, WhatsApp or
+ * Google account does NOT start it: those links already need the account's own
+ * PIN or passkey on the web, and the owner is notified.
  *
  * Was 48, now equal to HOLD_HOURS (both were cut: the window from 48 to 6, the
  * hold from 24 to 6). A send made inside the window is held for HOLD_HOURS, one
