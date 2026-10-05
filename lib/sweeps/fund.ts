@@ -16,7 +16,7 @@ import { startSweepSend } from "./start";
  * to succeed; it must never be the reason one fails differently from before,
  * so it never throws.
  *
- * A send in the hold tier is not swept. It waits 24 hours and then runs
+ * A send in the hold tier is not swept. It waits out its hold and then runs
  * through the release job, which has no sweep step, so starting one now would
  * only move money for a send that is not going out today. Those keep the
  * ordinary insufficient-balance answer until the release job learns to fund

@@ -10,7 +10,7 @@ import { resetAuthAttempts } from "@/lib/auth/rate-limit";
 import { deleteCredentialsForUser } from "@/lib/webauthn/repository";
 import { notifyUser } from "@/lib/messaging/notify";
 import { emailLinkedGoogle } from "@/lib/email/security-notice";
-import { FACTOR_CHANGE_HOLD_HOURS } from "@/lib/sends/tiers";
+import { HOLD_HOURS, FACTOR_CHANGE_HOLD_HOURS } from "@/lib/sends/tiers";
 
 export const dynamic = "force-dynamic";
 
@@ -128,7 +128,7 @@ export async function POST(request: Request) {
     removedPasskeys > 0
       ? [`Face ID / fingerprint was also removed from ${removedPasskeys} device${removedPasskeys === 1 ? "" : "s"}.`]
       : [];
-  const holdLine = `For the next ${FACTOR_CHANGE_HOLD_HOURS} hours every send waits 24 hours before it goes out.`;
+  const holdLine = `For the next ${FACTOR_CHANGE_HOLD_HOURS} hours every send waits ${HOLD_HOURS} hours before it goes out.`;
 
   await Promise.allSettled([
     notifyUser({

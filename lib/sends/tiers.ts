@@ -20,7 +20,7 @@ import type { ResolvedLimits } from "./limits";
 export type SendTier = "normal" | "hold";
 
 /** How long a held send waits. Long enough to sleep through and notice. */
-export const HOLD_HOURS = 24;
+export const HOLD_HOURS = 6;
 
 /**
  * The hold threshold, from the environment. Infinity means no holds.
@@ -67,10 +67,13 @@ export function holdThreshold(limits: ResolvedLimits): number {
  * This is that gap. Passkey removal and linking a new channel count too:
  * each is something an attacker holding the chat does on the way to a drain.
  *
- * Longer than HOLD_HOURS so a send confirmed right at the end of the window
- * still waits a full day.
+ * Was 48, now equal to HOLD_HOURS (both were cut: the window from 48 to 6, the
+ * hold from 24 to 6). A send made inside the window is held for HOLD_HOURS, one
+ * made after it is not held at all, so this is how long someone holding the
+ * chat has to wait before a send goes out normally, and how long the owner has
+ * to notice and freeze before then.
  */
-export const FACTOR_CHANGE_HOLD_HOURS = 48;
+export const FACTOR_CHANGE_HOLD_HOURS = 6;
 
 /** True while a recent security change puts every send on hold. */
 export function inFactorChangeWindow(

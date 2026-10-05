@@ -7,7 +7,7 @@ import {
 import { sendUsdc } from "@/lib/wallet/circle";
 import { gateSpend } from "@/lib/users/wallet-gate";
 import { checkSendLimits, formatLimitFailure, type LimitFailure } from "./limits";
-import { tierFor, inFactorChangeWindow, FACTOR_CHANGE_HOLD_HOURS } from "./tiers";
+import { HOLD_HOURS, tierFor, inFactorChangeWindow, FACTOR_CHANGE_HOLD_HOURS } from "./tiers";
 import { emailLinkedGoogle } from "@/lib/email/security-notice";
 import { arcNetwork } from "@/lib/wallet/network";
 import { createHeldSend } from "@/lib/held_sends/repository";
@@ -434,8 +434,8 @@ export function formatSendResultForChat(result: ExecuteSendResult): string {
           `⏳ Queued ${result.amount} USDC to ${result.recipientLabel}.`,
           "",
           result.heldBecause === "security_change"
-            ? `Your PIN, passkeys or linked accounts changed recently, so for ${FACTOR_CHANGE_HOLD_HOURS} hours after that every send waits 24 hours before it goes out. That gives you time to stop it if the change wasn't you.`
-            : `Sends this size wait 24 hours before they go out, so you've got time to stop it if this wasn't you.`,
+            ? `Your PIN, passkeys or linked accounts changed recently, so for ${FACTOR_CHANGE_HOLD_HOURS} hours after that every send waits ${HOLD_HOURS} hours before it goes out. That gives you time to stop it if the change wasn't you.`
+            : `Sends this size wait ${HOLD_HOURS} hours before they go out, so you've got time to stop it if this wasn't you.`,
           "",
           'Reply *cancel send* any time before then and nothing moves.',
         ].join("\n");

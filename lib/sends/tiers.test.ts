@@ -57,7 +57,9 @@ const CHECKS: Check[] = [
   ["negative is not held", () => tierFor(-5, limits({ holdThreshold: 5 })) === "normal"],
   ["NaN is not held", () => tierFor(NaN, limits({ holdThreshold: 5 })) === "normal"],
 
-  ["the hold, when one applies, is still a full day", () => HOLD_HOURS === 24],
+  // Pinned exactly, so a change to the hold is a deliberate edit here too.
+  // Was 24; reduced to 6 hours at the owner's request.
+  ["the hold, when one applies, is 6 hours", () => HOLD_HOURS === 6],
 
   // The post-change window. A PIN reset needs only the chat, so without this
   // a reset followed by a send moves the whole balance at once.
@@ -81,7 +83,10 @@ const CHECKS: Check[] = [
   ],
   ["no recorded change means no window", () => tierFor(5, limits(), null, NOW) === "normal"],
   ["a garbage timestamp does not open a window", () => !inFactorChangeWindow("not a date", NOW)],
-  ["the window outlasts the hold it imposes", () => FACTOR_CHANGE_HOLD_HOURS > HOLD_HOURS],
+  // Was "the window outlasts the hold it imposes". Dropped on purpose when the
+  // window went from 48 to 6 hours and the hold from 24 to 6: a send inside the
+  // window is held HOLD_HOURS, one after it is not held at all.
+  ["the window and the hold are both positive", () => FACTOR_CHANGE_HOLD_HOURS > 0 && HOLD_HOURS > 0],
 ];
 
 let passed = 0;

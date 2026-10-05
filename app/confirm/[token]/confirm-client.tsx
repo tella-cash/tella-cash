@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { ReturnTarget } from "@/lib/messaging/return-link";
+import { HOLD_HOURS } from "@/lib/sends/tiers";
 import {
   startRegistration,
   startAuthentication,
@@ -812,7 +813,7 @@ async function postJson<T = Record<string, unknown>>(
 
 /** Copy of last resort, if a held response ever arrives without its own. */
 const HELD_FALLBACK =
-  "Queued. Sends this size wait 24 hours before they go out — reply \u0022cancel send\u0022 in the chat any time before then and nothing moves.";
+  `Queued. Sends this size wait ${HOLD_HOURS} hours before they go out — reply \u0022cancel send\u0022 in the chat any time before then and nothing moves.`;
 
 /**
  * POST to a verify route and classify what came back.

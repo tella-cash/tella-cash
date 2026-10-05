@@ -2,7 +2,7 @@ import type { tellaUser } from "@/lib/supabase/types";
 import { emailLinkedGoogle } from "@/lib/email/security-notice";
 import { notifyUser } from "@/lib/messaging/notify";
 import { consumeResetToken, loadAuthorizedLink } from "@/lib/security/reset-tokens";
-import { FACTOR_CHANGE_HOLD_HOURS, inFactorChangeWindow } from "@/lib/sends/tiers";
+import { HOLD_HOURS, FACTOR_CHANGE_HOLD_HOURS, inFactorChangeWindow } from "@/lib/sends/tiers";
 import { isFrozen } from "@/lib/users/wallet-gate";
 import { isAbandonableAccount, mergePlaceholderIntoAccount } from "./whatsapp-link";
 
@@ -72,7 +72,7 @@ export async function handleWhatsappLinkHandoff(args: {
       body: [
         "🔗 A WhatsApp number was just linked to your tella wallet.",
         "",
-        `For the next ${FACTOR_CHANGE_HOLD_HOURS} hours every send waits 24 hours before it goes out.`,
+        `For the next ${FACTOR_CHANGE_HOLD_HOURS} hours every send waits ${HOLD_HOURS} hours before it goes out.`,
         "",
         "If this wasn't you, reply *freeze* immediately.",
       ].join("\n"),
@@ -84,7 +84,7 @@ export async function handleWhatsappLinkHandoff(args: {
       lines: [
         "A WhatsApp number was just linked to your tella wallet. It can check the balance, send and freeze.",
         "",
-        `For the next ${FACTOR_CHANGE_HOLD_HOURS} hours every send waits 24 hours before it goes out.`,
+        `For the next ${FACTOR_CHANGE_HOLD_HOURS} hours every send waits ${HOLD_HOURS} hours before it goes out.`,
         "",
         "If this wasn't you, freeze your wallet now: message tella and say freeze, or use the freeze page with this Google account.",
       ],

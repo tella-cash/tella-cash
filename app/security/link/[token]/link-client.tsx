@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { startAuthentication, browserSupportsWebAuthn } from "@simplewebauthn/browser";
+import { FACTOR_CHANGE_HOLD_HOURS, HOLD_HOURS } from "@/lib/sends/tiers";
 
 type Stage =
   | { kind: "form" }
@@ -121,7 +122,7 @@ export function LinkClient({
               {copy.cta}
             </a>
             <p className="text-xs leading-relaxed text-ink-400">
-              For the next 48 hours, sends from your wallet wait 24 hours before they go out.
+              For the next {FACTOR_CHANGE_HOLD_HOURS} hours, sends from your wallet wait {HOLD_HOURS} hours before they go out.
             </p>
           </>
         ) : (
