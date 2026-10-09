@@ -2,12 +2,6 @@ import { ConfirmShell } from "@/app/confirm/[token]/confirm-shell";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = {
-  title: "tella admin",
-  robots: { index: false, follow: false, nocache: true },
-  other: { referrer: "no-referrer" },
-};
-
 export default async function AdminLoginPage({
   searchParams,
 }: {

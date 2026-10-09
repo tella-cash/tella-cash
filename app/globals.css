@@ -41,6 +41,21 @@
   --shadow-soft: 0 1px 3px rgb(0 0 0 / 0.04), 0 4px 12px rgb(0 0 0 / 0.04);
   --shadow-card: 0 4px 12px rgb(0 0 0 / 0.06), 0 16px 40px rgb(0 0 0 / 0.08);
   --shadow-accent: 0 8px 24px -8px rgb(0 71 255 / 0.4);
+
+  /* Charts — admin dashboard only. Series colours carry identity and
+     nothing else: text never wears them. The three are checked as a set for
+     colour-vision separation and contrast, light and dark, so change them
+     together or not at all. */
+  --color-chart-1: #2a78d6;
+  --color-chart-2: #eb6834;
+  --color-chart-3: #1baf7a;
+  /* The strongest cell of a heatmap. Light enough that ink still reads on it. */
+  --color-heat: #6da7ec;
+
+  /* Direction and state, as text. Always beside an arrow or a word. */
+  --color-up: #006300;
+  --color-down: #b42318;
+  --color-warn: #8a5a00;
 }
 
 /* Base reset / typography */
@@ -112,6 +127,80 @@ h4, h5, h6 {
 
 /* Scrollbar — minimal */
 ::-webkit-scrollbar { width: 0; height: 0; }
+
+/* Admin — theme.
+ *
+ * Dark mode exists for /admin and nowhere else. The marketing pages set
+ * colours as literal hex, so flipping these tokens under them would leave
+ * dark text on a dark page.
+ *
+ * app/admin/layout.tsx renders one .admin-theme element carrying the chosen
+ * theme. Everything is keyed off that with :has(), so the tokens land on
+ * <html> — the body background and the scrollbar follow — without the root
+ * layout, which the whole site shares, knowing anything about it.
+ *
+ * Each token is written once, as light-dark(light, dark), and color-scheme
+ * picks the side: `light dark` follows the device, the other two pin it. The
+ * dark steps are chosen for a dark surface and contrast-checked, not
+ * inverted. A browser without light-dark() skips the block and stays light.
+ */
+@supports (color: light-dark(#000, #fff)) {
+  html:has(.admin-theme) {
+    color-scheme: light dark;
+
+    --color-surface-0: light-dark(#ffffff, #1a1a19);
+    --color-surface-50: light-dark(#fafaf8, #0f0f0e);
+    --color-surface-100: light-dark(#f4f4f0, #232321);
+    --color-surface-200: light-dark(#e9e9e3, #2c2c2a);
+    --color-surface-300: light-dark(#d4d4cc, #383835);
+
+    --color-ink-900: light-dark(#0a0a0a, #f4f4f0);
+    --color-ink-700: light-dark(#2b2b2b, #dcdcd6);
+    --color-ink-500: light-dark(#6b6b6b, #b0afa6);
+    --color-ink-400: light-dark(#8a8a8a, #8f8e87);
+    --color-ink-300: light-dark(#b8b8b8, #5e5d58);
+    --color-ink-200: light-dark(#dcdcdc, #33332f);
+
+    /* On dark, hover goes lighter, and the fill is stepped so white text
+       on a button still clears 4.5:1. */
+    --color-accent-50: light-dark(#eef2ff, #111a33);
+    --color-accent-100: light-dark(#dbe3ff, #18264d);
+    --color-accent-300: light-dark(#8fa6ff, #3d5fc2);
+    --color-accent-500: light-dark(#0047ff, #2b61f5);
+    --color-accent-600: light-dark(#0038cc, #4577ff);
+    --color-accent-700: light-dark(#002a99, #7d9dff);
+
+    --color-chart-1: light-dark(#2a78d6, #3987e5);
+    --color-chart-2: light-dark(#eb6834, #d95926);
+    --color-chart-3: light-dark(#1baf7a, #199e70);
+    --color-heat: light-dark(#6da7ec, #1c5cab);
+
+    --color-up: light-dark(#006300, #3fbf4f);
+    --color-down: light-dark(#b42318, #f08080);
+    --color-warn: light-dark(#8a5a00, #e0a030);
+
+    /* light-dark() takes colours only, so it goes inside each shadow. */
+    --shadow-card:
+      0 4px 12px light-dark(rgb(0 0 0 / 0.06), rgb(0 0 0 / 0.4)),
+      0 16px 40px light-dark(rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.5));
+  }
+
+  html:has(.admin-theme[data-theme="light"]) { color-scheme: light; }
+  html:has(.admin-theme[data-theme="dark"]) { color-scheme: dark; }
+}
+
+/* A dashboard is scrolled to find things, so it gets its scrollbar back. */
+html:has(.admin-theme)::-webkit-scrollbar { width: 12px; height: 12px; }
+html:has(.admin-theme)::-webkit-scrollbar-thumb {
+  background: var(--color-surface-300);
+  border: 3px solid var(--color-surface-50);
+  border-radius: 999px;
+}
+.admin-theme ::-webkit-scrollbar { width: 8px; height: 8px; }
+.admin-theme ::-webkit-scrollbar-thumb {
+  background: var(--color-surface-300);
+  border-radius: 999px;
+}
 
 /* Reduce motion respect */
 @media (prefers-reduced-motion: reduce) {

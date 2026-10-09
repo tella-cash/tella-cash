@@ -164,10 +164,10 @@ export function ChainsCard({
   }
 
   return (
-    <section className="rounded-2xl border border-ink-200/70 bg-surface-0 px-5 py-5">
-      <div className="flex items-baseline justify-between gap-3">
-        <h2 className="font-display text-lg text-ink-900">Networks</h2>
-        <span className="text-xs text-ink-400">
+    <section className="rounded-2xl bg-surface-0 p-5 ring-1 ring-ink-200/60 sm:p-6">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h3 className="text-[0.9375rem] font-medium text-ink-900">Networks</h3>
+        <span className="text-sm text-ink-500">
           Where users can be paid, {network === "mainnet" ? "mainnet" : "testnet"}
         </span>
       </div>
@@ -183,9 +183,9 @@ export function ChainsCard({
             <li className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-3 first:pt-0">
               <div className="flex items-baseline gap-3">
                 <span className="text-sm font-medium text-ink-900">Arc</span>
-                <span className="text-xs text-ink-400">Home network, always on</span>
+                <span className="text-xs text-ink-500">Home network, always on</span>
               </div>
-              <span className="text-xs text-ink-400">Wallets are created here and sends leave from here</span>
+              <span className="text-xs text-ink-500">Wallets are created here and sends leave from here</span>
             </li>
             {chains.map((c) => (
               <li
@@ -196,7 +196,7 @@ export function ChainsCard({
                   <span className="text-sm font-medium text-ink-900">{c.displayName}</span>
                   <span className="font-mono text-xs text-ink-500">{c.blockchain}</span>
                 </div>
-                <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs text-ink-400">
+                <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs text-ink-500">
                   <span title={c.usdcAddress} className="font-mono">
                     USDC {short(c.usdcAddress)}
                   </span>
@@ -239,7 +239,7 @@ export function ChainsCard({
 
       {step === "edit" && (
         <form onSubmit={review} noValidate className="mt-4 border-t border-ink-200/70 pt-5">
-          <h3 className="font-display text-base text-ink-900">Add a network</h3>
+          <h4 className="text-sm font-medium text-ink-900">Add a network</h4>
           <p className="mt-1 max-w-[60ch] text-sm text-ink-500">
             Only USDC on the address you give here is ever counted as money on this
             network. You&apos;ll review everything before it&apos;s saved.
@@ -295,7 +295,7 @@ export function ChainsCard({
           </div>
 
           {formError && (
-            <p className="mt-4 text-sm text-red-600" role="alert">
+            <p className="mt-4 text-sm text-down" role="alert">
               {formError}
             </p>
           )}
@@ -320,7 +320,7 @@ export function ChainsCard({
 
       {step === "review" && (
         <div className="mt-4 border-t border-ink-200/70 pt-5">
-          <h3 className="font-display text-base text-ink-900">Review before adding</h3>
+          <h4 className="text-sm font-medium text-ink-900">Review before adding</h4>
 
           <dl className="mt-4 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-[11rem_1fr]">
             <Row label="Name" value={fields.displayName.trim()} />
@@ -361,7 +361,7 @@ export function ChainsCard({
           </label>
 
           {formError && (
-            <p className="mt-4 text-sm text-red-600" role="alert">
+            <p className="mt-4 text-sm text-down" role="alert">
               {formError}
             </p>
           )}
@@ -424,13 +424,13 @@ function Field({
         aria-invalid={error ? true : undefined}
         aria-describedby={`${id}-note`}
         className={`mt-1.5 w-full rounded-xl border bg-surface-50 px-3.5 py-2.5 text-sm text-ink-900 outline-none transition-colors placeholder:text-ink-300 focus:border-accent-500 ${
-          error ? "border-red-600" : "border-ink-200"
+          error ? "border-down" : "border-ink-200"
         } ${mono ? "font-mono text-[13px]" : ""}`}
       />
       <p
         id={`${id}-note`}
         role={error ? "alert" : undefined}
-        className={`mt-1.5 text-xs ${error ? "text-red-600" : "text-ink-400"}`}
+        className={`mt-1.5 text-xs ${error ? "text-down" : "text-ink-500"}`}
       >
         {error ?? hint}
       </p>
@@ -451,7 +451,7 @@ function Row({
 }) {
   return (
     <>
-      <dt className="text-ink-400">{label}</dt>
+      <dt className="text-ink-500">{label}</dt>
       <dd className={`text-ink-900 ${mono ? "font-mono text-[13px]" : ""} ${wrap ? "break-all" : ""}`}>
         {value}
       </dd>

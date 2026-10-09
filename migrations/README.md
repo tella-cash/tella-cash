@@ -506,6 +506,40 @@ After applying, the new `chain-wallets` cron job (every 30 minutes, see
 Until it has reached a user, a deposit to them on Base is on chain but not
 announced and not in their balance.
 
+### `0033_admin_analytics_v2.sql` — safe to apply before or after the code
+
+The figures behind the redesigned admin dashboard. Everything in it is new, so
+it can be run while the app is live, and it is re-runnable (it drops its own
+functions first).
+
+- `tella_analytics_ledger()`: the one definition every figure reads. Settled
+  rows only, USDC only, duplicates removed, and each row classed as a deposit, a
+  tella-to-tella transfer, a withdrawal, or the recipient's half of a
+  tella-to-tella transfer. That last kind is what stops a transfer between two
+  users being counted twice. `tella_analytics_ledger_audit()` is the same thing
+  with the rejected rows left in and a reason beside each.
+- `tella_analytics_summary`, `_series`, `_funnel`, `_retention`, `_engagement`,
+  `_distribution`, `_ops`: one per section of the dashboard. All `stable`,
+  select-only, invoker rights, service role only.
+- `tella_analytics_excluded_users`: accounts left out of every figure. Written
+  by hand, never by the app. To mark a test account:
+
+  ```sql
+  insert into public.tella_analytics_excluded_users (user_id, reason)
+  select id, 'test account' from public.tella_users
+   where whatsapp_number = '<the number, as stored>';
+  ```
+
+The six `tella_admin_*` functions from 0020 are left alone; the dashboard still
+uses `tella_admin_security_posture`.
+
+Deploying the code without it shows a single "apply migration 0033" notice in
+place of the figures. Account security and the Networks card still work.
+
+Figures differ from the old dashboard on purpose, and only downward: sends that
+have not settled no longer count, and received money is no longer added on top
+of the send that produced it.
+
 ### Environment added alongside 0007–0015
 
 ```
